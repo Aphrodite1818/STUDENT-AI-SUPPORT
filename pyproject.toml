@@ -1,17 +1,9 @@
 [project]
-<<<<<<< HEAD
 name = "student-ai-support"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
-=======
-name = "nhs-charlse-project"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
 requires-python = ">=3.12"
->>>>>>> 9a91ad785df53a81088faabc709119a902de8c8d
 dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.136.1",
