@@ -1,14 +1,25 @@
 [project]
+<<<<<<< HEAD
 name = "student-ai-support"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
+=======
+name = "nhs-charlse-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+>>>>>>> 9a91ad785df53a81088faabc709119a902de8c8d
 dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.136.1",
     "pydantic>=2.13.4",
+<<<<<<< HEAD
     "pydantic-settings>=2.14.1",
+=======
+>>>>>>> 9a91ad785df53a81088faabc709119a902de8c8d
     "sqlalchemy>=2.0.49",
     "uvicorn>=0.47.0",
 ]
