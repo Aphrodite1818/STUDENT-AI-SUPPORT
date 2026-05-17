@@ -1,10 +1,6 @@
 #==========================#
 #  CONFIGURATIOIN SETTINGS #
 #==========================#
-from pydantic_settings import BaseSettings , SettingsCongigDict
-from pydantic import Field , field_validator
-from functools import lru_cache
-import os
 
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,7 +22,7 @@ class Settings(BaseSettings):
 
     ENV: str = Field(...)
 
-    SUPABASE_URL: str = Field(..., min_length=10)
+    #SUPABASE_URL: str = Field(..., min_length=10)
 
     DATABASE_URL: str = Field(..., description="Async Postgres URL")
 
@@ -38,7 +34,7 @@ class Settings(BaseSettings):
             raise ValueError(f"ENV must be one of {allowed}")
         return v
 
-    @field_validator("SUPABASE_URL", "DATABASE_URL")
+    @field_validator( "DATABASE_URL")
     @classmethod
     def no_empty_values(cls, v, field):
         if not v or not str(v).strip():

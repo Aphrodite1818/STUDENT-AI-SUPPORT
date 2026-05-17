@@ -4,7 +4,7 @@
 
 
 from typing import AsyncGenerator
-from db.engine import AsyncSessionLocal
+from ..db.engine import AsyncSessionLocal
 
 
 async def get_db() -> AsyncGenerator:
