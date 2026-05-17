@@ -1,0 +1,53 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Wheel metadata
+pip-wheel-metadata/
+
+# Installer logs
+pip-log.txt
+
+# Test and coverage
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+.coverage
+coverage.xml
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database files
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# Celery
+celerybeat-schedule
