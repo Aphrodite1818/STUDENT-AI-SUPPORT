@@ -1,33 +1,39 @@
+#==========================#
+# ASSIGNMENT SCRIPT
+#==========================#
+
 # schemas/assignment.py
 
 from datetime import date, datetime
 from typing import Optional
 
-from schemas.common import BaseSchema
+from pydantic import Field
+
+from .common import BaseSchema
 
 
 class AssignmentBase(BaseSchema):
-    title: str
-    description: str
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(..., min_length=1)
     due_date: date
-    course_id: int
-    class_level: str
+    course_id: int = Field(..., gt=0)
+    class_level: str = Field(..., min_length=1, max_length=50)
 
 
 class AssignmentCreate(AssignmentBase):
-    teacher_id: int
+    teacher_id: int = Field(..., gt=0)
     file_url: Optional[str] = None
 
 
 class AssignmentUpdate(BaseSchema):
-    title: Optional[str] = None
-    description: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, min_length=1)
     due_date: Optional[date] = None
-    class_level: Optional[str] = None
+    class_level: Optional[str] = Field(default=None, min_length=1, max_length=50)
     file_url: Optional[str] = None
 
 
-class AssignmentOut(AssignmentBase):
+class AssignmentResponse(AssignmentBase):
     id: int
     teacher_id: int
     teacher_name: str
@@ -36,7 +42,7 @@ class AssignmentOut(AssignmentBase):
     created_at: datetime
 
 
-class AssignmentListOut(BaseSchema):
+class AssignmentSummaryResponse(BaseSchema):
     id: int
     title: str
     due_date: date

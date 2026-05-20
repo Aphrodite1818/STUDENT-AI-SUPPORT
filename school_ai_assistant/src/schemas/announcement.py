@@ -1,21 +1,21 @@
+#==========================#
+# ANNOUNCEMENT SCRIPT
+#==========================#
+
 # schemas/announcement.py
 
 from datetime import datetime
-from enum import Enum
 from typing import Optional
 
-from schemas.common import BaseSchema
+from pydantic import Field
 
-
-class TargetAudience(str, Enum):
-    ALL = "all"
-    PARENTS = "parents"
-    TEACHERS = "teachers"
+from ..helpers.announcement_helper import TargetAudience
+from .common import BaseSchema
 
 
 class AnnouncementBase(BaseSchema):
-    title: str
-    body: str
+    title: str = Field(..., min_length=1, max_length=200)
+    body: str = Field(..., min_length=1)
     target_audience: TargetAudience
     publish_date: datetime
 
@@ -25,12 +25,12 @@ class AnnouncementCreate(AnnouncementBase):
 
 
 class AnnouncementUpdate(BaseSchema):
-    title: Optional[str] = None
-    body: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    body: Optional[str] = Field(default=None, min_length=1)
     target_audience: Optional[TargetAudience] = None
     publish_date: Optional[datetime] = None
 
 
-class AnnouncementOut(AnnouncementBase):
+class AnnouncementResponse(AnnouncementBase):
     id: int
     created_at: datetime

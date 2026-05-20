@@ -1,9 +1,10 @@
-# schemas/common.py
+#==========================#
+# COMMON SCRIPT
+#==========================#
 
 from typing import Any, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic.generics import GenericModel
 
 
 T = TypeVar("T")
@@ -22,11 +23,11 @@ class PaginationParams(BaseSchema):
     page_size: int = Field(default=10, ge=1, le=100)
 
 
-class PaginatedResponse(GenericModel, Generic[T]):
+class PaginatedResponse(BaseSchema, Generic[T]):
     items: List[T]
-    total: int
-    page: int
-    pages: int
+    total: int = Field(..., ge=0)
+    page: int = Field(..., ge=1)
+    pages: int = Field(..., ge=0)
 
 
 class SuccessResponse(BaseSchema):

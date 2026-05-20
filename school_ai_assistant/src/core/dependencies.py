@@ -1,15 +1,5 @@
 #==========================#
-# FAST API DEPENDENCIES    #
+# CORE DEPENDENCIES SCRIPT
 #==========================#
 
-
-from typing import AsyncGenerator
-from ..db.engine import AsyncSessionLocal
-
-
-async def get_db() -> AsyncGenerator:
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+from ..helpers.dependencies_helper import get_db

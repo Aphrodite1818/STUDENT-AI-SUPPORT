@@ -1,47 +1,39 @@
+#==========================#
+# CONVERSATION SCRIPT
+#==========================#
+
 # schemas/conversation.py
 
 from datetime import datetime
-from enum import Enum
 from typing import Optional
 
-from schemas.common import BaseSchema
+from pydantic import Field
 
-
-class Platform(str, Enum):
-    WHATSAPP = "whatsapp"
-
-
-class MessageDirection(str, Enum):
-    INBOUND = "inbound"
-    OUTBOUND = "outbound"
-
-
-class ContentType(str, Enum):
-    TEXT = "text"
-    AUDIO = "audio"
+from ..helpers.conversation_helper import ContentType, MessageDirection, Platform
+from .common import BaseSchema
 
 
 class ConversationSessionCreate(BaseSchema):
-    parent_id: int
+    parent_id: int = Field(..., gt=0)
     platform: Platform = Platform.WHATSAPP
 
 
-class ConversationSessionOut(BaseSchema):
+class ConversationSessionResponse(BaseSchema):
     id: int
     parent_id: int
     started_at: datetime
     last_active: datetime
-    turn_count: int
+    turn_count: int = Field(..., ge=0)
 
 
 class MessageLogCreate(BaseSchema):
-    session_id: int
+    session_id: int = Field(..., gt=0)
     direction: MessageDirection
     content_type: ContentType
-    raw_content: str
+    raw_content: str = Field(..., min_length=1)
     processed_content: Optional[str] = None
 
 
-class MessageLogOut(MessageLogCreate):
+class MessageLogResponse(MessageLogCreate):
     id: int
     created_at: datetime

@@ -1,25 +1,21 @@
+#==========================#
+# PARENT SCRIPT
+#==========================#
+
 # schemas/parent.py
 
 from datetime import datetime
-from enum import Enum
 from typing import List, Optional
 
 from pydantic import Field
 
-from schemas.common import BaseSchema
-from schemas.student import StudentSummary
-
-
-class LanguagePreference(str, Enum):
-    ENGLISH = "english"
-    PIDGIN = "pidgin"
-    YORUBA = "yoruba"
-    IGBO = "igbo"
-    HAUSA = "hausa"
+from ..helpers.parent_helper import LanguagePreference
+from .common import BaseSchema
+from .student import StudentSummary
 
 
 class ParentBase(BaseSchema):
-    full_name: str
+    full_name: str = Field(..., min_length=1, max_length=120)
     phone_number: str = Field(..., min_length=10, max_length=20)
     language_preference: LanguagePreference = LanguagePreference.ENGLISH
 
@@ -29,16 +25,16 @@ class ParentCreate(ParentBase):
 
 
 class ParentUpdate(BaseSchema):
-    full_name: Optional[str] = None
-    phone_number: Optional[str] = None
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    phone_number: Optional[str] = Field(default=None, min_length=10, max_length=20)
     language_preference: Optional[LanguagePreference] = None
 
 
-class ParentOut(ParentBase):
+class ParentResponse(ParentBase):
     id: int
-    students: List[StudentSummary] = []
+    students: List[StudentSummary] = Field(default_factory=list)
     created_at: datetime
 
 
 class ParentWhatsAppLookup(BaseSchema):
-    phone_number: str
+    phone_number: str = Field(..., min_length=10, max_length=20)
