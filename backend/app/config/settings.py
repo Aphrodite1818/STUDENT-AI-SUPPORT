@@ -2,6 +2,12 @@
 #             settings.py              #
 #======================================#
 
+
+"""
+Loads and validates all environment variables at startup using Pydantic BaseSettings.
+If any required variable is missing or invalid the application will refuse to boot.
+"""
+
 from functools import lru_cache
 from pathlib import Path
 from enum import Enum
@@ -52,6 +58,4 @@ class Settings(BaseSettings):
     TWILIO_WHATSAPP_FROM: str = Field(..., description="Twilio WhatsApp number")
 
 
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()
