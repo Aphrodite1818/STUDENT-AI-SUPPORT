@@ -15,12 +15,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker
 )
-from sqlalchemy.orm import DeclarativeBase
 from backend.app.config.settings import settings
-
-class Base(DeclarativeBase):
-    pass
-
 
 engine = create_async_engine(
     settings.DATABASE_URL,

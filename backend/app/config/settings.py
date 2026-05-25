@@ -8,9 +8,9 @@ Loads and validates all environment variables at startup using Pydantic BaseSett
 If any required variable is missing or invalid the application will refuse to boot.
 """
 
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from enum import Enum
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -18,10 +18,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
-class EnvironmentType(str, Enum):
+class EnvironmentType(str, Enum): 
     DEVELOPMENT = "dev"
     PRODUCTION = "prod"
-    STAGING = "staging"
+    STAGING = "stg"
 
 
 class Settings(BaseSettings):
@@ -32,19 +32,16 @@ class Settings(BaseSettings):
         case_sensitive=True
     )
 
-    ENV: EnvironmentType = Field(
-        default=EnvironmentType.DEVELOPMENT,
-        description="Runtime environment: dev | staging | prod"
-    )
+    ENV: EnvironmentType = EnvironmentType.DEVELOPMENT  
 
     APP_NAME: str = "School Management System"
     API_V1_PREFIX: str = "/api/v1"
 
     SECRET_KEY: str = Field(..., min_length=32)
-    ALGORITHM: str = Field(default="HS256", description="Algorithm for signing and verifying JWT tokens")
+    ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    DATABASE_URL: str = Field(..., description="Database URL e.g Supabase, local Postgres etc")
+    DATABASE_URL: str = Field(..., description="PostgreSQL connection URL")
 
     GEMINI_API_KEY: str = Field(..., description="Gemini API key for LLM")
 
