@@ -14,12 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config.database import AsyncSessionLocal
 
 
+
+from backend.app.config.logging import get_logger
+logger = get_logger(__name__)
+
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as db:
         try:
             yield db
             await db.commit()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Database session roll back due to exception" , exc_info=True)
             await db.rollback()
             raise
         finally:
