@@ -43,7 +43,16 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = Field(..., description="PostgreSQL connection URL")
 
-    GEMINI_API_KEY: str = Field(..., description="Gemini API key for LLM")
+    GEMINI_API_KEY: str | None = Field(default=None, description="Api Key for Gemini")
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    OPENAI_API_KEY: str | None = Field(default=None, description="Api Key for OpenAI")
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    ANTHROPIC_API_KEY: str | None = Field(default=None, description="Api Key for Anthropic")
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-5"
+    LLM_MAX_TOKENS: int = 1024
+    
 
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:3000",
