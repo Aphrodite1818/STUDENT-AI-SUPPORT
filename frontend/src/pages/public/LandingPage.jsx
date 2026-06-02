@@ -245,7 +245,7 @@ function LandingPage() {
               </div>
 
               <div className="mt-12 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl">
                   <p className="text-3xl font-extrabold text-text">Fast</p>
 
                   <p className="mt-1 text-sm font-medium text-text-muted">
@@ -253,7 +253,7 @@ function LandingPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl">
                   <p className="text-3xl font-extrabold text-text">100%</p>
 
                   <p className="mt-1 text-sm font-medium text-text-muted">
@@ -261,7 +261,7 @@ function LandingPage() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl">
                   <p className="text-3xl font-extrabold text-text">Zero</p>
 
                   <p className="mt-1 text-sm font-medium text-text-muted">
@@ -316,28 +316,28 @@ function LandingPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 bg-surface p-5">
-                  <div className="metric-card metric-card-lavender transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="metric-card metric-card-lavender transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
                     <p className="text-2xl font-bold text-text">120+</p>
                     <p className="mt-1 text-xs font-semibold text-text-muted">
                       Schools
                     </p>
                   </div>
 
-                  <div className="metric-card metric-card-peach transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="metric-card metric-card-peach transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
                     <p className="text-2xl font-bold text-text">50K+</p>
                     <p className="mt-1 text-xs font-semibold text-text-muted">
                       Messages
                     </p>
                   </div>
 
-                  <div className="metric-card metric-card-peach transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="metric-card metric-card-peach transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
                     <p className="text-2xl font-bold text-text">24/7</p>
                     <p className="mt-1 text-xs font-semibold text-text-muted">
                       Support
                     </p>
                   </div>
 
-                  <div className="metric-card metric-card-lavender transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                  <div className="metric-card metric-card-lavender transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
                     <p className="text-2xl font-bold text-text">98%</p>
                     <p className="mt-1 text-xs font-semibold text-text-muted">
                       Parent satisfaction
@@ -467,7 +467,7 @@ function LandingPage() {
             {pricingPlans.map((plan) => (
               <article
                 key={plan.name}
-                className={`relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl ${
+                className={`relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-sm transition-all duration-300 hover:-translate-y-2 hover:border-primary/60 hover:shadow-2xl ${
                   plan.highlighted
                     ? "scale-[1.02] border-primary bg-primary-soft/20 ring-2 ring-primary/20"
                     : ""
