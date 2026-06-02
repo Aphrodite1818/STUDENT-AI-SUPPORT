@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
+import logoImage from "../../assets/images/favicon.png";
 
 function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -43,7 +44,7 @@ function RegisterPage() {
           className="mb-8 flex items-center justify-center gap-3 transition-opacity duration-300 hover:opacity-90"
         >
           <img
-            src="/src/assets/images/favicon.png"
+            src={logoImage}
             alt="Learnly AI logo"
             className="h-10 w-10 rounded-xl border border-border bg-surface p-1 shadow-sm"
           />

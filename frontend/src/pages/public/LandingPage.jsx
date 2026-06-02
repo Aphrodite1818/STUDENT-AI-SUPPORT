@@ -1,6 +1,7 @@
-import  { useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import AppIcon from "../../components/ui/AppIcon";
+import logoImage from "../../assets/images/favicon.png";
 
 const features = [
   {
@@ -102,9 +103,9 @@ function LandingPage() {
             className="flex items-center gap-3 transition-opacity duration-300 hover:opacity-90"
           >
             <img
-              src="frontend/src/assets/images/favicon.png"
+              src={logoImage}
               alt="Learnly AI logo"
-              className="h-11 w-11 rounded-xl  border-border bg-surface p-1.5 shadow-sm"
+              className="h-11 w-11 rounded-xl border border-border bg-surface p-1.5 shadow-sm"
             />
 
             <div>
