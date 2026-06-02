@@ -102,7 +102,7 @@ function LandingPage() {
             className="flex items-center gap-3 transition-opacity duration-300 hover:opacity-90"
           >
             <img
-              src="src/assets/images/favicon.png"
+              src="frontend/src/assets/images/favicon.png"
               alt="Learnly AI logo"
               className="h-11 w-11 rounded-xl  border-border bg-surface p-1.5 shadow-sm"
             />
