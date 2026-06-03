@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.136.1",
     "google>=3.0.0",
     "google-genai>=2.4.0",
+    "httpx>=0.28.1",
     "jose>=1.0.0",
     "passlib==1.7.4",
     "pydantic>=2.13.4",
