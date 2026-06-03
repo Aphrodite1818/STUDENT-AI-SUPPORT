@@ -16,7 +16,7 @@ from backend.app.modules.AI.providers.utils import (
 
 class ClaudeProvider(BaseLLMProvider):
 
-    def __init__(self, api_key: str | None, model: str, max_tokens: int):
+    def __init__(self, api_key: str | None, model: str, max_tokens: int) -> None:
         self.api_key = require_api_key(api_key, "Anthropic")
         self.model = model
         self.max_tokens = max_tokens

@@ -1,15 +1,21 @@
 #==========================#
 #        UTILS.PY          #
 #==========================#
+
+
+
 from typing import Any
 
 
+"""adds validation and ensure api_key for provider gets managed well"""
 def require_api_key(api_key: str | None, provider_name: str) -> str:
     if not api_key:
         raise ValueError(f"{provider_name} API key is not configured")
     return api_key
 
 
+
+"""normalize content of any type and returns a simple string """
 def text_from_content(content: Any) -> str:
     if isinstance(content, str):
         return content
@@ -30,7 +36,7 @@ def text_from_content(content: Any) -> str:
 
     return str(content)
 
-
+"""converts sdk model objects into plain python dictionaries"""
 def model_to_dict(value: Any) -> Any:
     if hasattr(value, "model_dump"):
         return value.model_dump(exclude_none=True)
@@ -49,7 +55,7 @@ def model_to_dict(value: Any) -> Any:
 
     return value
 
-
+"""normalize tool calling to anthropic standard"""
 def openai_tool_to_anthropic(tool: dict[str, Any]) -> dict[str, Any]:
     if tool.get("type") != "function":
         return tool
@@ -62,6 +68,8 @@ def openai_tool_to_anthropic(tool: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+"""normalize tool calling to gemini standard"""
 def openai_tool_to_gemini_declaration(tool: dict[str, Any]) -> dict[str, Any]:
     if tool.get("type") != "function":
         return tool
