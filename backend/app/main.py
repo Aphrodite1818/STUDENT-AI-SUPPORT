@@ -67,5 +67,16 @@ app = create_app()
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import logging
     import uvicorn
-    uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8080, reload=True)
+
+    from backend.app.config.logging import is_development, resolve_log_level
+
+    uvicorn.run(
+        "backend.app.main:app",
+        host="0.0.0.0",
+        port=8080,
+        reload=is_development(),
+        log_config=None,
+        log_level=logging.getLevelName(resolve_log_level()).lower(),
+    )

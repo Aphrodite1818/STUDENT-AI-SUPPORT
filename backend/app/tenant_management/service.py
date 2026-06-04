@@ -61,8 +61,7 @@ class TenantService:
         )
         
         db.add(admin_user)
-        
-        await db.commit()
+        await db.flush()
         await db.refresh(tenant)
 
         return tenant

@@ -9,9 +9,10 @@ If any required variable is missing or invalid the application will refuse to bo
 """
 
 from enum import Enum
-from functools import lru_cache
 from pathlib import Path
-from pydantic import Field
+from typing import Literal
+
+from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +33,10 @@ class Settings(BaseSettings):
         case_sensitive=True
     )
 
-    ENV: EnvironmentType = EnvironmentType.DEVELOPMENT  
+    ENV: EnvironmentType = EnvironmentType.DEVELOPMENT
+
+    # Optional override — set LOG_LEVEL=DEBUG in .env to see debug logs even when ENV=prod
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None
 
     APP_NAME: str = "School Management System"
     API_V1_PREFIX: str = "/api/v1"
@@ -71,6 +75,11 @@ class Settings(BaseSettings):
 
     # OTP Settings
     OTP_EXPIRATION_MINUTES: int = 10
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_development(self) -> bool:
+        return self.ENV == EnvironmentType.DEVELOPMENT
 
 
 settings = Settings()

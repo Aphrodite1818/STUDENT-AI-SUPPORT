@@ -55,7 +55,7 @@ class TenantRepository:
     async def get_by_school_bot_number(db : AsyncSession , school_bot_whatssap_number : str) -> Tenant | None:
         result = await db.execute(
             select(Tenant).where(
-                Tenant.school_bot_number == school_bot_whatssap_number,
+                Tenant.school_bot_whatssap_number == school_bot_whatssap_number,
                 Tenant.is_deleted == False
             )
         )
@@ -131,7 +131,7 @@ class TenantRepository:
     @staticmethod
     async def school_bot_whatssap_number_exists(db : AsyncSession , whatssap_number : str) -> bool:
         result = await db.execute(
-            select(Tenant.id).where(Tenant.school_bot_number == whatssap_number)
+            select(Tenant.id).where(Tenant.school_bot_whatssap_number == whatssap_number)
         )
         return result.scalar_one_or_none() is not None
     

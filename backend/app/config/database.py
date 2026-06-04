@@ -15,11 +15,13 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker
 )
+from backend.app.config.logging import is_development, resolve_log_level
 from backend.app.config.settings import settings
+import logging
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.ENV == "dev",  # logs SQL only in development
+    echo=is_development() or resolve_log_level() <= logging.DEBUG,
     pool_pre_ping=True,          # health checks connection before use
     pool_size=10,                # persistent connections kept open
     max_overflow=20,             # extra connections allowed under load
