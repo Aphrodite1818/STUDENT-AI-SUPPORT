@@ -31,12 +31,12 @@ class AccountStatus(str, Enum):
 class User(BaseModel):
     __tablename__ = "users"
 
-    firstname: Mapped[str] = mapped_column(String(100), nullable=False)
-    lastname: Mapped[str] = mapped_column(String(100), nullable=False)
+    firstname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lastname: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    email: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    email: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
 
-    phone_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False) 
+    phone_number: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True) 
 
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)  
 

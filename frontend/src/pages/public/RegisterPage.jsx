@@ -1,32 +1,44 @@
-import  { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 
 function RegisterPage() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     schoolName: "",
-    firstname: "",
-    lastname: "",
     email: "",
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate registration
-    setTimeout(() => {
+    setError(null);
+    
+    try {
+      // DUMMY TEST: Simulate backend latency
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // We would normally POST to /api/v1/tenants/register here with:
+      // JSON.stringify({ school_name: formData.schoolName, email: formData.email, password: formData.password })
+      
+      // On success, redirect to OTP verification, passing email
+      navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setIsLoading(false);
-      console.log("Registered with:", formData);
-    }, 1500);
+    }
   };
 
   return (
@@ -61,6 +73,12 @@ function RegisterPage() {
             <p className="text-sm text-text-muted mt-2">Set up Learnly AI for your school.</p>
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="group">
               <Input
@@ -70,33 +88,6 @@ function RegisterPage() {
                 value={formData.schoolName}
                 onChange={handleChange}
                 placeholder="Greenwood High School"
-                required
-                className="transition-all duration-300 group-hover:border-primary/50"
-              />
-            </div>
-
-            <div className="group">
-              <Input
-                label="First name"
-                type="text"
-                name="firstname"
-                value={formData.firstname}
-                onChange={handleChange}
-                placeholder="Jane"
-                required
-                className="transition-all duration-300 group-hover:border-primary/50"
-              />
-            </div>
-
-            
-            <div className="group">
-              <Input
-                label="Last name"
-                type="text"
-                name="lastname"
-                value={formData.lastname}
-                onChange={handleChange}
-                placeholder="Doe"
                 required
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
@@ -124,6 +115,7 @@ function RegisterPage() {
                 onChange={handleChange}
                 placeholder="************"
                 required
+                minLength={8}
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
             </div>

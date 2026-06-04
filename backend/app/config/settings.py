@@ -63,5 +63,14 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = Field(..., description="Twilio auth token")
     TWILIO_WHATSAPP_FROM: str = Field(..., description="Twilio WhatsApp number")
 
+    # SMTP Settings for Emails (Optional for local testing)
+    SMTP_HOST: str | None = Field(default=None, description="SMTP Server Host")
+    SMTP_PORT: int = Field(default=587, description="SMTP Server Port")
+    SMTP_PASSWORD: str | None = Field(default=None, description="SMTP Password")
+    SMTP_FROM_EMAIL: str | None = Field(default=None, description="Sender Email Address")
+
+    # OTP Settings
+    OTP_EXPIRATION_MINUTES: int = 10
+
 
 settings = Settings()

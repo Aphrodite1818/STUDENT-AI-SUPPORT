@@ -9,8 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config.logging import get_logger
 from backend.app.config.database import engine
+from backend.app.core.exception_handlers import register_exception_handlers
 from backend.app.modules.users.router import router as users_router
-
+from backend.app.modules.auth.router import router as auth_router
 logger = get_logger(__name__)
 
 
@@ -43,8 +44,12 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # ── Exception Handlers ────────────────────────────────────────────────────
+    register_exception_handlers(app)
+
     # ── Routers ───────────────────────────────────────────────────────────────
-    app.include_router(users_router, prefix="/api/v1")
+    app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+    app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])

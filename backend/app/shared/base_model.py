@@ -11,25 +11,16 @@ from datetime import datetime
 import uuid
 
 
+from backend.app.shared.mixins import UUIDMixin, TimestampMixin
+
 class Base(DeclarativeBase):
     pass
 
 
-class BaseModel(Base):
+class BaseModel(UUIDMixin, TimestampMixin, Base):
     __abstract__ = True #this line prevents creation of another table
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True,
-        default=uuid.uuid4
-    )
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("tenants.id"),
         nullable=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        default=func.now(),
-        onupdate=func.now()    # ✅ also add default here, not just onupdate
     )

@@ -114,6 +114,15 @@ class UserRepository:
         return users
     
 
+    async def check_email_exists(self, email: str) -> bool:
+        result = await self.session.execute(
+            select(User).where(
+                User.email == email
+            )
+        )
+        return result.scalar_one_or_none() is not None
+    
+
 
 
 

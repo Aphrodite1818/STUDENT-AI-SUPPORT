@@ -6,7 +6,7 @@
 
 import uuid
 
-from fastapi import HTTPException, status
+from backend.app.core.exceptions import BadRequestException, NotFoundException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.config.logging import get_logger
@@ -40,9 +40,8 @@ class UserService:
                     "Registration rejected — email already in use",
                     extra={"email": user_data.email},
                 )
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="A user with this email already exists.",
+                raise BadRequestException(
+                    detail="A user with this email already exists."
                 )
 
         # 2. Check if phone number is already taken
@@ -52,9 +51,8 @@ class UserService:
                 "Registration rejected — phone number already in use",
                 extra={"phone_number": user_data.phone_number},
             )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A user with this phone number already exists.",
+            raise BadRequestException(
+                detail="A user with this phone number already exists."
             )
 
         # 3. Hash password and build model
@@ -88,9 +86,8 @@ class UserService:
                 "User lookup failed — not found",
                 extra={"user_id": str(user_id)},
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
+            raise NotFoundException(
+                detail="User not found."
             )
         logger.debug(
             "User fetched successfully",
@@ -128,9 +125,8 @@ class UserService:
                 "Profile update failed — user not found",
                 extra={"user_id": str(user_id)},
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
+            raise NotFoundException(
+                detail="User not found."
             )
         logger.info(
             "User profile updated",
@@ -157,9 +153,8 @@ class UserService:
                 "Admin update failed — user not found",
                 extra={"user_id": str(user_id)},
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
+            raise NotFoundException(
+                detail="User not found."
             )
         logger.info(
             "User updated by admin",
@@ -185,9 +180,8 @@ class UserService:
                 "Deletion failed — user not found",
                 extra={"user_id": str(user_id)},
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
+            raise NotFoundException(
+                detail="User not found."
             )
         logger.info(
             "User deleted successfully", extra={"user_id": str(user_id)}
