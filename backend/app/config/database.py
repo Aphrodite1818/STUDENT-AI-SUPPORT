@@ -22,7 +22,11 @@ engine = create_async_engine(
     echo=settings.ENV == "dev",  # logs SQL only in development
     pool_pre_ping=True,          # health checks connection before use
     pool_size=10,                # persistent connections kept open
-    max_overflow=20              # extra connections allowed under load
+    max_overflow=20,             # extra connections allowed under load
+    # Required when DATABASE_URL points at PgBouncer (transaction/statement pool mode).
+    # asyncpg caches prepared statements per connection; PgBouncer reassigns backend
+    # connections across clients, causing "__asyncpg_stmt_*__ already exists" errors.
+    connect_args={"statement_cache_size": 0},
 )
 
 
