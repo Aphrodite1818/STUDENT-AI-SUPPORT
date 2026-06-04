@@ -66,12 +66,10 @@ class OTPService:
     @staticmethod
     async def generate_otp(db: AsyncSession, payload: RequestOTP) -> None:
         user_repo = UserRepository(db)
-        
-        # Check if user exists for password reset
-        if payload.purpose == OTPPurpose.PASSWORD_RESET:
-            user = await user_repo.get_user_by_email(payload.email)
-            if not user:
-                raise NotFoundException("User with this email not found.")
+
+        user = await user_repo.get_user_by_email(payload.email)
+        if not user:
+            raise NotFoundException("User with this email not found.")
 
         # Generate 6 digit code
         code = ''.join(random.choices(string.digits, k=6))
@@ -81,7 +79,8 @@ class OTPService:
             email=payload.email,
             code=code,
             purpose=payload.purpose,
-            expires_at=expires_at
+            expires_at=expires_at,
+            tenant_id=user.tenant_id,
         )
         
         db.add(otp_record)
