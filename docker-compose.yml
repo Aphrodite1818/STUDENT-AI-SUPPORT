@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: nhs_backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - backend/app/.env # Assumes your env is stored here or in backend/.env
+    volumes:
+      - ./backend:/app/backend
+    restart: unless-stopped

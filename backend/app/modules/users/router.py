@@ -16,6 +16,8 @@ from backend.app.modules.users.schemas import (
     UserUpdate,
 )
 from backend.app.modules.users.service import UserService
+from backend.app.core.dependencies.route_guards import get_current_active_user
+from backend.app.modules.users.models import User
 
 
 logger = get_logger(__name__)
@@ -51,6 +53,20 @@ async def register_user(
 
 
 # ── Read ──────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get current user profile",
+)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_active_user),
+) -> UserResponse:
+    """
+    Fetch the currently authenticated user's profile.
+    """
+    return current_user
 
 @router.get(
     "",

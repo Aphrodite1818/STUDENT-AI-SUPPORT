@@ -50,6 +50,8 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
+    from backend.app.tenant_management.router import router as tenant_router
+    app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Tenants"])
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])
