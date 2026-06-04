@@ -9,8 +9,6 @@ from sqlalchemy import String, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.shared.base_model import BaseModel
 
-if TYPE_CHECKING:
-    from backend.app.modules.students.models import Students
 
 
 class UserRole(str, Enum):
@@ -52,12 +50,7 @@ class User(BaseModel):
 
     whatsapp_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True) 
 
-    # Relationships
-    students: Mapped[list["Students"]] = relationship(
-        "Students",
-        back_populates="parent",
-        foreign_keys="Students.parent_id",
-    )
+
 
     __table_args__ = (
         Index("ix_users_tenant_phone", "tenant_id", "phone_number"),
