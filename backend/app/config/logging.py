@@ -8,7 +8,23 @@ import logging.handlers
 import sys
 from typing import Any
 
-from backend.app.config.settings import BASE_DIR, EnvironmentType, settings
+from pathlib import Path
+try:
+    from backend.app.config.settings import BASE_DIR, EnvironmentType, settings
+except Exception:
+    # If settings cannot be imported (missing env or validation error),
+    # fall back to sensible defaults so logging can still be configured
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
+    class EnvironmentType:
+        DEVELOPMENT = "dev"
+        PRODUCTION = "prod"
+        STAGING = "stg"
+
+    class _FallbackSettings:
+        ENV = EnvironmentType.DEVELOPMENT
+        LOG_LEVEL = None
+
+    settings = _FallbackSettings()
 
 
 LOG_DIR = BASE_DIR / "logs"
@@ -122,7 +138,7 @@ def configure_logging() -> None:
     app_logger.info(
         "Logging configured",
         extra={
-            "env": settings.ENV.value,
+            "env": settings.ENV,
             "console_level": logging.getLevelName(console_level),
             "log_file": str(LOG_FILE),
         },
@@ -133,6 +149,11 @@ configure_logging()
 
 
 def get_logger(name: str) -> logging.Logger:
+    """Get a logger instance for the given module name.
+    
+    Automatically prepends 'backend.' if not already present.
+    This ensures all loggers are part of the backend logging hierarchy.
+    """
     if not name.startswith("backend."):
         name = f"backend.{name.lstrip('.')}"
     return logging.getLogger(name)

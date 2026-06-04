@@ -25,9 +25,12 @@ from backend.app.core.exceptions import (
 
 from backend.app.core.utils.validators import generate_slug
 from backend.app.config.security import hash_password
+from backend.app.config.logging import get_logger
 
 # Import the User model to create the Admin account
 from backend.app.modules.users.models import User, UserRole, AccountStatus
+
+logger = get_logger(__name__)
 
 
 class TenantService:
@@ -50,6 +53,7 @@ class TenantService:
         # Flush to get the new tenant ID (but don't commit yet)
         db.add(tenant)
         await db.flush()
+        logger.info(f"Tenant created: {payload.school_name}", extra={"tenant_id": str(tenant.id), "email": payload.email})
 
         # 3. CREATE THE ADMIN USER
         admin_user = User(
@@ -63,6 +67,12 @@ class TenantService:
         db.add(admin_user)
         await db.flush()
         await db.refresh(tenant)
+        logger.info(f"Admin user created for tenant", extra={"tenant_id": str(tenant.id), "admin_email": payload.email, "role": "ADMIN"})
+        
+        # CRITICAL: Commit the transaction to ensure tenant and admin user are persisted
+        # This is essential for OTPService to find the user when generating verification OTP
+        await db.commit()
+        logger.info(f"Tenant registration committed", extra={"tenant_id": str(tenant.id)})
 
         return tenant
 

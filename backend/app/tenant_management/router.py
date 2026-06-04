@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends, status
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.dependencies.db import DbSession, get_db
+from backend.app.config.logging import get_logger
+from backend.app.modules.auth.service import OTPService
+from backend.app.modules.auth.schemas import RequestOTP
+from backend.app.modules.auth.models import OTPPurpose
 from backend.app.tenant_management.schemas import (
     TenantCreate,
     TenantUpdate,
@@ -14,7 +18,6 @@ from backend.app.tenant_management.schemas import (
     TenantStatusUpdate,
     TenantAdminResponse
 )
-from backend.app.core.exceptions import ForbiddenException
 from backend.app.core.dependencies.route_guards import (
     get_current_user,
     require_role,
@@ -22,6 +25,8 @@ from backend.app.core.dependencies.route_guards import (
 )
 from backend.app.modules.users.models import User, UserRole
 from backend.app.tenant_management.service import TenantService
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["Tenants"])
 
@@ -38,9 +43,19 @@ async def register_tenant(
 ) -> TenantPublicResponse:
     """
     Public endpoint to register a new school and automatically create
-    an admin user account for it.
+    an admin user account for it. Sends verification OTP to admin email.
     """
-    return await TenantService.register_tenant(db, payload)
+    tenant = await TenantService.register_tenant(db, payload)
+    
+    # Send verification OTP email to tenant admin
+    try:
+        otp_request = RequestOTP(email=payload.email, purpose=OTPPurpose.VERIFICATION)
+        await OTPService.generate_otp(db, otp_request)
+        logger.info(f"Verification OTP sent to tenant admin {payload.email}", extra={"tenant_id": str(tenant.id), "school_name": tenant.school_name})
+    except Exception as e:
+        logger.error(f"Failed to send verification OTP to tenant admin {payload.email}: {str(e)}", exc_info=True, extra={"tenant_id": str(tenant.id)})
+    
+    return tenant
 
 
 @router.post(
@@ -131,6 +146,7 @@ async def update_tenant_status(
     Superadmin only. Change the status of a tenant (e.g., suspend or activate).
     """
     return await TenantService.update_tenant_status(db, tenant_id, payload)
+
 
 
 @router.delete(
