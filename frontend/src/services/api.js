@@ -24,7 +24,11 @@ async function request(endpoint, options = {}) {
                 localStorage.removeItem("token");
                 // Optionally trigger a redirect to login page here
             }
-            throw new Error(data.detail || data.message || "An error occurred");
+            const detail = data.detail;
+            const message = Array.isArray(detail)
+                ? detail.map((item) => item.msg || String(item)).join(", ")
+                : (detail || data.message || "An error occurred");
+            throw new Error(message);
         }
 
         return data;

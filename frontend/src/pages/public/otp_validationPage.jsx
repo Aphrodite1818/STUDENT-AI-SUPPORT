@@ -3,23 +3,28 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
+import { authService } from "../../services/auth.service";
 
 function OTPValidationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const email = searchParams.get("email") || "your email";
+  const emailParam = searchParams.get("email");
+  const email = emailParam || "";
   
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const inputRefs = useRef([]);
 
-  // Auto-focus first input
   useEffect(() => {
+    if (!emailParam) {
+      navigate("/register", { replace: true });
+      return;
+    }
     if (inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
-  }, []);
+  }, [emailParam, navigate]);
 
   const handleChange = (index, e) => {
     const value = e.target.value;
@@ -70,14 +75,19 @@ function OTPValidationPage() {
     setError(null);
 
     try {
-      // Simulate API call for OTP validation
-      // Replace with: await fetch('/api/v1/users/verify-otp', { ... })
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      console.log("Verified OTP:", otpString, "for email:", email);
-      // Route based on role, for now route to /login or /admin directly
-      navigate("/admin");
-      
+      await authService.verifyOtp(email, otpString, "verification");
+
+      const pendingRaw = sessionStorage.getItem("pendingAuth");
+      const pending = pendingRaw ? JSON.parse(pendingRaw) : null;
+
+      if (pending?.email === email && pending?.password) {
+        await authService.login(email, pending.password);
+        sessionStorage.removeItem("pendingAuth");
+        navigate("/admin");
+        return;
+      }
+
+      navigate("/login");
     } catch (err) {
       setError(err.message || "Invalid OTP code.");
     } finally {
@@ -159,7 +169,19 @@ function OTPValidationPage() {
 
           <p className="mt-8 text-center text-sm text-text-soft">
             Didn't receive the code?{" "}
-            <button className="font-semibold text-primary hover:text-primary-hover transition-colors">
+            <button
+              type="button"
+              className="font-semibold text-primary hover:text-primary-hover transition-colors"
+              disabled={isLoading || !email}
+              onClick={async () => {
+                setError(null);
+                try {
+                  await authService.requestOtp(email, "verification");
+                } catch (err) {
+                  setError(err.message || "Failed to resend code.");
+                }
+              }}
+            >
               Resend
             </button>
           </p>

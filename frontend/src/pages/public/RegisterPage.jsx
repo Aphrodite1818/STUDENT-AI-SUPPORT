@@ -4,6 +4,8 @@ import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
+import { tenantService } from "../../services/tenant.service";
+import { authService } from "../../services/auth.service";
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -25,17 +27,31 @@ function RegisterPage() {
     setError(null);
     
     try {
-      // DUMMY TEST: Simulate backend latency
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // We would normally POST to /api/v1/tenants/register here with:
-      // JSON.stringify({ school_name: formData.schoolName, email: formData.email, password: formData.password })
-      
-      // On success, redirect to OTP verification, passing email
+      await tenantService.registerTenant({
+        school_name: formData.schoolName,
+        email: formData.email,
+        password: formData.password,
+      });
+
+      sessionStorage.setItem(
+        "pendingAuth",
+        JSON.stringify({ email: formData.email, password: formData.password })
+      );
+
+      try {
+        await authService.requestOtp(formData.email, "verification");
+      } catch (otpErr) {
+        navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
+        setError(
+          otpErr.message ||
+            "Account created, but we could not send the verification code. Use Resend on the next page."
+        );
+        return;
+      }
+
       navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
-      
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
