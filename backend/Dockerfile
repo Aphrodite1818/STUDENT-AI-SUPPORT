@@ -14,14 +14,14 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY backend/requirements.txt /app/
+# Copy requirements file (context is already inside backend)
+COPY requirements.txt /app/
 
 # Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the backend codebase
-COPY backend/ /app/backend/
+# Copy the rest of the backend codebase into a "backend" folder to preserve absolute imports
+COPY . /app/backend/
 
 # Expose the application port
 EXPOSE 8080
