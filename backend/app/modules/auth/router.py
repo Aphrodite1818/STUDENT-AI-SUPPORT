@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.app.config.database import get_db
+from backend.app.core.dependencies.db import get_db
 from backend.app.config.security import create_access_token
 from backend.app.modules.auth.schemas import LoginRequest, Token, RequestOTP, VerifyOTP, UpdatePassword
 from backend.app.modules.auth.service import AuthService, OTPService

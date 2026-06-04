@@ -13,7 +13,7 @@ from jose import jwt, JWTError
 import uuid
 
 from backend.app.config.settings import settings
-from backend.app.config.database import get_db
+from backend.app.core.dependencies.db import get_db
 from backend.app.core.exceptions import UnauthorizedException, ForbiddenException
 from backend.app.modules.users.models import User, AccountStatus, UserRole
 from backend.app.modules.users.repository import UserRepository

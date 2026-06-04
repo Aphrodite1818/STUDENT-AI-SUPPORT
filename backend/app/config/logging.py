@@ -16,7 +16,7 @@ from backend.app.config.settings import settings, BASE_DIR
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
-LOG_FILE = LOG_DIR / "app.log"
+LOG_FILE = LOG_DIR / "backend.app.log"
 
 LOG_FORMAT = (
     "%(asctime)s | "
