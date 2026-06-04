@@ -25,30 +25,23 @@ function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
-    
+
     try {
+      // Register tenant - this automatically sends OTP verification email
       await tenantService.registerTenant({
         school_name: formData.schoolName,
         email: formData.email,
         password: formData.password,
       });
 
+      // Store credentials for auto-login after OTP verification
       sessionStorage.setItem(
         "pendingAuth",
-        JSON.stringify({ email: formData.email, password: formData.password })
+        JSON.stringify({ email: formData.email, password: formData.password }),
       );
 
-      try {
-        await authService.requestOtp(formData.email, "verification");
-      } catch (otpErr) {
-        navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
-        setError(
-          otpErr.message ||
-            "Account created, but we could not send the verification code. Use Resend on the next page."
-        );
-        return;
-      }
-
+      // OTP was already sent by the backend during registration
+      // Navigate to verification page where user can enter the OTP code
       navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
@@ -83,10 +76,12 @@ function RegisterPage() {
 
         <Card className="p-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary animate-text-gradient bg-[length:200%_auto]"></div>
-          
+
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-text">Create an account</h1>
-            <p className="text-sm text-text-muted mt-2">Set up Learnly AI for your school.</p>
+            <p className="text-sm text-text-muted mt-2">
+              Set up Learnly AI for your school.
+            </p>
           </div>
 
           {error && (
@@ -121,7 +116,7 @@ function RegisterPage() {
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
             </div>
-            
+
             <div className="group">
               <Input
                 label="Password"
@@ -142,7 +137,9 @@ function RegisterPage() {
                 className="w-full group relative overflow-hidden"
                 disabled={isLoading}
               >
-                <span className={`transition-all duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+                <span
+                  className={`transition-all duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
+                >
                   Create workspace
                 </span>
                 {isLoading && (
@@ -156,7 +153,10 @@ function RegisterPage() {
 
           <p className="mt-8 text-center text-sm text-text-soft">
             Already have an account?{" "}
-            <Link to="/login" className="font-semibold text-primary hover:text-primary-hover transition-colors">
+            <Link
+              to="/login"
+              className="font-semibold text-primary hover:text-primary-hover transition-colors"
+            >
               Log in
             </Link>
           </p>
