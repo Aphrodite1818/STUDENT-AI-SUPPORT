@@ -1,6 +1,6 @@
 import email.utils
 import re
-
+import httpx
 import aiosmtplib
 
 from email.mime.text import MIMEText
@@ -19,32 +19,62 @@ async def send_email(
     is_html: bool = False,
 ) -> bool:
     """
-    Send an email asynchronously.
-
-    Returns:
-        bool:
-            True  -> Email sent successfully
-            False -> Email failed to send
+    Hybrid email sender:
+    1. Google Apps Script (primary)
+    2. SMTP fallback (aiosmtplib)
     """
 
-    required_settings = [
-        settings.SMTP_HOST,
-        settings.SMTP_PORT,
-        settings.SMTP_PASSWORD,
-        settings.SMTP_FROM_EMAIL,
-    ]
-
-    if not all(required_settings):
-        logger.warning(
-            "SMTP configuration incomplete. "
-            "Email sending skipped."
-        )
+    # ==========================================================
+    # BASIC VALIDATION
+    # ==========================================================
+    if not to_email or not subject or not body:
+        logger.warning("Invalid email parameters")
         return False
 
     # ==========================================================
-    # Build Message
+    # 1. GOOGLE APPS SCRIPT (PRIMARY)
     # ==========================================================
+    if settings.APP_SCRIPT_URL:
+        try:
+            payload = {
+                "to": to_email,
+                "subject": subject,
+                "body": body,
+                "html": body if is_html else None,
+            }
 
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.post(
+                    settings.APPS_SCRIPT_URL,
+                    json=payload,
+                )
+
+            if res.status_code == 200:
+                logger.info(f"Email sent via Apps Script → {to_email}")
+                return True
+
+            logger.warning(
+                f"Apps Script failed ({res.status_code}): {res.text}"
+            )
+
+        except Exception as e:
+            logger.exception(f"Apps Script error: {e}")
+
+    # ==========================================================
+    # 2. SMTP FALLBACK
+    # ==========================================================
+    required = [
+        settings.SMTP_HOST,
+        settings.SMTP_PORT,
+        settings.SMTP_FROM_EMAIL,
+        settings.SMTP_PASSWORD,
+    ]
+
+    if not all(required):
+        logger.warning("SMTP not configured")
+        return False
+
+    # Build email message
     msg = (
         MIMEMultipart("alternative")
         if is_html
@@ -66,32 +96,21 @@ async def send_email(
 
         msg.attach(MIMEText(plain_text, "plain"))
         msg.attach(MIMEText(body, "html"))
-
     else:
         msg.attach(MIMEText(body, "plain"))
-
-    # ==========================================================
-    # SMTP Configuration
-    # ==========================================================
-
-    use_tls = settings.SMTP_PORT == 465
-    start_tls = settings.SMTP_PORT == 587
 
     smtp = aiosmtplib.SMTP(
         hostname=settings.SMTP_HOST,
         port=settings.SMTP_PORT,
-        use_tls=use_tls,
-        start_tls=start_tls,
+        start_tls=(settings.SMTP_PORT == 587),
+        use_tls=(settings.SMTP_PORT == 465),
         timeout=15,
     )
-
-    # ==========================================================
-    # Send Email
-    # ==========================================================
 
     try:
         await smtp.connect()
 
+        # NOTE: using FROM_EMAIL as auth identity
         await smtp.login(
             settings.SMTP_FROM_EMAIL,
             settings.SMTP_PASSWORD,
@@ -99,31 +118,11 @@ async def send_email(
 
         await smtp.send_message(msg)
 
-        logger.info(
-            f"Email successfully sent to {to_email}"
-        )
-
+        logger.info(f"Email sent via SMTP fallback → {to_email}")
         return True
 
-    except aiosmtplib.SMTPException as e:
-        logger.exception(
-            f"SMTP error while sending email to "
-            f"{to_email}: {str(e)}"
-        )
-        return False
-
-    except TimeoutError:
-        logger.exception(
-            f"SMTP timeout while sending email to "
-            f"{to_email}"
-        )
-        return False
-
     except Exception as e:
-        logger.exception(
-            f"Unexpected email error for "
-            f"{to_email}: {str(e)}"
-        )
+        logger.exception(f"SMTP fallback error: {e}")
         return False
 
     finally:
@@ -132,4 +131,3 @@ async def send_email(
                 await smtp.quit()
         except Exception:
             pass
-
