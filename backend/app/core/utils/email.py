@@ -32,7 +32,7 @@ async def send_email(
         return False
 
     # ==========================================================
-    # 1. GOOGLE APPS SCRIPT (PRIMARY)
+    # 1. GOOGLE APP SCRIPT (PRIMARY)
     # ==========================================================
     if settings.APP_SCRIPT_URL:
         try:
@@ -45,20 +45,20 @@ async def send_email(
 
             async with httpx.AsyncClient(timeout=10) as client:
                 res = await client.post(
-                    settings.APPS_SCRIPT_URL,
+                    settings.APP_SCRIPT_URL,
                     json=payload,
                 )
 
             if res.status_code == 200:
-                logger.info(f"Email sent via Apps Script → {to_email}")
+                logger.info(f"Email sent via App Script → {to_email}")
                 return True
 
             logger.warning(
-                f"Apps Script failed ({res.status_code}): {res.text}"
+                f"App Script failed ({res.status_code}): {res.text}"
             )
 
         except Exception as e:
-            logger.exception(f"Apps Script error: {e}")
+            logger.exception(f"App Script error: {e}")
 
     # ==========================================================
     # 2. SMTP FALLBACK
