@@ -12,20 +12,19 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    func,
     Enum as SQLEnum,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import  Mapped, mapped_column
 from backend.app.shared.mixins import TimestampMixin, UUIDMixin
 from backend.app.shared.base_model import BaseModel, Base
-
+from typing import List
 
 
 
 
 class TenantStatus(str, Enum):
-    """Represents the lifecycle status of a tenant (school)."""
+    """Represents the lifecycle of the tenant subscription plan"""
     ACTIVE    = "active"
     INACTIVE  = "inactive"
     SUSPENDED = "suspended"
@@ -39,6 +38,14 @@ class SubscriptionPlan(str, Enum):
     STARTER    = "starter"
     PRO        = "pro"
     ENTERPRISE = "enterprise"
+
+
+
+class TenantVerificationStatus(str , Enum):
+    """represent the lifecycle of tenant account during registration process"""
+    PENDING_VERIFICATION = "pending_verification"
+    ACTIVE = "active"
+    REJECTED = "rejected"
 
 
 # ── 4. Tenant Model ──────────────────────────────────────────────────────────
@@ -131,6 +138,17 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+
+    branches : Mapped[list[str] | None] = mapped_column(ARRAY(String) , nullable = True , default = None) 
+
+    verification_status : Mapped[TenantVerificationStatus] = mapped_column(
+        SQLEnum(TenantVerificationStatus, name="tenantverificationstatus"),
+        nullable=False,
+        default=TenantVerificationStatus.PENDING_VERIFICATION,
+    )
+
+
+
 
     def __repr__(self) -> str:
         return f"<Tenant id={self.id} slug={self.slug!r} status={self.status}>"

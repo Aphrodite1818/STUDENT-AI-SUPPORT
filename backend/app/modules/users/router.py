@@ -16,13 +16,17 @@ from backend.app.modules.users.schemas import (
     UserUpdate,
 )
 from backend.app.modules.users.service import UserService
-from backend.app.core.dependencies.route_guards import get_current_active_user
-from backend.app.modules.users.models import User
+from backend.app.core.dependencies.route_guards import (
+    get_current_active_user,
+    require_role,
+)
+from backend.app.core.exceptions import ForbiddenException
+from backend.app.modules.users.models import User, UserRole
 
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(tags=["Users"])
 
 
 # ── Dependency ────────────────────────────────────────────────────────────────
@@ -42,6 +46,7 @@ def get_user_service(session: DbSession) -> UserService:
 async def register_user(
     payload: UserCreate,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> UserResponse:
     """
     Register a new user account.
@@ -78,6 +83,7 @@ async def list_users(
     skip: int = Query(default=0, ge=0, description="Number of records to skip"),
     limit: int = Query(default=100, ge=1, le=500, description="Max records to return"),
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> list[UserResponse]:
     """
     Return a paginated list of all users.
@@ -94,11 +100,19 @@ async def list_users(
 async def get_user(
     user_id: uuid.UUID,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_active_user),
 ) -> UserResponse:
     """
     Fetch a user by their UUID. Returns 404 if not found.
     """
-    return await service.get_user_by_id(user_id)
+    user = await service.get_user_by_id(user_id)
+    if (
+        current_user.role != UserRole.SUPERADMIN
+        and current_user.id != user_id
+        and current_user.tenant_id != user.tenant_id
+    ):
+        raise ForbiddenException("You do not have access to this user")
+    return user
 
 
 # ── Update ────────────────────────────────────────────────────────────────────
@@ -113,11 +127,24 @@ async def update_profile(
     user_id: uuid.UUID,
     payload: UserUpdate,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_active_user),
 ) -> UserResponse:
     """
     Partial update of a user's own profile fields.
     Only fields included in the request body are changed.
     """
+    if current_user.id != user_id and current_user.role not in (
+        UserRole.ADMIN,
+        UserRole.SUPERADMIN,
+    ):
+        raise ForbiddenException("You can only update your own profile")
+    if (
+        current_user.role == UserRole.ADMIN
+        and current_user.id != user_id
+    ):
+        target = await service.get_user_by_id(user_id)
+        if target.tenant_id != current_user.tenant_id:
+            raise ForbiddenException("You do not have access to this user")
     return await service.update_profile(user_id, payload)
 
 
@@ -131,6 +158,7 @@ async def update_admin_status(
     user_id: uuid.UUID,
     payload: UserAdminUpdate,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> UserResponse:
     """
     Admin-only endpoint to update privileged fields
@@ -149,6 +177,7 @@ async def update_admin_status(
 async def delete_user(
     user_id: uuid.UUID,
     service: UserService = Depends(get_user_service),
+    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> dict:
     """
     Permanently delete a user. Returns 404 if not found.

@@ -3,13 +3,13 @@
 #======================================#
 
 from fastapi import APIRouter, Depends, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.dependencies.db import DbSession, get_db
 from backend.app.config.logging import get_logger
 from backend.app.modules.auth.service import OTPService
-from backend.app.modules.auth.schemas import RequestOTP
-from backend.app.modules.auth.models import OTPPurpose
 from backend.app.tenant_management.schemas import (
     TenantCreate,
     TenantUpdate,
@@ -33,30 +33,26 @@ router = APIRouter(tags=["Tenants"])
 
 @router.post(
     "/register",
-    response_model=TenantPublicResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new school (tenant) and its admin user",
 )
 async def register_tenant(
     payload: TenantRegisterRequest,
     db: DbSession
-) -> TenantPublicResponse:
+) -> dict:
     """
     Public endpoint to register a new school and automatically create
     an admin user account for it. Sends verification OTP to admin email.
-    """
-    tenant = await TenantService.register_tenant(db, payload)
-    
-    # Send verification OTP email to tenant admin
-    try:
-        otp_request = RequestOTP(email=payload.email, purpose=OTPPurpose.VERIFICATION)
-        await OTPService.generate_otp(db, otp_request)
-        logger.info(f"Verification OTP sent to tenant admin {payload.email}", extra={"tenant_id": str(tenant.id), "school_name": tenant.school_name})
-    except Exception as e:
-        logger.error(f"Failed to send verification OTP to tenant admin {payload.email}: {str(e)}", exc_info=True, extra={"tenant_id": str(tenant.id)})
-    
-    return tenant
 
+    Returns 201 for new tenant, 200 for resend on existing pending account.
+    """
+    result = await TenantService.register_tenant(db, payload)
+    if result.get("can_resend_otp") is False:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=jsonable_encoder(result),
+        )
+    return result
 
 @router.post(
     "",
@@ -83,9 +79,9 @@ async def create_tenant(
     dependencies=[Depends(require_role([UserRole.SUPERADMIN]))]
 )
 async def list_tenants(
+    db: DbSession,
     skip: int = 0,
     limit: int = 50,
-    db: DbSession = None
 ) -> list[TenantAdminResponse]:
     """
     Superadmin only. Lists all tenants paginated.

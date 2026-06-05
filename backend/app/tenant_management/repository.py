@@ -13,7 +13,7 @@ queries without needing to instantiate the repository.
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select , update
-from backend.app.tenant_management.models import Tenant , TenantStatus
+from backend.app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
 from datetime import datetime , timezone
 
 
@@ -135,4 +135,11 @@ class TenantRepository:
         )
         return result.scalar_one_or_none() is not None
     
+
+    @staticmethod
+    async def is_verified(db : AsyncSession , email : str ):
+        result = await db.execute(
+            select(Tenant.verification_status).where(Tenant.email == email)
+        )
+        return result.scalar_one_or_none() == TenantVerificationStatus.ACTIVE
 

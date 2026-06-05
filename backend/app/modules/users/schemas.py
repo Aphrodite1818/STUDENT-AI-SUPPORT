@@ -84,14 +84,18 @@ class UserAdminUpdate(BaseModel):
     account_status: AccountStatus | None = None
 
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
+    firstname: str | None = None
+    lastname: str | None = None
+    email: EmailStr | None = None
+    phone_number: str | None = None
     created_at: datetime
     updated_at: datetime
     role: UserRole
     account_status: AccountStatus
-    whatsapp_id: str | None
+    whatsapp_id: str | None = None
 
     model_config = {"from_attributes": True}  
 

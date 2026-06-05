@@ -16,6 +16,7 @@ function RegisterPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [passwordStrength, setPasswordStrength] = useState(0);
 
   const handleChange = (e) => {
@@ -64,13 +65,17 @@ function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await tenantService.registerTenant({
+      const result = await tenantService.registerTenant({
         school_name: formData.schoolName,
         email: formData.email,
         password: formData.password,
       });
 
-      // Store only the email — never store the password
+      if (result?.message) {
+        setError(null);
+        setSuccessMessage(result.message);
+      }
+
       sessionStorage.setItem("pendingVerificationEmail", formData.email);
 
       navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
@@ -118,6 +123,12 @@ function RegisterPage() {
               Set up Learnly AI for your school.
             </p>
           </div>
+
+          {successMessage && !error && (
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
+              {successMessage}
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">

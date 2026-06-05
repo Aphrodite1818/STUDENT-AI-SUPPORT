@@ -27,19 +27,30 @@ function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const justVerified = searchParams.get("verified") === "true";
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
+  const [resendMessage, setResendMessage] = useState(null);
   const [error, setError] = useState(null);
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    if (needsVerification) {
+      setNeedsVerification(false);
+      setError(null);
+      setResendMessage(null);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setNeedsVerification(false);
+    setResendMessage(null);
 
     try {
       const data = await authService.login(formData.email, formData.password);
@@ -58,13 +69,35 @@ function LoginPage() {
 
       navigate(route, { replace: true });
     } catch (err) {
-      const message =
-        err?.response?.data?.detail ||
-        err?.message ||
-        "Invalid email or password.";
-      setError(message);
+      if (err?.response?.status === 403) {
+        setNeedsVerification(true);
+        setVerificationEmail(formData.email || err?.response?.data?.email || "");
+        setError(err?.response?.data?.detail || "Your account needs to be verified before logging in.");
+      } else {
+        const message =
+          err?.response?.data?.detail ||
+          err?.message ||
+          "Invalid email or password.";
+        setError(message);
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setIsResendingOtp(true);
+    setError(null);
+    setResendMessage(null);
+    try {
+      await authService.requestOtp(verificationEmail, "verification");
+      setResendMessage("A new verification code has been sent to your email.");
+    } catch (err) {
+      const message =
+        err?.response?.data?.detail || err?.message || "Failed to resend code.";
+      setError(message);
+    } finally {
+      setIsResendingOtp(false);
     }
   };
 
@@ -111,6 +144,36 @@ function LoginPage() {
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
               {error}
+            </div>
+          )}
+
+          {needsVerification && (
+            <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/50 rounded-md text-sm text-center">
+              <p className="text-yellow-600 dark:text-yellow-400 font-medium mb-2">
+                Your account needs email verification before you can log in.
+              </p>
+              {resendMessage && (
+                <p className="text-green-600 dark:text-green-400 mb-2">
+                  {resendMessage}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={isResendingOtp}
+                className="font-semibold text-primary hover:text-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isResendingOtp ? "Sending..." : "Resend verification code"}
+              </button>
+              <p className="text-xs text-text-muted mt-2">
+                or{" "}
+                <Link
+                  to={`/verify-otp?email=${encodeURIComponent(verificationEmail)}`}
+                  className="font-semibold text-primary hover:text-primary-hover transition-colors"
+                >
+                  verify code manually
+                </Link>
+              </p>
             </div>
           )}
 

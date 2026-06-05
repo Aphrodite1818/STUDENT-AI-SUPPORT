@@ -17,7 +17,7 @@ from pydantic import(
     model_validator
 )
 
-from backend.app.tenant_management.models import SubscriptionPlan , TenantStatus
+from backend.app.tenant_management.models import SubscriptionPlan , TenantStatus, TenantVerificationStatus
 from backend.app.core.utils.validators import generate_slug
 
 
@@ -126,6 +126,7 @@ class TenantPublicResponse(BaseModel):
     timezone : str
     language : str
     onboarding_completed : bool
+    verification_status : TenantVerificationStatus
     created_at : datetime
     updated_at : datetime
 

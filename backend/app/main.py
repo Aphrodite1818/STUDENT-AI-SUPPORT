@@ -9,9 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config.logging import get_logger
 from backend.app.config.database import engine
+from backend.app.config.settings import settings
 from backend.app.core.exception_handlers import register_exception_handlers
 from backend.app.modules.users.router import router as users_router
 from backend.app.modules.auth.router import router as auth_router
+from backend.app.tenant_management.router import router as tenant_router
 logger = get_logger(__name__)
 
 
@@ -38,7 +40,7 @@ def create_app() -> FastAPI:
     # CORS — tighten origins before going to production
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -50,7 +52,6 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
-    from backend.app.tenant_management.router import router as tenant_router
     app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Tenants"])
 
     # ── Health check ──────────────────────────────────────────────────────────

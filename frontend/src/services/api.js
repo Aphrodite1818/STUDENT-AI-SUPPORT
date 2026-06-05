@@ -20,16 +20,18 @@ async function request(endpoint, options = {}) {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            // Check for unauthenticated error
             if (response.status === 401) {
                 localStorage.removeItem("token");
-                // Optionally trigger a redirect to login page here
+            } else if (response.status === 403) {
+                // Do NOT clear token on 403 — account may just need OTP verification
             }
             const detail = data.detail;
             const message = Array.isArray(detail)
                 ? detail.map((item) => item.msg || String(item)).join(", ")
                 : (detail || data.message || "An error occurred");
-            throw new Error(message);
+            const error = new Error(message);
+            error.response = { status: response.status, data, headers: Object.fromEntries(response.headers.entries()) };
+            throw error;
         }
 
         return data;
