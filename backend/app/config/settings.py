@@ -77,7 +77,7 @@ class Settings(BaseSettings):
 
     # OTP Settings
     OTP_EXPIRATION_MINUTES: int = 10
-    APP_SCRIPT_URL = Field(...,)
+    APP_SCRIPT_URL : str = Field(...,)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
