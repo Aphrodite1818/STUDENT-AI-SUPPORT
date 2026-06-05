@@ -30,7 +30,6 @@ async def send_email(
     required_settings = [
         settings.SMTP_HOST,
         settings.SMTP_PORT,
-        settings.SMTP_USERNAME,
         settings.SMTP_PASSWORD,
         settings.SMTP_FROM_EMAIL,
     ]
@@ -94,7 +93,7 @@ async def send_email(
         await smtp.connect()
 
         await smtp.login(
-            settings.SMTP_USERNAME,
+            settings.SMTP_FROM_EMAIL,
             settings.SMTP_PASSWORD,
         )
 
