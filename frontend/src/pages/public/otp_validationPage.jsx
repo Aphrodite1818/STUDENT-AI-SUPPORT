@@ -9,21 +9,23 @@ function OTPValidationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const emailParam = searchParams.get("email");
+  const purpose = searchParams.get("purpose") || "verification";
   const email = emailParam || "";
-  
+
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [error, setError] = useState(null);
+  const [resendMessage, setResendMessage] = useState(null);
   const inputRefs = useRef([]);
 
   useEffect(() => {
+    // No email in URL — nothing to verify, send them back
     if (!emailParam) {
       navigate("/register", { replace: true });
       return;
     }
-    if (inputRefs.current[0]) {
-      inputRefs.current[0].focus();
-    }
+    inputRefs.current[0]?.focus();
   }, [emailParam, navigate]);
 
   const handleChange = (index, e) => {
@@ -31,35 +33,32 @@ function OTPValidationPage() {
     if (isNaN(value)) return;
 
     const newOtp = [...otp];
-    // Allow pasting a full string if pasted into one box
+
+    // Handle paste into a single box
     if (value.length > 1) {
       const pastedData = value.slice(0, 6).split("");
       for (let i = 0; i < pastedData.length; i++) {
         if (index + i < 6) newOtp[index + i] = pastedData[i];
       }
       setOtp(newOtp);
-      // Focus the next empty box or the last one
-      const nextEmptyIndex = newOtp.findIndex(val => val === "");
-      if (nextEmptyIndex !== -1 && inputRefs.current[nextEmptyIndex]) {
-        inputRefs.current[nextEmptyIndex].focus();
-      } else if (inputRefs.current[5]) {
-        inputRefs.current[5].focus();
-      }
+      const nextEmptyIndex = newOtp.findIndex((val) => val === "");
+      const focusIndex = nextEmptyIndex !== -1 ? nextEmptyIndex : 5;
+      inputRefs.current[focusIndex]?.focus();
       return;
     }
 
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto-advance
-    if (value !== "" && index < 5 && inputRefs.current[index + 1]) {
-      inputRefs.current[index + 1].focus();
+    // Auto-advance to next box
+    if (value !== "" && index < 5) {
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleKeyDown = (index, e) => {
-    if (e.key === "Backspace" && otp[index] === "" && index > 0 && inputRefs.current[index - 1]) {
-      inputRefs.current[index - 1].focus();
+    if (e.key === "Backspace" && otp[index] === "" && index > 0) {
+      inputRefs.current[index - 1]?.focus();
     }
   };
 
@@ -75,23 +74,36 @@ function OTPValidationPage() {
     setError(null);
 
     try {
-      await authService.verifyOtp(email, otpString, "verification");
-
-      const pendingRaw = sessionStorage.getItem("pendingAuth");
-      const pending = pendingRaw ? JSON.parse(pendingRaw) : null;
-
-      if (pending?.email === email && pending?.password) {
-        await authService.login(email, pending.password);
-        sessionStorage.removeItem("pendingAuth");
-        navigate("/admin");
-        return;
+      const result = await authService.verifyOtp(email, otpString, purpose);
+if (purpose === "password_reset") {
+         navigate("/forgot-password", { replace: true, state: { email, reset_token: result.reset_token } });
+       } else {
+        navigate("/login?verified=true", { replace: true });
       }
-
-      navigate("/login");
     } catch (err) {
-      setError(err.message || "Invalid OTP code.");
+      const message =
+        err?.response?.data?.detail || err?.message || "Invalid OTP code.";
+      setError(message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setError(null);
+    setResendMessage(null);
+    setIsResending(true);
+    try {
+      await authService.requestOtp(email, purpose);
+      setResendMessage("A new code has been sent to your email.");
+      setOtp(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+    } catch (err) {
+      const message =
+        err?.response?.data?.detail || err?.message || "Failed to resend code.";
+      setError(message);
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -120,7 +132,7 @@ function OTPValidationPage() {
 
         <Card className="p-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary animate-text-gradient bg-[length:200%_auto]"></div>
-          
+
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-text">Check your email</h1>
             <p className="text-sm text-text-muted mt-2">
@@ -135,13 +147,20 @@ function OTPValidationPage() {
             </div>
           )}
 
+          {resendMessage && !error && (
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
+              {resendMessage}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex justify-between gap-2">
               {otp.map((digit, index) => (
                 <input
                   key={index}
-                  ref={el => inputRefs.current[index] = el}
+                  ref={(el) => (inputRefs.current[index] = el)}
                   type="text"
+                  inputMode="numeric"
                   maxLength={6}
                   value={digit}
                   onChange={(e) => handleChange(index, e)}
@@ -156,7 +175,9 @@ function OTPValidationPage() {
               className="w-full group relative overflow-hidden"
               disabled={isLoading || otp.join("").length < 6}
             >
-              <span className={`transition-all duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+              <span
+                className={`transition-all duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
+              >
                 Verify Code
               </span>
               {isLoading && (
@@ -171,18 +192,11 @@ function OTPValidationPage() {
             Didn't receive the code?{" "}
             <button
               type="button"
-              className="font-semibold text-primary hover:text-primary-hover transition-colors"
-              disabled={isLoading || !email}
-              onClick={async () => {
-                setError(null);
-                try {
-                  await authService.requestOtp(email, "verification");
-                } catch (err) {
-                  setError(err.message || "Failed to resend code.");
-                }
-              }}
+              className="font-semibold text-primary hover:text-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading || isResending || !email}
+              onClick={handleResend}
             >
-              Resend
+              {isResending ? "Sending..." : "Resend"}
             </button>
           </p>
         </Card>

@@ -1,3 +1,6 @@
+#==========================#
+#     CONFIG/SECURITY.PY   #
+#==========================#
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
@@ -9,18 +12,27 @@ from backend.app.config.logging import get_logger
 logger = get_logger(__name__)
 
 
-pwd_context = CryptContext(
+hash_context = CryptContext(
     schemes=["argon2"],
     deprecated="auto"
 )
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return hash_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return hash_context.verify(plain_password, hashed_password)
+
+
+
+def hash_otp(otp_code : str) -> str:
+    return hash_context.hash(otp_code)
+
+
+def verify_otp(otp_code : str, hashed_otp : str):
+    return hash_context.verify(otp_code , hashed_otp)
 
 
 def create_access_token(

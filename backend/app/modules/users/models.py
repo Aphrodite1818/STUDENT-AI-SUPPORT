@@ -5,7 +5,7 @@
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Index
+from sqlalchemy import String, Index , Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.shared.base_model import BaseModel
 
@@ -50,6 +50,8 @@ class User(BaseModel):
 
     whatsapp_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True) 
 
+
+    # is_verified : Mapped[bool] = mapped_column(Boolean , nullable = False , default = True)
 
 
     __table_args__ = (

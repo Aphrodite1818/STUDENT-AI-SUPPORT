@@ -16,7 +16,7 @@ class OTP(BaseModel):
     __tablename__ = "otps"
 
     email: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    code: Mapped[str] = mapped_column(String(255), nullable=False) # Hashed or plain (hashing recommended)
+    hashed_code: Mapped[str] = mapped_column(String(255), nullable=False) # Hashed or plain (hashing recommended)
     purpose: Mapped[OTPPurpose] = mapped_column(nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

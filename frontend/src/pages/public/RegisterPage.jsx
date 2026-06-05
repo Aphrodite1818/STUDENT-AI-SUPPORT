@@ -5,7 +5,6 @@ import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { tenantService } from "../../services/tenant.service";
-import { authService } from "../../services/auth.service";
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -13,38 +12,74 @@ function RegisterPage() {
     schoolName: "",
     email: "",
     password: "",
+    confirmPassword: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [passwordStrength, setPasswordStrength] = useState(0);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "password") {
+      setPasswordStrength(getPasswordStrength(value));
+    }
   };
+
+  const getPasswordStrength = (password) => {
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+    return score;
+  };
+
+  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong", "Very strong"];
+  const strengthColor = [
+    "",
+    "bg-red-500",
+    "bg-orange-400",
+    "bg-yellow-400",
+    "bg-green-400",
+    "bg-green-500",
+  ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
 
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setIsLoading(true);
+
     try {
-      // Register tenant - this automatically sends OTP verification email
       await tenantService.registerTenant({
         school_name: formData.schoolName,
         email: formData.email,
         password: formData.password,
       });
 
-      // Store credentials for auto-login after OTP verification
-      sessionStorage.setItem(
-        "pendingAuth",
-        JSON.stringify({ email: formData.email, password: formData.password }),
-      );
+      // Store only the email — never store the password
+      sessionStorage.setItem("pendingVerificationEmail", formData.email);
 
-      // OTP was already sent by the backend during registration
-      // Navigate to verification page where user can enter the OTP code
       navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
-      setError(err.message || "Registration failed. Please try again.");
+      const message =
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Registration failed. Please try again.";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -124,11 +159,54 @@ function RegisterPage() {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                placeholder="************"
+                placeholder="············"
                 required
                 minLength={8}
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
+              {/* Password strength meter */}
+              {formData.password.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <div
+                        key={level}
+                        className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                          passwordStrength >= level
+                            ? strengthColor[passwordStrength]
+                            : "bg-border"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    Strength:{" "}
+                    <span className="font-medium text-text">
+                      {strengthLabel[passwordStrength] || "Too short"}
+                    </span>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="group">
+              <Input
+                label="Confirm password"
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="············"
+                required
+                className="transition-all duration-300 group-hover:border-primary/50"
+              />
+              {/* Inline mismatch hint */}
+              {formData.confirmPassword.length > 0 &&
+                formData.password !== formData.confirmPassword && (
+                  <p className="mt-1 text-xs text-red-500">
+                    Passwords do not match.
+                  </p>
+                )}
             </div>
 
             <div className="pt-2">

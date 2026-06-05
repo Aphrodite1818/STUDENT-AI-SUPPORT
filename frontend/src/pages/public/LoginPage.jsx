@@ -1,26 +1,71 @@
-import  { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
+import { authService } from "../../services/auth.service";
+
+const ROLE_ROUTES = {
+  SUPERADMIN: "/superadmin/dashboard",
+  ADMIN: "/admin/dashboard",
+  TEACHER: "/teacher/dashboard",
+  STUDENT: "/student/dashboard",
+  PARENT: "/parent/dashboard",
+};
+
+const decodeToken = (token) => {
+  try {
+    const payload = token.split(".")[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+};
 
 function LoginPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const justVerified = searchParams.get("verified") === "true";
+
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate login
-    setTimeout(() => {
+    setError(null);
+
+    try {
+      const data = await authService.login(formData.email, formData.password);
+
+      localStorage.setItem("token", data.access_token);
+
+      const decoded = decodeToken(data.access_token);
+      const role = decoded?.role?.toUpperCase();
+      const route = ROLE_ROUTES[role];
+
+      if (!route) {
+        setError(`Unknown role "${decoded?.role}". Please contact support.`);
+        localStorage.removeItem("token");
+        return;
+      }
+
+      navigate(route, { replace: true });
+    } catch (err) {
+      const message =
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Invalid email or password.";
+      setError(message);
+    } finally {
       setIsLoading(false);
-      console.log("Logged in with:", formData);
-    }, 1500);
+    }
   };
 
   return (
@@ -49,11 +94,25 @@ function LoginPage() {
 
         <Card className="p-8 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary animate-text-gradient bg-[length:200%_auto]"></div>
-          
+
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-text">Welcome back</h1>
-            <p className="text-sm text-text-muted mt-2">Log in to manage your school workspace.</p>
+            <p className="text-sm text-text-muted mt-2">
+              Log in to manage your school workspace.
+            </p>
           </div>
+
+          {justVerified && (
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
+              Account verified! You can now log in.
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="group">
@@ -68,7 +127,7 @@ function LoginPage() {
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
             </div>
-            
+
             <div className="group">
               <Input
                 label="Password"
@@ -84,12 +143,18 @@ function LoginPage() {
 
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="rounded border-border text-primary focus:ring-primary/20 accent-primary" />
+                <input
+                  type="checkbox"
+                  className="rounded border-border text-primary focus:ring-primary/20 accent-primary"
+                />
                 <span className="text-text-soft">Remember me</span>
               </label>
-              <a href="#" className="font-semibold text-primary hover:text-primary-hover transition-colors">
+              <Link
+                to="/forgot-password"
+                className="font-semibold text-primary hover:text-primary-hover transition-colors"
+              >
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <Button
@@ -97,7 +162,9 @@ function LoginPage() {
               className="w-full mt-2 group relative overflow-hidden"
               disabled={isLoading}
             >
-              <span className={`transition-all duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}>
+              <span
+                className={`transition-all duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
+              >
                 Log in to workspace
               </span>
               {isLoading && (
@@ -110,7 +177,10 @@ function LoginPage() {
 
           <p className="mt-8 text-center text-sm text-text-soft">
             Don't have an account?{" "}
-            <Link to="/register" className="font-semibold text-primary hover:text-primary-hover transition-colors">
+            <Link
+              to="/register"
+              className="font-semibold text-primary hover:text-primary-hover transition-colors"
+            >
               Get started
             </Link>
           </p>

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import Card from "../../components/ui/Card";
 
-function TeacherDashboardPage() {
+function ParentDashboardPage() {
   return (
     <div className="min-h-screen bg-background flex text-text">
       <aside className="w-64 transition-all duration-300 bg-surface border-r border-border flex flex-col">
@@ -17,13 +17,13 @@ function TeacherDashboardPage() {
         </nav>
       </aside>
       <main className="flex-1 p-8">
-        <h1 className="text-2xl font-bold mb-4">Teacher Dashboard</h1>
+        <h1 className="text-2xl font-bold mb-4">Parent Dashboard</h1>
         <Card className="p-6">
-          <p className="text-text-muted">Welcome to your teaching workspace.</p>
+          <p className="text-text-muted">Welcome to your parent portal.</p>
         </Card>
       </main>
     </div>
   );
 }
 
-export default TeacherDashboardPage;
+export default ParentDashboardPage;
