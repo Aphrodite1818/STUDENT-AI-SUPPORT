@@ -33,7 +33,6 @@ function LoginPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
-  const [resendMessage, setResendMessage] = useState(null);
   const [error, setError] = useState(null);
 
   const handleChange = (e) => {
@@ -41,7 +40,6 @@ function LoginPage() {
     if (needsVerification) {
       setNeedsVerification(false);
       setError(null);
-      setResendMessage(null);
     }
   };
 
@@ -50,7 +48,6 @@ function LoginPage() {
     setIsLoading(true);
     setError(null);
     setNeedsVerification(false);
-    setResendMessage(null);
 
     try {
       const data = await authService.login(formData.email, formData.password);
@@ -88,10 +85,9 @@ function LoginPage() {
   const handleResendOtp = async () => {
     setIsResendingOtp(true);
     setError(null);
-    setResendMessage(null);
     try {
       await authService.requestOtp(verificationEmail, "verification");
-      setResendMessage("A new verification code has been sent to your email.");
+      navigate(`/verify-otp?email=${encodeURIComponent(verificationEmail)}&purpose=verification`);
     } catch (err) {
       const message =
         err?.response?.data?.detail || err?.message || "Failed to resend code.";
@@ -152,11 +148,6 @@ function LoginPage() {
               <p className="text-yellow-600 dark:text-yellow-400 font-medium mb-2">
                 Your account needs email verification before you can log in.
               </p>
-              {resendMessage && (
-                <p className="text-green-600 dark:text-green-400 mb-2">
-                  {resendMessage}
-                </p>
-              )}
               <button
                 type="button"
                 onClick={handleResendOtp}
@@ -165,15 +156,6 @@ function LoginPage() {
               >
                 {isResendingOtp ? "Sending..." : "Resend verification code"}
               </button>
-              <p className="text-xs text-text-muted mt-2">
-                or{" "}
-                <Link
-                  to={`/verify-otp?email=${encodeURIComponent(verificationEmail)}`}
-                  className="font-semibold text-primary hover:text-primary-hover transition-colors"
-                >
-                  verify code manually
-                </Link>
-              </p>
             </div>
           )}
 

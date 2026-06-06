@@ -2,7 +2,7 @@
 #            auth/router.py            #
 #======================================#
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from backend.app.core.dependencies.db import DbSession, get_db
 from backend.app.config.security import create_access_token
 from backend.app.modules.auth.schemas import LoginRequest, Token, RequestOTP, VerifyOTP, UpdatePassword
@@ -44,9 +44,9 @@ async def login(payload: LoginRequest, db: DbSession) -> LoginResponse:
     return LoginResponse(access_token=access_token, email=user.email)
 
 @router.post("/request-otp")
-async def request_otp(payload: RequestOTP, db: DbSession) -> dict[str, str]:
+async def request_otp(payload: RequestOTP, db: DbSession, background_tasks: BackgroundTasks) -> dict[str, str]:
     try:
-        await OTPService.generate_otp(db, payload)
+        await OTPService.generate_otp(db, payload, background_tasks=background_tasks)
     except TooManyRequestsException as e:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

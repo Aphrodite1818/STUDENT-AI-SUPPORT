@@ -43,7 +43,8 @@ async def send_email(
                 "html": body if is_html else None,
             }
 
-            async with httpx.AsyncClient(timeout=10) as client:
+            timeout = httpx.Timeout(5.0, connect=3.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 res = await client.post(
                     settings.APP_SCRIPT_URL,
                     json=payload,
@@ -104,7 +105,7 @@ async def send_email(
         port=settings.SMTP_PORT,
         start_tls=(settings.SMTP_PORT == 587),
         use_tls=(settings.SMTP_PORT == 465),
-        timeout=15,
+        timeout=8,
     )
 
     try:

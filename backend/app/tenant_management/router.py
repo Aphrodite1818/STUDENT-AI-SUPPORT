@@ -2,7 +2,7 @@
 #      tenant_management/router.py     #
 #======================================#
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 import uuid
@@ -38,7 +38,8 @@ router = APIRouter(tags=["Tenants"])
 )
 async def register_tenant(
     payload: TenantRegisterRequest,
-    db: DbSession
+    db: DbSession,
+    background_tasks: BackgroundTasks,
 ) -> dict:
     """
     Public endpoint to register a new school and automatically create
@@ -46,7 +47,7 @@ async def register_tenant(
 
     Returns 201 for new tenant, 200 for resend on existing pending account.
     """
-    result = await TenantService.register_tenant(db, payload)
+    result = await TenantService.register_tenant(db, payload, background_tasks=background_tasks)
     if result.get("can_resend_otp") is False:
         return JSONResponse(
             status_code=status.HTTP_200_OK,

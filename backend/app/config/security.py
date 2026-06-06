@@ -2,6 +2,8 @@
 #     CONFIG/SECURITY.PY   #
 #==========================#
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -28,10 +30,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def hash_otp(otp_code : str) -> str:
-    return hash_context.hash(otp_code)
+    digest = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        otp_code.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"otp_sha256${digest}"
 
 
 def verify_otp(otp_code : str, hashed_otp : str):
+    if hashed_otp.startswith("otp_sha256$"):
+        return hmac.compare_digest(hash_otp(otp_code), hashed_otp)
     return hash_context.verify(otp_code , hashed_otp)
 
 

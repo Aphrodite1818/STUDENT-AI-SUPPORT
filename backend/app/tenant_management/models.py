@@ -77,7 +77,7 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
     )
 
     # ── Contact / location ───────────────────────────────────────────────────
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)

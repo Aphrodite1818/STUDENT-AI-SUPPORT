@@ -18,6 +18,7 @@ import string
 from jose import jwt, JWTError
 from backend.app.modules.users.repository import UserRepository
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import BackgroundTasks
 from backend.app.modules.users.models import User
 from backend.app.tenant_management.models import TenantVerificationStatus
 from backend.app.tenant_management.models import TenantStatus
@@ -84,7 +85,11 @@ class AuthService:
 
 class OTPService:
     @staticmethod
-    async def generate_otp(db: AsyncSession, payload: RequestOTP) -> None:
+    async def generate_otp(
+        db: AsyncSession,
+        payload: RequestOTP,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
         user = await AuthService._user_repo(db).get_user_by_email(payload.email)
 
         if not user:
@@ -102,7 +107,6 @@ class OTPService:
         await db.execute(
             delete(OTP).where(
                 OTP.email == payload.email,
-                OTP.expires_at < datetime.now(timezone.utc),
                 OTP.purpose == payload.purpose,
                 OTP.is_used == False,
             )
@@ -132,19 +136,28 @@ class OTPService:
             expiration_minutes=settings.OTP_EXPIRATION_MINUTES,
         )
 
-        try:
-            await send_email(
+        db.add(otp_record)
+        await db.commit()
+
+        if background_tasks is not None:
+            background_tasks.add_task(
+                send_email,
                 to_email=payload.email,
                 subject=subject,
                 body=html_body,
                 is_html=True,
             )
-        except Exception:
-            await db.rollback()
-            raise
+            return
 
-        db.add(otp_record)
-        await db.commit()
+        email_sent = await send_email(
+            to_email=payload.email,
+            subject=subject,
+            body=html_body,
+            is_html=True,
+        )
+
+        if not email_sent:
+            raise BadRequestException("Unable to send OTP email. Please try again.")
 
     @staticmethod
     async def verify_otp(db: AsyncSession, payload: VerifyOTP) -> dict[str, str]:
@@ -156,7 +169,7 @@ class OTPService:
                 OTP.is_used == False,
             ).order_by(OTP.created_at.desc())
         )
-        otp_record = result.scalar_one_or_none()
+        otp_record = result.scalars().first()
 
         if not otp_record or not verify_otp_hash(payload.code, otp_record.hashed_code):
             raise BadRequestException("Invalid OTP")

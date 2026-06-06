@@ -5,6 +5,7 @@
 """THIS IS WHERE THE BUSINESS LOGIC FOR TENANTS LIVE"""
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import BackgroundTasks
 import uuid
 from datetime import datetime, timezone, timedelta
 
@@ -46,7 +47,11 @@ class TenantService:
         return slug
 
     @staticmethod
-    async def register_tenant(db: AsyncSession, payload: TenantRegisterRequest) -> dict:
+    async def register_tenant(
+        db: AsyncSession,
+        payload: TenantRegisterRequest,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> dict:
         existing_tenant = await TenantRepository.get_by_email(db, payload.email)
 
         if existing_tenant is not None:
@@ -62,6 +67,7 @@ class TenantService:
                 await OTPService.generate_otp(
                     db,
                     RequestOTP(email=payload.email, purpose=OTPPurpose.VERIFICATION),
+                    background_tasks=background_tasks,
                 )
 
                 logger.info(
@@ -119,6 +125,7 @@ class TenantService:
         await OTPService.generate_otp(
             db,
             RequestOTP(email=payload.email, purpose=OTPPurpose.VERIFICATION),
+            background_tasks=background_tasks,
         )
         logger.info(f"Tenant registration committed", extra={"tenant_id": str(tenant.id)})
         logger.info(
