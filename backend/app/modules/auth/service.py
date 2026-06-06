@@ -20,6 +20,7 @@ from backend.app.modules.users.repository import UserRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.modules.users.models import User
 from backend.app.tenant_management.models import TenantVerificationStatus
+from backend.app.tenant_management.models import TenantStatus
 from backend.app.tenant_management.repository import TenantRepository
 from backend.app.core.utils.otp_rate_limiter import OTPRateLimiter
 class AuthService:
@@ -40,6 +41,9 @@ class AuthService:
         tenant = await TenantRepository.get_by_id(db, user.tenant_id)
         if tenant is None:
             raise UnauthorizedException("Account not found")
+
+        if tenant.is_deleted or tenant.status not in (TenantStatus.ACTIVE, TenantStatus.TRIAL):
+            raise UnauthorizedException("Account is not active")
 
         if tenant.verification_status == TenantVerificationStatus.PENDING_VERIFICATION:
             raise AccountNotVerifiedException(

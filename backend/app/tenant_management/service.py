@@ -116,13 +116,11 @@ class TenantService:
             extra={"tenant_id": str(tenant.id), "admin_email": payload.email, "role": "ADMIN"},
         )
 
-        await db.commit()
-        logger.info(f"Tenant registration committed", extra={"tenant_id": str(tenant.id)})
-
         await OTPService.generate_otp(
             db,
             RequestOTP(email=payload.email, purpose=OTPPurpose.VERIFICATION),
         )
+        logger.info(f"Tenant registration committed", extra={"tenant_id": str(tenant.id)})
         logger.info(
             f"OTP sent to new tenant",
             extra={"tenant_id": str(tenant.id), "email": payload.email},

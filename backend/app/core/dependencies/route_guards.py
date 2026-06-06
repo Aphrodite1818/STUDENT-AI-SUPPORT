@@ -17,6 +17,8 @@ from backend.app.core.dependencies.db import get_db
 from backend.app.core.exceptions import UnauthorizedException, ForbiddenException
 from backend.app.modules.users.models import User, AccountStatus, UserRole
 from backend.app.modules.users.repository import UserRepository
+from backend.app.tenant_management.models import TenantStatus, TenantVerificationStatus
+from backend.app.tenant_management.repository import TenantRepository
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -45,10 +47,22 @@ async def get_current_user(
     return user
 
 async def get_current_active_user(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
-    if current_user.account_status in [AccountStatus.BANNED, AccountStatus.DEACTIVATED, AccountStatus.SUSPENDED]:
+    if current_user.account_status != AccountStatus.ACTIVE:
         raise ForbiddenException("Inactive account")
+
+    tenant = await TenantRepository.get_by_id(db, current_user.tenant_id)
+    if tenant is None or tenant.is_deleted:
+        raise ForbiddenException("Inactive tenant")
+
+    if tenant.verification_status != TenantVerificationStatus.ACTIVE:
+        raise ForbiddenException("Tenant is not verified")
+
+    if tenant.status not in (TenantStatus.ACTIVE, TenantStatus.TRIAL):
+        raise ForbiddenException("Inactive tenant")
+
     return current_user
 
 def require_role(allowed_roles: list[UserRole]):
