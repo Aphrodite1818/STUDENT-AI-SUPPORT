@@ -8,8 +8,8 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from backend.app.modules.AI.providers.base import BaseLLMProvider
-from backend.app.modules.AI.providers.utils import (
+from app.modules.AI.providers.base import BaseLLMProvider
+from app.modules.AI.providers.utils import (
     model_to_dict,
     openai_tool_to_gemini_declaration,
     require_api_key,
@@ -73,3 +73,4 @@ class GeminiProvider(BaseLLMProvider):
             "tool_calls": model_to_dict(response.function_calls) or None,
             "raw_response": model_to_dict(response),
         }
+

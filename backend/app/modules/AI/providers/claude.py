@@ -6,8 +6,8 @@ from typing import Any
 
 import httpx
 
-from backend.app.modules.AI.providers.base import BaseLLMProvider
-from backend.app.modules.AI.providers.utils import (
+from app.modules.AI.providers.base import BaseLLMProvider
+from app.modules.AI.providers.utils import (
     openai_tool_to_anthropic,
     require_api_key,
     text_from_content,
@@ -79,3 +79,4 @@ class ClaudeProvider(BaseLLMProvider):
             "tool_calls": tool_calls or None,
             "raw_response": raw_response,
         }
+

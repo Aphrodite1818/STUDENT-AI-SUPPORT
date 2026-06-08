@@ -5,6 +5,7 @@ import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
+import { getErrorMessage } from "../../services/api";
 
 // ── shared layout ────────────────────────────────────────────────────
 // Defined outside the component so React never sees it as a new type
@@ -107,11 +108,7 @@ function ForgotPasswordPage() {
         `/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`
       );
     } catch (err) {
-      const message =
-        err?.response?.data?.detail ||
-        err?.message ||
-        "Something went wrong. Please try again.";
-      setError(message);
+      setError(getErrorMessage(err, "Something went wrong. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -138,11 +135,7 @@ function ForgotPasswordPage() {
       await authService.resetPassword(resetEmail, resetToken, password);
       navigate("/login?reset=true", { replace: true });
     } catch (err) {
-      const message =
-        err?.response?.data?.detail ||
-        err?.message ||
-        "Failed to reset password. Please try again.";
-      setError(message);
+      setError(getErrorMessage(err, "Failed to reset password. Please try again."));
     } finally {
       setIsLoading(false);
     }

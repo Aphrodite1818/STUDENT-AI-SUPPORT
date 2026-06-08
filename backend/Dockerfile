@@ -20,11 +20,12 @@ COPY requirements.txt /app/
 # Install python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the backend codebase into a "backend" folder to preserve absolute imports
-COPY . /app/backend/
+# Copy the backend project into the working directory
+COPY . /app/
 
 # Expose the application port
 EXPOSE 8080
 
 # Command to run the application using Uvicorn
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+

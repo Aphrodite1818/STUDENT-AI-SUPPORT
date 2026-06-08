@@ -1,7 +1,16 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
+import { authService } from "../../services/auth.service";
 
 function StudentDashboardPage() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    authService.logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-background flex text-text">
       <aside className="w-64 transition-all duration-300 bg-surface border-r border-border flex flex-col">
@@ -11,13 +20,18 @@ function StudentDashboardPage() {
           </Link>
         </div>
         <nav className="p-4 space-y-2">
-          <a className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary">
+          <Link to="/student/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary">
             <span>Dashboard</span>
-          </a>
+          </Link>
         </nav>
       </aside>
-      <main className="flex-1 p-8">
-        <h1 className="text-2xl font-bold mb-4">Student Dashboard</h1>
+      <main className="flex-1 p-6 md:p-8">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-bold">Student Dashboard</h1>
+          <Button variant="secondary" size="small" onClick={handleLogout}>
+            Logout
+          </Button>
+        </div>
         <Card className="p-6">
           <p className="text-text-muted">Welcome to your learning portal.</p>
         </Card>

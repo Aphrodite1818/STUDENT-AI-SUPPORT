@@ -5,6 +5,8 @@ import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { tenantService } from "../../services/tenant.service";
+import { authService } from "../../services/auth.service";
+import { getErrorMessage } from "../../services/api";
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -16,7 +18,6 @@ function RegisterPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
   const [passwordStrength, setPasswordStrength] = useState(0);
 
   const handleChange = (e) => {
@@ -71,20 +72,35 @@ function RegisterPage() {
         password: formData.password,
       });
 
-      if (result?.message) {
-        setError(null);
-        setSuccessMessage(result.message);
+      authService.setPendingVerificationEmail(formData.email);
+      navigate(
+        `/verify-otp?email=${encodeURIComponent(formData.email)}&purpose=verification`,
+        {
+          replace: true,
+          state: {
+            notice:
+              result?.message ||
+              "Please check your email for the verification code.",
+          },
+        }
+      );
+    } catch (err) {
+      if (err?.response?.status === 429) {
+        authService.setPendingVerificationEmail(formData.email);
+        navigate(
+          `/verify-otp?email=${encodeURIComponent(formData.email)}&purpose=verification`,
+          {
+            replace: true,
+            state: {
+              notice:
+                "A verification code was sent recently. Please use that code or wait a moment before requesting another one.",
+            },
+          }
+        );
+        return;
       }
 
-      sessionStorage.setItem("pendingVerificationEmail", formData.email);
-
-      navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
-    } catch (err) {
-      const message =
-        err?.response?.data?.detail ||
-        err?.message ||
-        "Registration failed. Please try again.";
-      setError(message);
+      setError(getErrorMessage(err, "Registration failed. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -123,12 +139,6 @@ function RegisterPage() {
               Set up Learnly AI for your school.
             </p>
           </div>
-
-          {successMessage && !error && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
-              {successMessage}
-            </div>
-          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">

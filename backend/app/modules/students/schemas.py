@@ -9,7 +9,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from backend.app.modules.students.models import Gender, AcademicStatus
+from app.modules.students.models import Gender, AcademicStatus
 
 
 
@@ -140,6 +140,7 @@ class StudentPublicResponse(BaseModel):
 
     model_config = {"from_attributes": True}
     
+
 
 
 

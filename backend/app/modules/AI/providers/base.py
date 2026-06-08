@@ -3,14 +3,14 @@
 #==========================#
 
 
-"""THIS DECLARES THE DEFAULT STANDARD FOR LLM PROVIDERS AND CAN BE ALTERED IN THE FUTURE"""
+"""Define the abstract interface implemented by all LLM providers."""
 
 from abc import ABC, abstractmethod
 from typing import Any
 
 
 class BaseLLMProvider(ABC): 
-    """class cannot be instantiated only inherited"""
+    """Abstract base class for chat-capable LLM provider integrations."""
 
 
     @abstractmethod

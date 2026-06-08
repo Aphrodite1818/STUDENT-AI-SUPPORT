@@ -3,10 +3,7 @@
 #======================================#
 
 
-"""
-Loads and validates all environment variables at startup using Pydantic BaseSettings.
-If any required variable is missing or invalid the application will refuse to boot.
-"""
+"""Load and validate application settings from environment variables."""
 
 from enum import Enum
 from pathlib import Path
@@ -77,12 +74,16 @@ class Settings(BaseSettings):
 
     # OTP Settings
     OTP_EXPIRATION_MINUTES: int = 10
+    TENANT_ACTIVATION_EXPIRATION_HOURS: int = 48
+
+    FRONTEND_APP_URL: str = "http://localhost:5173"
+
     APP_SCRIPT_URL : str = Field(...,)
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field  #creates and compute the value of this property method
     @property
     def is_development(self) -> bool:
-        return self.ENV == EnvironmentType.DEVELOPMENT
+        return self.ENV == EnvironmentType.DEVELOPMENT #returns True if the env is a development environment
 
 
 settings = Settings()

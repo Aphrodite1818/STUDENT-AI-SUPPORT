@@ -16,15 +16,15 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import  Mapped, mapped_column
-from backend.app.shared.mixins import TimestampMixin, UUIDMixin
-from backend.app.shared.base_model import BaseModel, Base
+from app.shared.mixins import TimestampMixin, UUIDMixin
+from app.shared.base_model import BaseModel, Base, PUBLIC_SCHEMA
 from typing import List
 
 
 
 
 class TenantStatus(str, Enum):
-    """Represents the lifecycle of the tenant subscription plan"""
+    """Represent the lifecycle state of a tenant account."""
     ACTIVE    = "active"
     INACTIVE  = "inactive"
     SUSPENDED = "suspended"
@@ -42,7 +42,7 @@ class SubscriptionPlan(str, Enum):
 
 
 class TenantVerificationStatus(str , Enum):
-    """represent the lifecycle of tenant account during registration process"""
+    """Represent a tenant's verification state during onboarding."""
     PENDING_VERIFICATION = "pending_verification"
     ACTIVE = "active"
     REJECTED = "rejected"
@@ -50,10 +50,7 @@ class TenantVerificationStatus(str , Enum):
 
 # ── 4. Tenant Model ──────────────────────────────────────────────────────────
 class Tenant(UUIDMixin, TimestampMixin, Base):
-    """
-    record for how tenants(schools) are onboarded, their subscription status, limits, and feature flags.
-    This is the central model for tenant management. All other models that are tenant-specific will have
-    a foreign key referencing this model."""
+    """Store tenant onboarding, subscription, and feature configuration data."""
 
     __tablename__ = "tenants"
 
@@ -89,12 +86,12 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
 
     # ── Status & subscription ────────────────────────────────────────────────
     status: Mapped[TenantStatus] = mapped_column(
-        SQLEnum(TenantStatus, name="tenantstatus"),
+        SQLEnum(TenantStatus, name="tenantstatus", schema=PUBLIC_SCHEMA),
         default=TenantStatus.TRIAL,   # new schools start on trial
         nullable=False,
     )
     plan: Mapped[SubscriptionPlan] = mapped_column(
-        SQLEnum(SubscriptionPlan, name="subscriptionplan"),
+        SQLEnum(SubscriptionPlan, name="subscriptionplan", schema=PUBLIC_SCHEMA),
         default=SubscriptionPlan.FREE,
         nullable=False,
     )
@@ -142,14 +139,14 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
     branches : Mapped[list[str] | None] = mapped_column(ARRAY(String) , nullable = True , default = None) 
 
     verification_status : Mapped[TenantVerificationStatus] = mapped_column(
-        SQLEnum(TenantVerificationStatus, name="tenantverificationstatus"),
+        SQLEnum(
+            TenantVerificationStatus,
+            name="tenantverificationstatus",
+            schema=PUBLIC_SCHEMA,
+        ),
         nullable=False,
         default=TenantVerificationStatus.PENDING_VERIFICATION,
     )
-
-
-
-
     def __repr__(self) -> str:
         return f"<Tenant id={self.id} slug={self.slug!r} status={self.status}>"
 
@@ -162,3 +159,4 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
         if not self.feature_flags:
             return False
         return bool(self.feature_flags.get("whatsapp_bot", False))
+

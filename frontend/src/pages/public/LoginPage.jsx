@@ -5,6 +5,8 @@ import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
+import { getErrorMessage } from "../../services/api";
+import { getTokenPayload } from "../../utils/auth";
 
 const ROLE_ROUTES = {
   SUPERADMIN: "/superadmin/dashboard",
@@ -14,31 +16,43 @@ const ROLE_ROUTES = {
   PARENT: "/parent/dashboard",
 };
 
-const decodeToken = (token) => {
-  try {
-    const payload = token.split(".")[1];
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-};
-
 function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const justVerified = searchParams.get("verified") === "true";
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [canResendOtp, setCanResendOtp] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
 
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    remember: true,
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [error, setError] = useState(null);
 
+  const redirectToVerification = (email, notice) => {
+    authService.setPendingVerificationEmail(email);
+    navigate(
+      `/verify-otp?email=${encodeURIComponent(email)}&purpose=verification`,
+      {
+        replace: true,
+        state: { notice },
+      }
+    );
+  };
+
   const handleChange = (e) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { checked, name, type, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
     if (needsVerification) {
       setNeedsVerification(false);
+      setCanResendOtp(false);
       setError(null);
     }
   };
@@ -48,34 +62,74 @@ function LoginPage() {
     setIsLoading(true);
     setError(null);
     setNeedsVerification(false);
+    setCanResendOtp(false);
 
     try {
-      const data = await authService.login(formData.email, formData.password);
+      const data = await authService.login(formData.email, formData.password, {
+        remember: formData.remember,
+      });
 
-      localStorage.setItem("token", data.access_token);
+      authService.clearPendingVerificationEmail();
 
-      const decoded = decodeToken(data.access_token);
+      const decoded = getTokenPayload(data.access_token);
       const role = decoded?.role?.toUpperCase();
       const route = ROLE_ROUTES[role];
 
       if (!route) {
         setError(`Unknown role "${decoded?.role}". Please contact support.`);
-        localStorage.removeItem("token");
+        authService.logout();
         return;
       }
 
       navigate(route, { replace: true });
     } catch (err) {
       if (err?.response?.status === 403) {
-        setNeedsVerification(true);
-        setVerificationEmail(formData.email || err?.response?.data?.email || "");
-        setError(err?.response?.data?.detail || "Your account needs to be verified before logging in.");
+        const resendAvailable =
+          err?.response?.headers?.["x-resend-otp-available"] === "true";
+        const email =
+          formData.email ||
+          err?.response?.headers?.["x-email"] ||
+          "";
+        const verificationMessage = getErrorMessage(
+          err,
+          "Your account needs to be verified before logging in."
+        );
+
+        setVerificationEmail(email);
+
+        if (resendAvailable && email) {
+          try {
+            await authService.requestOtp(email, "verification");
+            redirectToVerification(
+              email,
+              "Your account is not verified yet. We sent a new verification code to your email."
+            );
+            return;
+          } catch (resendErr) {
+            if (resendErr?.response?.status === 429) {
+              redirectToVerification(
+                email,
+                "Your account is not verified yet. A verification code was sent recently. Please use that code or wait a moment before requesting another one."
+              );
+              return;
+            }
+
+            const resendMessage = getErrorMessage(
+              resendErr,
+              "We couldn't send a new verification code. Please try again."
+            );
+            setNeedsVerification(true);
+            setCanResendOtp(true);
+            setError(`${verificationMessage} ${resendMessage}`);
+            return;
+          }
+        }
+
+        setNeedsVerification(resendAvailable);
+        setCanResendOtp(resendAvailable);
+        setError(verificationMessage);
       } else {
-        const message =
-          err?.response?.data?.detail ||
-          err?.message ||
-          "Invalid email or password.";
-        setError(message);
+        setError(getErrorMessage(err, "Invalid email or password."));
       }
     } finally {
       setIsLoading(false);
@@ -89,9 +143,7 @@ function LoginPage() {
       await authService.requestOtp(verificationEmail, "verification");
       navigate(`/verify-otp?email=${encodeURIComponent(verificationEmail)}&purpose=verification`);
     } catch (err) {
-      const message =
-        err?.response?.data?.detail || err?.message || "Failed to resend code.";
-      setError(message);
+      setError(getErrorMessage(err, "Failed to resend code."));
     } finally {
       setIsResendingOtp(false);
     }
@@ -143,7 +195,7 @@ function LoginPage() {
             </div>
           )}
 
-          {needsVerification && (
+          {needsVerification && canResendOtp && (
             <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/50 rounded-md text-sm text-center">
               <p className="text-yellow-600 dark:text-yellow-400 font-medium mb-2">
                 Your account needs email verification before you can log in.
@@ -190,6 +242,9 @@ function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
+                  name="remember"
+                  checked={formData.remember}
+                  onChange={handleChange}
                   className="rounded border-border text-primary focus:ring-primary/20 accent-primary"
                 />
                 <span className="text-text-soft">Remember me</span>

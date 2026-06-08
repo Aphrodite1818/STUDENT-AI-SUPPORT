@@ -8,8 +8,8 @@ from typing import Any
 
 import httpx
 
-from backend.app.modules.AI.providers.base import BaseLLMProvider
-from backend.app.modules.AI.providers.utils import require_api_key
+from app.modules.AI.providers.base import BaseLLMProvider
+from app.modules.AI.providers.utils import require_api_key
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -53,3 +53,4 @@ class OpenAIProvider(BaseLLMProvider):
             "tool_calls": message.get("tool_calls"),
             "raw_response": raw_response,
         }
+

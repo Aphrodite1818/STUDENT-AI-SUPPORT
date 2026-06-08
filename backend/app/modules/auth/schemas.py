@@ -4,7 +4,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 class Token(BaseModel):
     access_token: str
@@ -28,3 +28,15 @@ class VerifyOTP(BaseModel):
     email: EmailStr
     code: str
     purpose: Literal["verification", "password_reset"]
+
+
+class TenantActivationRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=64)
+    token: str = Field(..., min_length=20)
+
+
+class UserInviteAcceptanceRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=64)
+    token: str = Field(..., min_length=20)

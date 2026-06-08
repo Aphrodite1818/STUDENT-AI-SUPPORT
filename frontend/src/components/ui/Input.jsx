@@ -1,4 +1,9 @@
 function Input({ label, error, className = "", ...props }) {
+  const errorMessage =
+    typeof error === "string"
+      ? error
+      : error?.message || (error ? JSON.stringify(error) : "");
+
   return (
     <div className="w-full">
       {label && (
@@ -7,7 +12,7 @@ function Input({ label, error, className = "", ...props }) {
         </label>
       )}
       <input className={`input-base ${className}`} {...props} />
-      {error && <p className="mt-1 text-sm text-error">{error}</p>}
+      {errorMessage && <p className="mt-1 text-sm text-error">{errorMessage}</p>}
     </div>
   );
 }

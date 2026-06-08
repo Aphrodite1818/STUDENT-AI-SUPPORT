@@ -5,9 +5,9 @@
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Index , Boolean
+from sqlalchemy import String, Index , Boolean, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from backend.app.shared.base_model import BaseModel
+from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 
 
@@ -40,21 +40,25 @@ class User(BaseModel):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)  
 
     account_status: Mapped[AccountStatus] = mapped_column(
+        SQLEnum(AccountStatus, name="accountstatus", schema=PUBLIC_SCHEMA),
         default=AccountStatus.PENDING, 
         nullable=False
     )
 
     role: Mapped[UserRole] = mapped_column(
+        SQLEnum(UserRole, name="userrole", schema=PUBLIC_SCHEMA),
         nullable=False
     )
 
     whatsapp_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True) 
 
 
-    # is_verified : Mapped[bool] = mapped_column(Boolean , nullable = False , default = True)
+    is_verified : Mapped[bool] = mapped_column(Boolean , nullable = False , default = True)
+
 
 
     __table_args__ = (
         Index("ix_users_tenant_phone", "tenant_id", "phone_number"),
         Index("ix_users_tenant_role", "tenant_id", "role"),
-    )
+    )#this creates additional index for faster db lookups 
+

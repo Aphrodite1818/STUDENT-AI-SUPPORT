@@ -2,12 +2,25 @@
 #            auth/router.py            #
 #======================================#
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from backend.app.core.dependencies.db import DbSession, get_db
-from backend.app.config.security import create_access_token
-from backend.app.modules.auth.schemas import LoginRequest, Token, RequestOTP, VerifyOTP, UpdatePassword
-from backend.app.modules.auth.service import AuthService, OTPService
-from backend.app.core.exceptions import AccountNotVerifiedException, TooManyRequestsException
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks
+from app.core.dependencies.db import DbSession
+from app.config.security import create_access_token
+from app.modules.auth.schemas import (
+    LoginRequest,
+    Token,
+    RequestOTP,
+    TenantActivationRequest,
+    UserInviteAcceptanceRequest,
+    VerifyOTP,
+    UpdatePassword,
+)
+from app.modules.auth.service import (
+    AuthService,
+    OTPService,
+    TenantActivationService,
+    UserInviteService,
+)
+from app.core.exceptions import AccountNotVerifiedException, TooManyRequestsException
 
 router = APIRouter()
 
@@ -24,7 +37,7 @@ async def login(payload: LoginRequest, db: DbSession) -> LoginResponse:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e.detail),
-            headers={"X-Resend-OTP-Available": "true", "X-Email": payload.email},
+            headers=e.headers,
         )
     except TooManyRequestsException as e:
         raise HTTPException(
@@ -63,3 +76,25 @@ async def verify_otp(payload: VerifyOTP, db: DbSession):
 async def reset_password(payload: UpdatePassword, db: DbSession) -> dict[str, str]:
     await AuthService.reset_password(db, payload)
     return {"detail": "Password has been successfully reset. You may now log in."}
+
+
+@router.post("/activate-tenant")
+async def activate_tenant(
+    payload: TenantActivationRequest,
+    db: DbSession,
+) -> dict[str, str]:
+    return await TenantActivationService.activate_tenant(db, payload)
+
+
+@router.get("/invite-status")
+async def get_invite_status(token: str, db: DbSession) -> dict[str, str | None]:
+    return await UserInviteService.get_invite_status(db, token)
+
+
+@router.post("/accept-invite")
+async def accept_invite(
+    payload: UserInviteAcceptanceRequest,
+    db: DbSession,
+) -> dict[str, str]:
+    return await UserInviteService.accept_invite(db, payload)
+

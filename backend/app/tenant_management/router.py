@@ -2,31 +2,25 @@
 #      tenant_management/router.py     #
 #======================================#
 
-from fastapi import APIRouter, Depends, status, BackgroundTasks
+from fastapi import APIRouter, Depends, status, BackgroundTasks, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
-from backend.app.core.dependencies.db import DbSession, get_db
-from backend.app.config.logging import get_logger
-from backend.app.modules.auth.service import OTPService
-from backend.app.tenant_management.schemas import (
+from app.core.dependencies.db import DbSession
+from app.core.utils.frontend_urls import resolve_frontend_app_url
+from app.tenant_management.schemas import (
     TenantCreate,
     TenantUpdate,
-    TenantPublicResponse,
     TenantRegisterRequest,
     TenantStatusUpdate,
     TenantAdminResponse
 )
-from backend.app.core.dependencies.route_guards import (
-    get_current_user,
+from app.core.dependencies.route_guards import (
     require_role,
     require_tenant_ownership
 )
-from backend.app.modules.users.models import User, UserRole
-from backend.app.tenant_management.service import TenantService
-
-logger = get_logger(__name__)
+from app.modules.users.models import User, UserRole
+from app.tenant_management.service import TenantService
 
 router = APIRouter(tags=["Tenants"])
 
@@ -45,10 +39,10 @@ async def register_tenant(
     Public endpoint to register a new school and automatically create
     an admin user account for it. Sends verification OTP to admin email.
 
-    Returns 201 for new tenant, 200 for resend on existing pending account.
+    Returns 201 for a new tenant and 200 when the account already exists but is still pending verification.
     """
     result = await TenantService.register_tenant(db, payload, background_tasks=background_tasks)
-    if result.get("can_resend_otp") is False:
+    if result.get("created") is False:
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content=jsonable_encoder(result),
@@ -64,12 +58,19 @@ async def register_tenant(
 )
 async def create_tenant(
     payload: TenantCreate,
-    db: DbSession
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+    request: Request,
 ) -> TenantAdminResponse:
     """
-    Superadmin only. Creates a tenant record directly without a corresponding user.
+    Superadmin only. Creates an inactive tenant and emails an activation link to its admin.
     """
-    return await TenantService.superadmin_create_tenant(db, payload)
+    return await TenantService.superadmin_create_tenant(
+        db,
+        payload,
+        background_tasks=background_tasks,
+        frontend_app_url=resolve_frontend_app_url(request),
+    )
 
 
 @router.get(
@@ -160,3 +161,21 @@ async def delete_tenant(
     Superadmin only. Soft deletes a tenant.
     """
     return await TenantService.delete_tenant(db, tenant_id)
+
+
+@router.patch(
+    "/{tenant_id}/restore",
+    response_model=TenantAdminResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Superadmin: Restore a soft-deleted tenant",
+    dependencies=[Depends(require_role([UserRole.SUPERADMIN]))]
+)
+async def restore_tenant(
+    tenant_id: uuid.UUID,
+    db: DbSession
+) -> TenantAdminResponse:
+    """
+    Superadmin only. Reverses a tenant soft delete.
+    """
+    return await TenantService.restore_tenant(db, tenant_id)
+

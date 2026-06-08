@@ -6,15 +6,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from backend.app.config.settings import settings
+from app.config.settings import settings
 
-from backend.app.modules.AI.providers.claude import ClaudeProvider
-from backend.app.modules.AI.providers.openai import OpenAIProvider
-from backend.app.modules.AI.providers.gemini import GeminiProvider
-from backend.app.config.logging import get_logger
+from app.modules.AI.providers.claude import ClaudeProvider
+from app.modules.AI.providers.openai import OpenAIProvider
+from app.modules.AI.providers.gemini import GeminiProvider
+from app.config.logging import get_logger
 
 if TYPE_CHECKING:
-    from backend.app.modules.AI.providers.base import BaseLLMProvider
+    from app.modules.AI.providers.base import BaseLLMProvider
 
 
 
@@ -52,3 +52,4 @@ class ProviderFactory:
 
         logger.info(f"Returning provider: {provider_name}")
         return factory()
+

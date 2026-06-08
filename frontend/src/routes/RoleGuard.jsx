@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { getValidTokenPayload } from "./ProtectedRoute";
+import { getValidTokenPayload } from "../utils/auth";
 
 function RoleGuard({ allowedRoles = [] }) {
   const payload = getValidTokenPayload();

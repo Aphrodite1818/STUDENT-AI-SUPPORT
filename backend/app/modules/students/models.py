@@ -5,13 +5,13 @@ from enum import Enum
 import uuid
 from typing import TYPE_CHECKING
 
-from backend.app.shared.base_model import BaseModel
-from sqlalchemy import String, UUID, Date, ForeignKey, Index
+from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
+from sqlalchemy import String, UUID, Date, ForeignKey, Index, Enum as SQLEnum
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 from datetime import date
 
 if TYPE_CHECKING:
-    from backend.app.modules.users.models import User
+    from app.modules.users.models import User
 
 
 
@@ -38,7 +38,10 @@ class Students(BaseModel):
 
     date_of_birth : Mapped[date] = mapped_column(Date , nullable=False)
 
-    gender : Mapped[Gender] = mapped_column(nullable=False)
+    gender : Mapped[Gender] = mapped_column(
+        SQLEnum(Gender, name="gender", schema=PUBLIC_SCHEMA),
+        nullable=False,
+    )
 
     passport_photo_url : Mapped[str | None] = mapped_column(String(150) , nullable= True)
 
@@ -51,18 +54,22 @@ class Students(BaseModel):
 
     class_id : Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid = True),
-        ForeignKey("classes.id", ondelete="RESTRICT"),
+        ForeignKey(f"{PUBLIC_SCHEMA}.classes.id", ondelete="RESTRICT"),
         nullable=False
     )
 
     arm : Mapped[str | None] = mapped_column(String(20) , nullable=True )
 
 
-    status : Mapped[AcademicStatus] = mapped_column(nullable = False , default = AcademicStatus.ACTIVE)
+    status : Mapped[AcademicStatus] = mapped_column(
+        SQLEnum(AcademicStatus, name="academicstatus", schema=PUBLIC_SCHEMA),
+        nullable=False,
+        default=AcademicStatus.ACTIVE,
+    )
 
     parent_id : Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid = True),
-        ForeignKey("users.id" , ondelete="RESTRICT"),
+        ForeignKey(f"{PUBLIC_SCHEMA}.users.id" , ondelete="RESTRICT"),
         nullable=False
     )
 
@@ -80,3 +87,4 @@ class Students(BaseModel):
         Index("ix_students_tenant_class",     "tenant_id", "class_id"),
         Index("ix_students_tenant_parent",    "tenant_id", "parent_id"),
     )
+

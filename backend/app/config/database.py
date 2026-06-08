@@ -7,7 +7,7 @@
 
 
 
-"""THE MAIN ROLE OF THIS SCRIPT IS JUST TO SET UP A CONNECTION TO THE EXISTING DATABASE """
+"""Configure the application's async database engine and session factory."""
 
 
 from sqlalchemy.ext.asyncio import (
@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker
 )
-from backend.app.config.logging import is_development, resolve_log_level
-from backend.app.config.settings import settings
+from app.config.logging import is_development, resolve_log_level
+from app.config.settings import settings
 import logging
 
 engine = create_async_engine(
@@ -37,6 +37,7 @@ AsyncSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False       # keep objects readable after commit
 )
+
 
 
 

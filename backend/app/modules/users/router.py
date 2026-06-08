@@ -4,25 +4,24 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 
-from backend.app.core.dependencies.db import DbSession
-from backend.app.config.logging import get_logger
-from backend.app.modules.users.schemas import (
+from app.core.dependencies.db import DbSession
+from app.config.logging import get_logger
+from app.core.utils.frontend_urls import resolve_frontend_app_url
+from app.modules.users.schemas import (
     UserAdminUpdate,
-    UserCreate,
+    UserInviteCreate,
     UserResponse,
     UserUpdate,
 )
-from backend.app.modules.users.service import UserService
-from backend.app.core.dependencies.route_guards import (
+from app.modules.users.service import UserService
+from app.core.dependencies.route_guards import (
     get_current_active_user,
     require_role,
 )
-from backend.app.core.exceptions import ForbiddenException
-from backend.app.modules.users.models import User, UserRole
-
+from app.core.exceptions import ForbiddenException
+from app.modules.users.models import User, UserRole
 
 logger = get_logger(__name__)
 
@@ -31,8 +30,6 @@ router = APIRouter(tags=["Users"])
 
 # ── Dependency ────────────────────────────────────────────────────────────────
 
-def get_user_service(session: DbSession) -> UserService:
-    return UserService(session=session)
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
@@ -43,24 +40,59 @@ def get_user_service(session: DbSession) -> UserService:
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
+@router.post(
+    "/user-create",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user",
+)
 async def register_user(
-    payload: UserCreate,
-    service: UserService = Depends(get_user_service),
-    current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
+    payload: UserInviteCreate,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    current_user: User = Depends(require_role([UserRole.ADMIN])),
 ) -> UserResponse:
     """
-    Register a new user account.
+    Create a normal tenant user and email an invite link.
 
-    - Rejects duplicate email or phone number.
-    - Passwords are hashed before storage.
+    - Tenant admins can only invite users inside their own tenant.
+    - Normal users complete setup from the emailed invite link.
     """
-    return await service.register_user(payload)
+    return await UserService.register_user(
+        db,
+        current_user,
+        payload,
+        background_tasks=background_tasks,
+        frontend_app_url=resolve_frontend_app_url(request),
+    )
+
+
+@router.post(
+    "/{user_id}/resend-invite",
+    status_code=status.HTTP_200_OK,
+    summary="Resend a tenant user invite",
+)
+async def resend_invite(
+    user_id: uuid.UUID,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    current_user: User = Depends(require_role([UserRole.ADMIN])),
+) -> dict[str, str]:
+    return await UserService.resend_invite(
+        db,
+        current_user,
+        user_id,
+        background_tasks=background_tasks,
+        frontend_app_url=resolve_frontend_app_url(request),
+    )
 
 
 # ── Read ──────────────────────────────────────────────────────────────────────
 
 @router.get(
-    "/me",
+    "/get-authenticated-user",
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     summary="Get current user profile",
@@ -79,16 +111,28 @@ async def get_current_user_profile(
     status_code=status.HTTP_200_OK,
     summary="List all users (paginated)",
 )
+@router.get(
+    "/list-users",
+    response_model=list[UserResponse],
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
 async def list_users(
+    db: DbSession,
     skip: int = Query(default=0, ge=0, description="Number of records to skip"),
     limit: int = Query(default=100, ge=1, le=500, description="Max records to return"),
-    service: UserService = Depends(get_user_service),
     current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> list[UserResponse]:
     """
     Return a paginated list of all users.
     """
-    return await service.get_all_users(skip=skip, limit=limit)
+    tenant_id = None if current_user.role == UserRole.SUPERADMIN else current_user.tenant_id
+    return await UserService.get_all_users(
+        db,
+        skip=skip,
+        limit=limit,
+        tenant_id=tenant_id,
+    )
 
 
 @router.get(
@@ -99,15 +143,20 @@ async def list_users(
 )
 async def get_user(
     user_id: uuid.UUID,
-    service: UserService = Depends(get_user_service),
+    db: DbSession,
     current_user: User = Depends(get_current_active_user),
 ) -> UserResponse:
     """
     Fetch a user by their UUID. Returns 404 if not found.
     """
-    user = await service.get_user_by_id(user_id)
+    user = await UserService.get_user_by_id(db, user_id)
     if (
-        current_user.role != UserRole.SUPERADMIN
+        current_user.role not in (UserRole.ADMIN, UserRole.SUPERADMIN)
+        and current_user.id != user_id
+    ):
+        raise ForbiddenException("You can only access your own profile")
+    if (
+        current_user.role == UserRole.ADMIN
         and current_user.id != user_id
         and current_user.tenant_id != user.tenant_id
     ):
@@ -126,7 +175,7 @@ async def get_user(
 async def update_profile(
     user_id: uuid.UUID,
     payload: UserUpdate,
-    service: UserService = Depends(get_user_service),
+    db: DbSession,
     current_user: User = Depends(get_current_active_user),
 ) -> UserResponse:
     """
@@ -142,10 +191,10 @@ async def update_profile(
         current_user.role == UserRole.ADMIN
         and current_user.id != user_id
     ):
-        target = await service.get_user_by_id(user_id)
+        target = await UserService.get_user_by_id(db, user_id)
         if target.tenant_id != current_user.tenant_id:
             raise ForbiddenException("You do not have access to this user")
-    return await service.update_profile(user_id, payload)
+    return await UserService.update_profile(db, user_id, payload)
 
 
 @router.patch(
@@ -157,14 +206,18 @@ async def update_profile(
 async def update_admin_status(
     user_id: uuid.UUID,
     payload: UserAdminUpdate,
-    service: UserService = Depends(get_user_service),
+    db: DbSession,
     current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> UserResponse:
     """
     Admin-only endpoint to update privileged fields
     (e.g. role, is_active, is_verified).
     """
-    return await service.update_admin_status(user_id, payload)
+    if current_user.role != UserRole.SUPERADMIN:
+        target_user = await UserService.get_user_by_id(db, user_id)
+        if target_user.tenant_id != current_user.tenant_id:
+            raise ForbiddenException("You do not have access to this user")
+    return await UserService.update_admin_status(db, current_user, user_id, payload)
 
 
 # ── Delete ────────────────────────────────────────────────────────────────────
@@ -176,10 +229,14 @@ async def update_admin_status(
 )
 async def delete_user(
     user_id: uuid.UUID,
-    service: UserService = Depends(get_user_service),
+    db: DbSession,
     current_user: User = Depends(require_role([UserRole.ADMIN, UserRole.SUPERADMIN])),
 ) -> dict:
     """
     Permanently delete a user. Returns 404 if not found.
     """
-    return await service.delete_user(user_id)
+    if current_user.role != UserRole.SUPERADMIN:
+        target_user = await UserService.get_user_by_id(db, user_id)
+        if target_user.tenant_id != current_user.tenant_id:
+            raise ForbiddenException("You do not have access to this user")
+    return await UserService.delete_user(db, user_id)

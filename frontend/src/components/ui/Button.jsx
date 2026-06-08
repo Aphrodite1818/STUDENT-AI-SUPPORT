@@ -9,6 +9,7 @@ const variantStyles = {
 };
 
 const sizeStyles = {
+  sm: "px-3.5 py-1.5 text-xs",
   small: "px-3.5 py-1.5 text-xs",
   medium: "px-5 py-2",
   large: "px-6 py-3 text-base",
@@ -23,7 +24,7 @@ function Button({
 }) {
   return (
     <button
-      className={`btn-base ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={`btn-base ${variantStyles[variant] || variantStyles.primary} ${sizeStyles[size] || sizeStyles.medium} ${className}`}
       {...props}
     >
       {children}

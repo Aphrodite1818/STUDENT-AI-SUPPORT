@@ -17,8 +17,8 @@ from pydantic import(
     model_validator
 )
 
-from backend.app.tenant_management.models import SubscriptionPlan , TenantStatus, TenantVerificationStatus
-from backend.app.core.utils.validators import generate_slug
+from app.tenant_management.models import SubscriptionPlan , TenantStatus, TenantVerificationStatus
+from app.core.utils.validators import generate_slug
 
 
 
@@ -62,7 +62,7 @@ class TenantCreate(TenantBase):
     @computed_field
     @property
     def log_slug_preview(self) -> str:
-        """Note slug is not stored here"""
+        """Return the generated slug preview without persisting it."""
         return generate_slug(self.school_name)
 
 
@@ -86,8 +86,8 @@ class TenantUpdate(BaseModel):
     onboarding_completed : bool | None = True
 
     plan : SubscriptionPlan | None = None
-    max_students : int | None = Field(default = None , ge=1 , le = 100_00)
-    max_teachers : int | None = Field(default = None , ge = 1 , le = 100_00)
+    max_students : int | None = Field(default = None , ge=1 , le = 100_000)
+    max_teachers : int | None = Field(default = None , ge = 1 , le = 100_000)
     feature_flags : dict[str , Any] | None = None #dictionary of any dtype
     model_config = ConfigDict(extra ="forbid")
 
@@ -106,9 +106,7 @@ class TenantStatusUpdate(BaseModel):
 
 
 class TenantPublicResponse(BaseModel):
-    """RETURNED TO THE SCHOOLS ADMIN'S DASHBOARD
-    NO SENSITIVE INFORMATION IS LEAKED
-    """
+    """Public tenant response shown to school administrators."""
     model_config = ConfigDict(from_attributes=True)
     id : uuid.UUID
     school_name : str
@@ -132,9 +130,7 @@ class TenantPublicResponse(BaseModel):
 
 
 class TenantAdminResponse(TenantPublicResponse):
-    """RETURNED TO THE SUPER-ADMIN DASHBOARD ONLY
-    EXTENDS TenantPublicResponse WITH INTERNAL / BILLING FIELDS
-    """
+    """Extended tenant response for super-admin and internal views."""
     max_students : int
     max_teachers : int
     feature_flags : dict[str , Any] | None
@@ -146,10 +142,7 @@ class TenantAdminResponse(TenantPublicResponse):
 
 
 class TenantContext(BaseModel):
-    """PREVENTS RE-QUERY OF TENANT
-    BASICALLY HOLDS DETAIL ABOUT SPECIFIC TENANT TO AVOID CONSTANTLY 
-    QUERYING DATABASE
-    """
+    """Cache core tenant details to avoid repeated database lookups."""
     
     model_config = ConfigDict(from_attributes=True)
 

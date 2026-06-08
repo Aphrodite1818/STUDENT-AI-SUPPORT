@@ -2,7 +2,7 @@
 #      AI SCHEMAS.PY       #
 #==========================#
 
-"""PURE PURPOSE IS FOR DATA TRANSFER OBJECT"""
+"""Define request and message schemas used by the AI module."""
 from attr import field
 from pydantic import BaseModel , field_validator
 from typing import List , Optional , Any , Dict

@@ -1,16 +1,19 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
+import { getErrorMessage } from "../../services/api";
 
 function OTPValidationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const emailParam = searchParams.get("email");
   const purpose = searchParams.get("purpose") || "verification";
   const email = emailParam || "";
+  const notice = location.state?.notice || null;
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,8 +32,7 @@ function OTPValidationPage() {
   }, [emailParam, navigate]);
 
   const handleChange = (index, e) => {
-    const value = e.target.value;
-    if (isNaN(value)) return;
+    const value = e.target.value.replace(/\D/g, "");
 
     const newOtp = [...otp];
 
@@ -47,7 +49,7 @@ function OTPValidationPage() {
       return;
     }
 
-    newOtp[index] = value;
+    newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
     // Auto-advance to next box
@@ -75,15 +77,14 @@ function OTPValidationPage() {
 
     try {
       const result = await authService.verifyOtp(email, otpString, purpose);
-if (purpose === "password_reset") {
-         navigate("/forgot-password", { replace: true, state: { email, reset_token: result.reset_token } });
-       } else {
+      if (purpose === "password_reset") {
+        navigate("/forgot-password", { replace: true, state: { email, reset_token: result.reset_token } });
+      } else {
+        authService.clearPendingVerificationEmail();
         navigate("/login?verified=true", { replace: true });
       }
     } catch (err) {
-      const message =
-        err?.response?.data?.detail || err?.message || "Invalid OTP code.";
-      setError(message);
+      setError(getErrorMessage(err, "Invalid OTP code."));
     } finally {
       setIsLoading(false);
     }
@@ -99,9 +100,7 @@ if (purpose === "password_reset") {
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } catch (err) {
-      const message =
-        err?.response?.data?.detail || err?.message || "Failed to resend code.";
-      setError(message);
+      setError(getErrorMessage(err, "Failed to resend code."));
     } finally {
       setIsResending(false);
     }
@@ -142,8 +141,14 @@ if (purpose === "password_reset") {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center animate-shake">
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
               {error}
+            </div>
+          )}
+
+          {notice && !error && !resendMessage && (
+            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/50 text-blue-600 rounded-md text-sm text-center">
+              {notice}
             </div>
           )}
 
@@ -161,7 +166,7 @@ if (purpose === "password_reset") {
                   ref={(el) => (inputRefs.current[index] = el)}
                   type="text"
                   inputMode="numeric"
-                  maxLength={6}
+                  maxLength={index === 0 ? 6 : 1}
                   value={digit}
                   onChange={(e) => handleChange(index, e)}
                   onKeyDown={(e) => handleKeyDown(index, e)}

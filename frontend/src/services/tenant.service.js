@@ -14,5 +14,6 @@ export const tenantService = {
     
     // Superadmin specific updates
     updateTenantStatus: (tenantId, statusData) => api.patch(`/tenants/${tenantId}/status`, statusData),
-    deleteTenant: (tenantId) => api.delete(`/tenants/${tenantId}`)
+    deleteTenant: (tenantId) => api.delete(`/tenants/${tenantId}`),
+    restoreTenant: (tenantId) => api.patch(`/tenants/${tenantId}/restore`, {})
 };

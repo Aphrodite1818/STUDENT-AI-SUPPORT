@@ -29,8 +29,16 @@ class ForbiddenException(AppException):
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 class AccountNotVerifiedException(AppException):
-    def __init__(self, detail: str = "Account not verified") -> None:
-        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+    def __init__(
+        self,
+        detail: str = "Account not verified",
+        headers: dict | None = None,
+    ) -> None:
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+            headers=headers,
+        )
 
 class TooManyRequestsException(AppException):
     def __init__(self, detail: str = "Too many requests", retry_after: int = 60) -> None:

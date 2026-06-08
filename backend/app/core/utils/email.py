@@ -6,8 +6,8 @@ import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from backend.app.config.settings import settings
-from backend.app.config.logging import get_logger
+from app.config.settings import settings
+from app.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -18,11 +18,7 @@ async def send_email(
     body: str,
     is_html: bool = False,
 ) -> bool:
-    """
-    Hybrid email sender:
-    1. Google Apps Script (primary)
-    2. SMTP fallback (aiosmtplib)
-    """
+    """Send email via Google Apps Script first, then SMTP as a fallback."""
 
     # ==========================================================
     # BASIC VALIDATION
@@ -43,7 +39,7 @@ async def send_email(
                 "html": body if is_html else None,
             }
 
-            timeout = httpx.Timeout(5.0, connect=3.0)
+            timeout = httpx.Timeout(12.0, connect=5.0)
             async with httpx.AsyncClient(timeout=timeout) as client:
                 res = await client.post(
                     settings.APP_SCRIPT_URL,
@@ -105,7 +101,7 @@ async def send_email(
         port=settings.SMTP_PORT,
         start_tls=(settings.SMTP_PORT == 587),
         use_tls=(settings.SMTP_PORT == 465),
-        timeout=8,
+        timeout=15,
     )
 
     try:
@@ -132,3 +128,4 @@ async def send_email(
                 await smtp.quit()
         except Exception:
             pass
+

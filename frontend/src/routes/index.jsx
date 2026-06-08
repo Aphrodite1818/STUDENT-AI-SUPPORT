@@ -7,6 +7,7 @@ import OTPValidationPage from "../pages/public/otp_validationPage";
 import InvitePage from "../pages/public/InvitePage";
 import ForgotPasswordPage from "../pages/public/ForgotPasswordPage";
 import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
+import UserManagementPage from "../pages/admin/UserManagementPage";
 import TeacherDashboardPage from "../pages/teacher/TeacherDashboardPage";
 import StudentDashboardPage from "../pages/student/StudentDashboardPage";
 import ParentDashboardPage from "../pages/parent/ParentDashboardPage";
@@ -27,6 +28,7 @@ function AppRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route element={<RoleGuard allowedRoles={["admin"]} />}>
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+            <Route path="/admin/users" element={<UserManagementPage />} />
           </Route>
           <Route element={<RoleGuard allowedRoles={["teacher"]} />}>
             <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />

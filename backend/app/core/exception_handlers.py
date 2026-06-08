@@ -5,8 +5,8 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend.app.config.logging import get_logger
-from backend.app.core.exceptions import AppException
+from app.config.logging import get_logger
+from app.core.exceptions import AppException
 
 logger = get_logger(__name__)
 
@@ -41,3 +41,4 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=500,
             content={"detail": "Internal server error"},
         )
+

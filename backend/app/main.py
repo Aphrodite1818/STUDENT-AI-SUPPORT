@@ -7,13 +7,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.config.logging import get_logger
-from backend.app.config.database import engine
-from backend.app.config.settings import settings
-from backend.app.core.exception_handlers import register_exception_handlers
-from backend.app.modules.users.router import router as users_router
-from backend.app.modules.auth.router import router as auth_router
-from backend.app.tenant_management.router import router as tenant_router
+from app.config.logging import get_logger
+from app.config.database import engine
+from app.config.settings import settings
+from app.core.exception_handlers import register_exception_handlers
+from app.modules.users.router import router as users_router
+from app.modules.auth.router import router as auth_router
+from app.tenant_management.router import router as tenant_router
 logger = get_logger(__name__)
 
 
@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="School AI Assistant",
+        title="LearnlyAI Assistant",
         description="WhatsApp-powered school management assistant API",
         version="0.1.0",
         lifespan=lifespan,
@@ -71,10 +71,10 @@ if __name__ == "__main__":
     import logging
     import uvicorn
 
-    from backend.app.config.logging import is_development, resolve_log_level
+    from app.config.logging import is_development, resolve_log_level
 
     uvicorn.run(
-        "backend.app.main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=8080,
         reload=is_development(),

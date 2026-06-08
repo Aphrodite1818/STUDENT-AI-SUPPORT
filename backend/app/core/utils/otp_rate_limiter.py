@@ -1,19 +1,23 @@
 import time
-from collections import defaultdict
+from collections import defaultdict #creates a dictionary with default values
 from threading import Lock
+from typing import Self
 
 
 class OTPRateLimiter:
     _instance = None
     _lock = Lock()
+    _records: defaultdict[str, list[float]]
+    _max_requests: int
+    _window_seconds: int
 
-    def __new__(cls):
+    def __new__(cls) -> Self:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     inst = super().__new__(cls)
-                    inst._records: dict[str, list[float]] = defaultdict(list)
-                    inst._max_requests = 3
+                    inst._records = defaultdict(list)
+                    inst._max_requests = 5
                     inst._window_seconds = 600
                     cls._instance = inst
         return cls._instance

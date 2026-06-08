@@ -1,7 +1,7 @@
 #======================================#
 #              mixins.py               #
 #======================================#
-"""this file contains reusable mixins that can be inherited by multiple models to avoid code duplication."""
+"""Reusable SQLAlchemy mixins shared across multiple models."""
 import uuid
 from datetime import datetime
 from sqlalchemy import DateTime, func
@@ -32,4 +32,5 @@ class UUIDMixin:
         primary_key=True,
         default=uuid.uuid4,
         nullable=False,
+        unique=True
     )

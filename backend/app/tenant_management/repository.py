@@ -1,38 +1,50 @@
 #======================================#
 #    tenant_management/repository.py   #
 #======================================#
-"""
-Provides a reusable data access layer (Repository) for Tenant entities.
 
-The TenantRepository class contains static methods that encapsulate database
-CRUD operations for tenants. Using static methods allows services to execute 
-queries without needing to instantiate the repository.
-"""
-
+"""Provide data-access helpers for tenant entities."""
 
 import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select , update
-from backend.app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
-from datetime import datetime , timezone
+
+from app.tenant_management.models import Tenant, TenantVerificationStatus
 
 
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
 
 
 class TenantRepository:
-    """READ METHODS"""
+    """Encapsulate tenant persistence and lookup operations."""
+
     @staticmethod
-    async def get_by_id(db: AsyncSession , tenant_id : uuid.UUID) -> Tenant | None:
+    async def get_by_id_including_deleted(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+    ) -> Tenant | None:
+        """Return a tenant by ID whether or not it has been soft-deleted."""
+        result = await db.execute(
+            select(Tenant).where(Tenant.id == tenant_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant | None:
+        """Return a non-deleted tenant by ID."""
         result = await db.execute(
             select(Tenant).where(
                 Tenant.id == tenant_id,
-                Tenant.is_deleted == False #returns tenant who are not soft deleted
+                Tenant.is_deleted == False
             )
         )
         return result.scalar_one_or_none()
-    
+
     @staticmethod
-    async def get_by_slug(db : AsyncSession , slug : str) -> Tenant | None:
+    async def get_by_slug(db: AsyncSession, slug: str) -> Tenant | None:
+        """Return a non-deleted tenant by slug."""
         result = await db.execute(
             select(Tenant).where(
                 Tenant.slug == slug,
@@ -40,19 +52,48 @@ class TenantRepository:
             )
         )
         return result.scalar_one_or_none()
-    
+
     @staticmethod
-    async def get_by_email(db : AsyncSession , email : str) -> Tenant | None:
+    async def get_by_email(db: AsyncSession, email: str) -> Tenant | None:
+        """Return a non-deleted tenant by email address."""
+        normalized_email = _normalize_email(email)
         result = await db.execute(
             select(Tenant).where(
-                Tenant.email == email,
+                func.lower(Tenant.email) == normalized_email,
                 Tenant.is_deleted == False
             )
         )
         return result.scalar_one_or_none()
-    
+
     @staticmethod
-    async def get_by_school_bot_number(db : AsyncSession , school_bot_whatssap_number : str) -> Tenant | None:
+    async def get_by_email_including_deleted(db: AsyncSession, email: str) -> Tenant | None:
+        """Return a tenant by email address whether or not it has been soft-deleted."""
+        normalized_email = _normalize_email(email)
+        result = await db.execute(
+            select(Tenant).where(
+                func.lower(Tenant.email) == normalized_email
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_school_name(db: AsyncSession, school_name: str) -> Tenant | None:
+        """Return a non-deleted tenant by normalized school name."""
+        normalized_school_name = school_name.strip().lower()
+        result = await db.execute(
+            select(Tenant).where(
+                func.lower(Tenant.school_name) == normalized_school_name,
+                Tenant.is_deleted == False,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_school_bot_number(
+        db: AsyncSession,
+        school_bot_whatssap_number: str,
+    ) -> Tenant | None:
+        """Return a non-deleted tenant by its WhatsApp bot number."""
         result = await db.execute(
             select(Tenant).where(
                 Tenant.school_bot_whatssap_number == school_bot_whatssap_number,
@@ -60,86 +101,95 @@ class TenantRepository:
             )
         )
         return result.scalar_one_or_none()
-    
 
     @staticmethod
     async def get_all(
-        db : AsyncSession,
-        skip : int = 0 ,
-        limit : int = 50
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 50,
     ) -> list[Tenant]:
-        """Super admin only - list all tenants"""
+        """Return a paginated list of non-deleted tenants."""
         result = await db.execute(
             select(Tenant)
             .where(Tenant.is_deleted == False)
-            .offset(skip) #where to start from
-            .limit(limit) #limit of record to return
+            .offset(skip)
+            .limit(limit)
         )
-        return list(result.scalars().all()) #.all converts records to a list
-    
+        return list(result.scalars().all())
 
-    """WRITE METHODS"""
     @staticmethod
-    async def create(db : AsyncSession , tenant : Tenant ) -> Tenant:
+    async def create(db: AsyncSession, tenant: Tenant) -> Tenant:
+        """Persist a tenant and flush it into the current transaction."""
         db.add(tenant)
-        await db.flush() #temporary stores data
+        await db.flush()
         return tenant
-    
 
     @staticmethod
-    async def update(db : AsyncSession , tenant_id : uuid.UUID , update_data : dict) -> Tenant | None:
-        await db.execute(
-            update(Tenant).where(
-                Tenant.id == tenant_id)
-                .values(**update_data) #provided fields to unpack and update
-            )
-        return await TenantRepository.get_by_id(db , tenant_id) #returns the entire row as response
-    
-
-
-    """DELELTE METHOD"""
-    @staticmethod
-    async def soft_delete(db : AsyncSession , tenant_id : uuid.UUID) -> int:
+    async def update(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        update_data: dict,
+    ) -> Tenant | None:
+        """Update a tenant and return the refreshed record."""
         await db.execute(
             update(Tenant).where(
                 Tenant.id == tenant_id
-            ).values(is_deleted = True , deleted_at = datetime.now(timezone.utc))
+            ).values(**update_data)
         )
-    
+        return await TenantRepository.get_by_id(db, tenant_id)
 
-
-
-    """EXISTENCE CHECK"""
     @staticmethod
-    async def email_exists(db : AsyncSession , email: str) -> bool:
-        result = await db.execute(
-            select(Tenant.id).where(Tenant.email == email)
+    async def soft_delete(db: AsyncSession, tenant_id: uuid.UUID) -> int:
+        """Mark a tenant as deleted without removing the row."""
+        await db.execute(
+            update(Tenant).where(
+                Tenant.id == tenant_id
+            ).values(is_deleted=True, deleted_at=datetime.now(timezone.utc))
+        )
 
+    @staticmethod
+    async def restore(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant | None:
+        """Reverse a soft delete and return the active tenant record."""
+        await db.execute(
+            update(Tenant).where(
+                Tenant.id == tenant_id
+            ).values(is_deleted=False, deleted_at=None)
+        )
+        return await TenantRepository.get_by_id(db, tenant_id)
+
+    @staticmethod
+    async def email_exists(db: AsyncSession, email: str) -> bool:
+        """Return whether a tenant already exists for the given email."""
+        normalized_email = _normalize_email(email)
+        result = await db.execute(
+            select(Tenant.id).where(func.lower(Tenant.email) == normalized_email)
         )
         return result.scalar_one_or_none() is not None
-    
 
     @staticmethod
-    
-    async def slug_exists(db : AsyncSession , slug: str) -> bool:
+    async def slug_exists(db: AsyncSession, slug: str) -> bool:
+        """Return whether a tenant slug is already in use."""
         result = await db.execute(
             select(Tenant.id).where(Tenant.slug == slug)
-
         )
-        return result.scalar_one_or_none() is not None #this  returns True if the result is not None , but returns false if None
-    
+        return result.scalar_one_or_none() is not None
+
     @staticmethod
-    async def school_bot_whatssap_number_exists(db : AsyncSession , whatssap_number : str) -> bool:
+    async def school_bot_whatssap_number_exists(
+        db: AsyncSession,
+        whatssap_number: str,
+    ) -> bool:
+        """Return whether a WhatsApp bot number is already assigned."""
         result = await db.execute(
             select(Tenant.id).where(Tenant.school_bot_whatssap_number == whatssap_number)
         )
         return result.scalar_one_or_none() is not None
-    
 
     @staticmethod
-    async def is_verified(db : AsyncSession , email : str ):
+    async def is_verified(db: AsyncSession, email: str):
+        """Return whether the tenant linked to the email is verified."""
+        normalized_email = _normalize_email(email)
         result = await db.execute(
-            select(Tenant.verification_status).where(Tenant.email == email)
+            select(Tenant.verification_status).where(func.lower(Tenant.email) == normalized_email)
         )
         return result.scalar_one_or_none() == TenantVerificationStatus.ACTIVE
-
