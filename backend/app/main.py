@@ -11,6 +11,7 @@ from app.config.logging import get_logger
 from app.config.database import engine
 from app.config.settings import settings
 from app.core.exception_handlers import register_exception_handlers
+from app.modules.superadmin.router import router as superadmin_router
 from app.modules.users.router import router as users_router
 from app.modules.auth.router import router as auth_router
 from app.tenant_management.router import router as tenant_router
@@ -37,13 +38,23 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    middleware_options = {
+        "allow_origins": settings.ALLOWED_ORIGINS,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+    if settings.is_development:
+        # Keep explicit origins from settings, but also allow loopback hosts
+        # across dev ports so local Vite/React servers do not fail CORS.
+        middleware_options["allow_origin_regex"] = (
+            r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        )
+
     # CORS — tighten origins before going to production
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        **middleware_options,
     )
 
     # ── Exception Handlers ────────────────────────────────────────────────────
@@ -53,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
     app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Tenants"])
+    app.include_router(superadmin_router)
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])

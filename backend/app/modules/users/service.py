@@ -19,7 +19,6 @@ from app.tenant_management.repository import TenantRepository
 
 logger = get_logger(__name__)
 
-
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -36,9 +35,16 @@ class UserService:
         frontend_app_url: str | None = None,
     ) -> User:
         """Create a tenant-scoped invited user after validating uniqueness constraints."""
+        normalized_email = _normalize_email(user_data.email)
+
         logger.debug(
             "Starting tenant user invite",
-            extra={"email": user_data.email, "phone_number": user_data.phone_number},
+            extra={
+                "email": normalized_email,
+                "phone_number": user_data.phone_number,
+                "actor_id": str(actor.id),
+                "tenant_id": str(actor.tenant_id),
+            },
         )
 
         if actor.role != UserRole.ADMIN:
@@ -46,22 +52,30 @@ class UserService:
                 detail="Only tenant admins can create invited tenant users."
             )
 
-        if user_data.role in (UserRole.ADMIN, UserRole.SUPERADMIN):
+        if not actor.tenant_id:
+            raise ForbiddenException(
+                detail="Admin user is not attached to a tenant."
+            )
+
+        if user_data.role == UserRole.ADMIN:
             raise ForbiddenException(
                 detail="Tenant admins can only invite normal tenant users."
             )
 
-        existing_email = await UserRepository.get_user_by_email(db, user_data.email)
+        existing_email = await UserRepository.get_user_by_email(db, normalized_email)
         if existing_email:
             logger.warning(
                 "Registration rejected - email already in use",
-                extra={"email": user_data.email},
+                extra={"email": normalized_email},
             )
             raise BadRequestException(
                 detail="A user with this email already exists."
             )
 
-        existing_phone = await UserRepository.get_by_phone_number(db, user_data.phone_number)
+        existing_phone = await UserRepository.get_by_phone_number(
+            db,
+            user_data.phone_number,
+        )
         if existing_phone:
             logger.warning(
                 "Registration rejected - phone number already in use",
@@ -89,26 +103,55 @@ class UserService:
         if tenant is None:
             raise NotFoundException(detail="Tenant not found.")
 
-        user_dict = user_data.model_dump()
-        user_dict["email"] = _normalize_email(user_data.email)
+        user_dict = user_data.model_dump(
+            exclude={
+                "tenant_id",
+                "password",
+                "password_hash",
+                "account_status",
+                "is_verified",
+            },
+            exclude_unset=True,
+        )
+
+        user_dict["email"] = normalized_email
         user_dict["tenant_id"] = actor.tenant_id
-        user_dict["password_hash"] = hash_password(secrets.token_urlsafe(32))
+        user_dict["password_hash"] = hash_password(secrets.token_urlsafe(32))#temporary password to be reset by user
         user_dict["account_status"] = AccountStatus.PENDING
         user_dict["is_verified"] = False
+
         new_user = User(**user_dict)
 
-        created_user = await UserRepository.create_user(db, new_user)
-        invite_link = await UserInviteService.create_invite_record(
-            db,
-            user=created_user,
-            frontend_app_url=frontend_app_url,
-        )
-        await db.commit()
-        await db.refresh(created_user)
+        try:
+            created_user = await UserRepository.create_user(db, new_user)
+
+            await db.flush()
+
+            invite_link = await UserInviteService.create_invite_record(
+                db,
+                user=created_user,
+                frontend_app_url=frontend_app_url,
+            )
+
+            await db.commit()
+            await db.refresh(created_user)
+
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "Tenant user invite failed",
+                extra={
+                    "email": normalized_email,
+                    "phone_number": user_data.phone_number,
+                    "tenant_id": str(actor.tenant_id),
+                },
+            )
+            raise
 
         user_name = " ".join(
             part for part in (created_user.firstname, created_user.lastname) if part
         ) or created_user.email
+
         await UserInviteService.send_invite_email(
             email=created_user.email,
             user_name=user_name,
@@ -116,15 +159,20 @@ class UserService:
             invite_link=invite_link,
             background_tasks=background_tasks,
         )
+
         logger.info(
             "Tenant user invited successfully",
             extra={
                 "user_id": str(created_user.id),
                 "email": created_user.email,
                 "phone_number": created_user.phone_number,
+                "tenant_id": str(created_user.tenant_id),
             },
         )
+
         return created_user
+
+
 
     @staticmethod
     async def resend_invite(
@@ -148,7 +196,7 @@ class UserService:
                 detail="Admins can only invite users inside their own tenant."
             )
 
-        if db_user.role in (UserRole.ADMIN, UserRole.SUPERADMIN):
+        if db_user.role == UserRole.ADMIN:
             raise BadRequestException(
                 detail="Invite resend is only available for normal tenant users."
             )
@@ -181,6 +229,9 @@ class UserService:
         )
         return {"detail": "A new invite link has been emailed to the user."}
 
+
+
+
     @staticmethod
     async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User:
         """Fetch a single user by ID or raise if it does not exist."""
@@ -197,6 +248,9 @@ class UserService:
             extra={"user_id": str(user_id), "email": user.email},
         )
         return user
+
+
+
 
     @staticmethod
     async def get_all_users(
@@ -224,6 +278,8 @@ class UserService:
 
         logger.info("User list retrieved", extra=info_extra)
         return users
+
+
 
     @staticmethod
     async def update_profile(
@@ -300,6 +356,10 @@ class UserService:
         )
         return updated_user
 
+
+
+
+
     @staticmethod
     async def update_admin_status(
         db: AsyncSession,
@@ -323,15 +383,14 @@ class UserService:
             raise NotFoundException(detail="User not found.")
 
         requested_role = admin_data.role
-        if actor.role != UserRole.SUPERADMIN:
-            if db_user.role == UserRole.SUPERADMIN:
-                raise ForbiddenException(
-                    detail="Only superadmins can manage superadmin accounts."
-                )
-            if requested_role == UserRole.SUPERADMIN:
-                raise ForbiddenException(
-                    detail="Only superadmins can assign the superadmin role."
-                )
+        if db_user.role == UserRole.ADMIN:
+            raise ForbiddenException(
+                detail="Tenant admins cannot manage other administrator accounts."
+            )
+        if requested_role == UserRole.ADMIN:
+            raise ForbiddenException(
+                detail="Tenant admins cannot assign administrator roles."
+            )
 
         for key, value in update_dict.items():
             setattr(db_user, key, value)
@@ -342,6 +401,9 @@ class UserService:
             extra={"user_id": str(user_id), "changed_fields": changed_fields},
         )
         return updated_user
+
+
+
 
     @staticmethod
     async def delete_user(db: AsyncSession, user_id: uuid.UUID) -> dict:

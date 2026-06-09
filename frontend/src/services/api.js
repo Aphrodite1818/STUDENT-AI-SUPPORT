@@ -1,115 +1,329 @@
 const DEFAULT_API_URL =
-    import.meta.env.MODE === "development"
-        ? "http://localhost:8080/api/v1"
-        : "/api/v1";
+  import.meta.env.MODE === "development"
+    ? "http://localhost:8080/api/v1"
+    : "/api/v1";
 
 const API_URL =
-    (import.meta.env.MODE === "development"
-        ? import.meta.env.VITE_API_URL_DEV
-        : import.meta.env.VITE_API_URL) || DEFAULT_API_URL;
+  (import.meta.env.MODE === "development"
+    ? import.meta.env.VITE_API_URL_DEV
+    : import.meta.env.VITE_API_URL) || DEFAULT_API_URL;
 
 const API_BASE_URL = API_URL.replace(/\/$/, "");
+
 const TOKEN_KEY = "token";
+const USER_KEY = "auth_user";
+const ROLE_KEY = "auth_role";
+const DEFAULT_USER_SAFE_ERROR =
+  "Something went wrong while processing your request. Please try again.";
+const NETWORK_ERROR_MESSAGE =
+  "We could not reach the server. Check your connection and try again.";
+const TECHNICAL_ERROR_PATTERN =
+  /traceback|sql|sqlalchemy|asyncpg|psycopg|uuid|pydantic|stack trace|internal server error|syntax error/i;
 
 const normalizeDetail = (detail) => {
-    if (!detail) return null;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) {
-        return detail
-            .map((item) => {
-                if (typeof item === "string") return item;
-                if (item?.msg) return item.msg;
-                if (item?.message) return item.message;
-                return null;
-            })
-            .filter(Boolean)
-            .join(", ");
-    }
-    if (typeof detail === "object") {
-        return detail.message || detail.msg || JSON.stringify(detail);
-    }
-    return String(detail);
+  if (!detail) return null;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item?.msg) return item.msg;
+        if (item?.message) return item.message;
+        return null;
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (typeof detail === "object") {
+    return detail.detail || detail.message || detail.msg || null;
+  }
+
+  return String(detail);
+};
+
+const getStoredValue = (key) =>
+  localStorage.getItem(key) || sessionStorage.getItem(key);
+
+const setStoredValue = (key, value, { remember = true } = {}) => {
+  const primaryStorage = remember ? localStorage : sessionStorage;
+  const secondaryStorage = remember ? sessionStorage : localStorage;
+
+  secondaryStorage.removeItem(key);
+  primaryStorage.setItem(key, value);
+};
+
+const removeStoredValue = (key) => {
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+};
+
+const buildFieldErrors = (detail) => {
+  if (!Array.isArray(detail)) return {};
+
+  return detail.reduce((errors, item) => {
+    if (!item || typeof item !== "object") return errors;
+
+    const loc = Array.isArray(item.loc)
+      ? item.loc.filter((segment) => segment !== "body")
+      : [];
+
+    const fieldName = loc.map(String).join(".");
+    const message = normalizeDetail(item.msg) || "Invalid value";
+
+    if (!fieldName) return errors;
+
+    errors[fieldName] = errors[fieldName]
+      ? `${errors[fieldName]}, ${message}`
+      : message;
+
+    return errors;
+  }, {});
+};
+
+const getStatusFallbackMessage = (status, fallback) => {
+  if (fallback) return fallback;
+
+  switch (status) {
+    case 400:
+      return DEFAULT_USER_SAFE_ERROR;
+    case 401:
+      return "Your session has expired. Please log in again.";
+    case 403:
+      return "You do not have permission to perform this action.";
+    case 409:
+      return "This request conflicts with existing data.";
+    case 429:
+      return "Too many requests. Please wait before trying again.";
+    default:
+      return DEFAULT_USER_SAFE_ERROR;
+  }
+};
+
+const isTechnicalMessage = (message) =>
+  typeof message === "string" && TECHNICAL_ERROR_PATTERN.test(message);
+
+const normalizeBoolean = (value) => value === true || value === "true";
+
+const getVerificationMetadata = (data = {}, headers = {}) => ({
+  verificationRequired: normalizeBoolean(
+    data?.verification_required ??
+      headers["x-verification-required"] ??
+      headers["X-Verification-Required"]
+  ),
+  email: data?.email || headers["x-email"] || headers["X-Email"] || null,
+  purpose:
+    data?.purpose ||
+    headers["x-otp-purpose"] ||
+    headers["X-OTP-Purpose"] ||
+    null,
+  redirectTo:
+    data?.redirect_to ||
+    headers["x-redirect-to"] ||
+    headers["X-Redirect-To"] ||
+    null,
+  resendOtpAvailable: normalizeBoolean(
+    data?.resend_otp_available ??
+      headers["x-resend-otp-available"] ??
+      headers["X-Resend-OTP-Available"]
+  ),
+});
+
+const getUserSafeMessage = (status, data, fallback, fieldErrors) => {
+  const backendMessage =
+    normalizeDetail(data?.message) || normalizeDetail(data?.detail);
+
+  if (Object.keys(fieldErrors || {}).length > 0) {
+    return backendMessage && !isTechnicalMessage(backendMessage)
+      ? backendMessage
+      : "Please correct the highlighted fields and try again.";
+  }
+
+  if (status >= 500) {
+    return DEFAULT_USER_SAFE_ERROR;
+  }
+
+  if (backendMessage && !isTechnicalMessage(backendMessage)) {
+    return backendMessage;
+  }
+
+  return getStatusFallbackMessage(status, fallback);
 };
 
 export const authSession = {
-    getToken: () =>
-        localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY),
-    setToken: (token, { remember = true } = {}) => {
-        const primaryStorage = remember ? localStorage : sessionStorage;
-        const secondaryStorage = remember ? sessionStorage : localStorage;
+  getToken: () => getStoredValue(TOKEN_KEY),
 
-        secondaryStorage.removeItem(TOKEN_KEY);
-        primaryStorage.setItem(TOKEN_KEY, token);
-    },
-    clearToken: () => {
-        localStorage.removeItem(TOKEN_KEY);
-        sessionStorage.removeItem(TOKEN_KEY);
-    },
-};
-
-export const getErrorMessage = (error, fallback = "An error occurred") => {
-    if (!error) return fallback;
-
-    const responseDetail = normalizeDetail(error?.response?.data?.detail);
-    if (responseDetail) return responseDetail;
-
-    const responseMessage = normalizeDetail(error?.response?.data?.message);
-    if (responseMessage) return responseMessage;
-
-    if (typeof error?.message === "string" && error.message.trim()) {
-        return error.message;
+  setToken: (token, { remember = true } = {}) => {
+    if (!token) {
+      removeStoredValue(TOKEN_KEY);
+      return;
     }
 
-    return fallback;
+    setStoredValue(TOKEN_KEY, token, { remember });
+  },
+
+  clearToken: () => {
+    removeStoredValue(TOKEN_KEY);
+  },
+
+  getUser: () => {
+    const rawValue = getStoredValue(USER_KEY);
+
+    if (!rawValue) return null;
+
+    try {
+      return JSON.parse(rawValue);
+    } catch {
+      removeStoredValue(USER_KEY);
+      return null;
+    }
+  },
+
+  setUser: (user, { remember = true } = {}) => {
+    if (!user) {
+      authSession.clearUser();
+      return;
+    }
+
+    setStoredValue(USER_KEY, JSON.stringify(user), { remember });
+
+    if (user.role) {
+      authSession.setRole(user.role, { remember });
+    }
+  },
+
+  clearUser: () => {
+    removeStoredValue(USER_KEY);
+    removeStoredValue(ROLE_KEY);
+  },
+
+  getRole: () => getStoredValue(ROLE_KEY),
+
+  setRole: (role, { remember = true } = {}) => {
+    if (!role) {
+      removeStoredValue(ROLE_KEY);
+      return;
+    }
+
+    setStoredValue(ROLE_KEY, role, { remember });
+  },
+
+  clear: () => {
+    authSession.clearToken();
+    authSession.clearUser();
+  },
+};
+
+export const parseApiError = (error, fallback) => {
+  if (!error?.response) {
+    return {
+      status: null,
+      message: NETWORK_ERROR_MESSAGE,
+      fieldErrors: {},
+      headers: {},
+      retryAfter: null,
+      isNetworkError: true,
+      technicalMessage: error?.message || null,
+    };
+  }
+
+  const { data = {}, headers = {}, status } = error.response;
+  const safeHeaders = headers || {};
+  const fieldErrors = buildFieldErrors(data?.detail);
+  const verificationMetadata = getVerificationMetadata(data, safeHeaders);
+  const message = getUserSafeMessage(status, data, fallback, fieldErrors);
+
+  return {
+    status,
+    message,
+    fieldErrors,
+    headers: safeHeaders,
+    retryAfter: safeHeaders["retry-after"] || safeHeaders["Retry-After"] || null,
+    isNetworkError: false,
+    technicalMessage: error?.message || null,
+    data,
+    ...verificationMetadata,
+  };
+};
+
+export const remapFieldErrors = (fieldErrors, fieldMap = {}) =>
+  Object.entries(fieldErrors || {}).reduce((mappedErrors, [field, message]) => {
+    const mappedField = fieldMap[field] || field;
+    mappedErrors[mappedField] = message;
+    return mappedErrors;
+  }, {});
+
+export const getErrorMessage = (error, fallback = "An error occurred") => {
+  if (!error) return fallback;
+  return parseApiError(error, fallback).message;
 };
 
 async function request(endpoint, options = {}) {
-    const token = authSession.getToken();
+  const { auth = true, headers: optionHeaders = {}, ...restOptions } = options;
+  const token = auth ? authSession.getToken() : null;
+  const hasBody = restOptions.body !== undefined && restOptions.body !== null;
 
-    const headers = {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-    };
+  const headers = {
+    ...(hasBody ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...optionHeaders,
+  };
 
-    const config = {
-        ...options,
-        headers,
-    };
+  const config = {
+    ...restOptions,
+    headers,
+  };
 
-    try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-        const data = await response.json().catch(() => ({}));
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    const data = await response.json().catch(() => ({}));
+    const responseHeaders = Object.fromEntries(response.headers.entries());
 
-        if (!response.ok) {
-            if (response.status === 401) {
-                authSession.clearToken();
-            }
+    if (!response.ok) {
+      if (response.status === 401) {
+        authSession.clear();
+      }
 
-            const error = new Error(
-                getErrorMessage({ response: { data } }, "An error occurred")
-            );
-            error.response = {
-                status: response.status,
-                data,
-                headers: Object.fromEntries(response.headers.entries()),
-            };
-            throw error;
-        }
+      const errorPayload = {
+        response: {
+          status: response.status,
+          data,
+          headers: responseHeaders,
+        },
+      };
 
-        return data;
-    } catch (error) {
-        console.error(`API Error on ${endpoint}:`, error);
-        throw error;
+      const error = new Error(getErrorMessage(errorPayload, "An error occurred"));
+      error.response = errorPayload.response;
+
+      throw error;
     }
+
+    return data;
+  } catch (error) {
+    console.error(`API Error on ${endpoint}:`, error);
+    throw error;
+  }
 }
 
 export const api = {
-    get: (endpoint, options) => request(endpoint, { method: "GET", ...options }),
-    post: (endpoint, body, options) =>
-        request(endpoint, { method: "POST", body: JSON.stringify(body), ...options }),
-    patch: (endpoint, body, options) =>
-        request(endpoint, { method: "PATCH", body: JSON.stringify(body), ...options }),
-    delete: (endpoint, options) =>
-        request(endpoint, { method: "DELETE", ...options }),
+  get: (endpoint, options) => request(endpoint, { method: "GET", ...options }),
+
+  post: (endpoint, body, options) =>
+    request(endpoint, {
+      method: "POST",
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...options,
+    }),
+
+  patch: (endpoint, body, options) =>
+    request(endpoint, {
+      method: "PATCH",
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...options,
+    }),
+
+  delete: (endpoint, options) =>
+    request(endpoint, { method: "DELETE", ...options }),
 };

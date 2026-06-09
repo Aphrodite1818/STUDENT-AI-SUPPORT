@@ -2,9 +2,11 @@
 #            auth/service.py           #
 #======================================#
 
+import uuid
 import random
 import secrets
 import string
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 
@@ -42,15 +44,51 @@ from app.modules.auth.schemas import (
     UpdatePassword,
     VerifyOTP,
 )
+from app.modules.superadmin.models import SuperAdmin
+from app.modules.superadmin.repository import SuperAdminRepository
 from app.modules.users.models import AccountStatus, User, UserRole
 from app.modules.users.repository import UserRepository
 from app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
 from app.tenant_management.repository import TenantRepository
 from app.core.utils.otp_rate_limiter import OTPRateLimiter
 
-
+"""AUTH SERVICE LARGLEY DEPENDS ON USER AND TENANT REPOSITORIES AND MODELS"""
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+async def _get_platform_email_conflicts(
+    db: AsyncSession,
+    email: str,
+) -> tuple[User | None, Tenant | None, SuperAdmin | None]:
+    normalized_email = _normalize_email(email)
+    existing_user = await UserRepository.get_user_by_email(db, normalized_email)
+    existing_tenant = await TenantRepository.get_by_email_including_deleted(db, normalized_email)
+    existing_superadmin = await SuperAdminRepository.get_by_email(db, normalized_email)
+    return existing_user, existing_tenant, existing_superadmin
+
+
+async def _authenticate_superadmin(
+    db: AsyncSession,
+    *,
+    email: str,
+    password: str,
+) -> SuperAdmin | None:
+    superadmin = await SuperAdminRepository.get_by_email(db, email)
+    if superadmin is None:
+        return None
+    if not verify_password(password, superadmin.password_hash):
+        raise UnauthorizedException("Invalid email or password")
+    if not superadmin.is_active:
+        raise UnauthorizedException("Superadmin account is not active")
+
+    await SuperAdminRepository.touch_last_login(
+        db,
+        superadmin,
+        at=datetime.now(timezone.utc),
+    )
+    await db.commit()
+    return superadmin
 
 
 def _tenant_allows_login(tenant: Tenant | None) -> bool:
@@ -93,16 +131,114 @@ def _user_can_reset_password(user: User | None, tenant: Tenant | None) -> bool:
     )
 
 
+@dataclass
+class AuthenticatedActor:
+    account_type: str
+    actor_id: uuid.UUID
+    email: str
+    role: str
+    tenant_id: uuid.UUID | None = None
+
+
 class AuthService:
     @staticmethod
-    def _otp_verification_headers(email: str) -> dict[str, str]:
+    def _build_verification_required_payload(
+        email: str,
+        detail: str,
+        *,
+        resend_otp_available: bool,
+    ) -> dict[str, str | bool]:
+        normalized_email = _normalize_email(email)
         return {
-            "X-Resend-OTP-Available": "true",
-            "X-Email": email,
+            "message": detail,
+            "verification_required": True,
+            "email": normalized_email,
+            "purpose": AuthPurpose.VERIFICATION.value,
+            "redirect_to": "/verify-otp",
+            "resend_otp_available": resend_otp_available,
         }
 
     @staticmethod
-    async def authenticate_user(db: AsyncSession, payload: LoginRequest) -> User:
+    def _otp_verification_headers(
+        email: str,
+        *,
+        resend_otp_available: bool,
+    ) -> dict[str, str]:
+        normalized_email = _normalize_email(email)
+        return {
+            "X-Verification-Required": "true",
+            "X-Resend-OTP-Available": str(resend_otp_available).lower(),
+            "X-Email": normalized_email,
+            "X-OTP-Purpose": AuthPurpose.VERIFICATION.value,
+            "X-Redirect-To": "/verify-otp",
+        }
+
+    @staticmethod
+    async def _raise_verification_required(
+        db: AsyncSession,
+        *,
+        email: str,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> None:
+        normalized_email = _normalize_email(email)
+        detail = "Your account needs verification. We sent a new verification code."
+        resend_otp_available = True
+        headers: dict[str, str] | None = None
+
+        try:
+            await OTPService.generate_otp(
+                db,
+                RequestOTP(
+                    email=normalized_email,
+                    purpose=AuthPurpose.VERIFICATION,
+                ),
+                background_tasks=background_tasks,
+            )
+        except TooManyRequestsException as exc:
+            resend_otp_available = False
+            detail = (
+                "Your account needs verification. A verification code was sent recently. "
+                "Please use the latest code or wait before requesting another one."
+            )
+            headers = AuthService._otp_verification_headers(
+                normalized_email,
+                resend_otp_available=resend_otp_available,
+            )
+            headers["Retry-After"] = str(exc.retry_after)
+
+        raise AccountNotVerifiedException(
+            detail=detail,
+            headers=headers
+            or AuthService._otp_verification_headers(
+                normalized_email,
+                resend_otp_available=resend_otp_available,
+            ),
+            payload=AuthService._build_verification_required_payload(
+                normalized_email,
+                detail,
+                resend_otp_available=resend_otp_available,
+            ),
+        )
+
+    @staticmethod
+    async def authenticate_actor(
+        db: AsyncSession,
+        payload: LoginRequest,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> AuthenticatedActor:
+        superadmin = await _authenticate_superadmin(
+            db,
+            email=payload.email,
+            password=payload.password,
+        )
+        if superadmin is not None:
+            return AuthenticatedActor(
+                account_type="superadmin",
+                actor_id=superadmin.id,
+                email=superadmin.email,
+                role="superadmin",
+            )
+
         user = await UserRepository.get_user_by_email(db, payload.email)
 
         if not user:
@@ -110,11 +246,6 @@ class AuthService:
 
         if not verify_password(payload.password, user.password_hash):
             raise UnauthorizedException("Invalid email or password")
-
-        if user.role == UserRole.SUPERADMIN:
-            if user.account_status != AccountStatus.ACTIVE:
-                raise UnauthorizedException("Account is not active")
-            return user
 
         tenant = await TenantRepository.get_by_id(db, user.tenant_id)
         if tenant is None:
@@ -125,9 +256,10 @@ class AuthService:
                 raise AccountNotVerifiedException(
                     detail="Account not activated. Please use the activation link sent to your email.",
                 )
-            raise AccountNotVerifiedException(
-                detail="Account not verified. Please check your email for the verification code.",
-                headers=AuthService._otp_verification_headers(payload.email),
+            await AuthService._raise_verification_required(
+                db,
+                email=payload.email,
+                background_tasks=background_tasks,
             )
 
         if tenant.verification_status == TenantVerificationStatus.REJECTED:
@@ -139,9 +271,10 @@ class AuthService:
         if user.account_status != AccountStatus.ACTIVE:
             if user.account_status == AccountStatus.PENDING:
                 if user.role == UserRole.ADMIN and tenant.email.strip().lower() == user.email.strip().lower():
-                    raise AccountNotVerifiedException(
-                        detail="Account not verified. Please check your email for the verification code.",
-                        headers=AuthService._otp_verification_headers(payload.email),
+                    await AuthService._raise_verification_required(
+                        db,
+                        email=payload.email,
+                        background_tasks=background_tasks,
                     )
                 raise AccountNotVerifiedException(
                     detail=(
@@ -151,7 +284,13 @@ class AuthService:
                 )
             raise UnauthorizedException("Account is not active")
 
-        return user
+        return AuthenticatedActor(
+            account_type="tenant_user",
+            actor_id=user.id,
+            email=user.email,
+            role=user.role.value,
+            tenant_id=user.tenant_id,
+        )
 
     @staticmethod
     async def reset_password(db: AsyncSession, payload: UpdatePassword) -> None:
@@ -442,15 +581,39 @@ class UserInviteService:
         record = result.scalars().first()
 
         if record is None:
-            return {"status": "invalid", "purpose": None}
+            superadmin_invite = await SuperAdminRepository.get_invite_status_record(
+                db,
+                hashed_token,
+            )
+            if superadmin_invite is None:
+                return {"status": "invalid", "purpose": None}
 
-        tenant_result = await db.execute(
-            select(Tenant).where(Tenant.id == record.tenant_id)
-        )
+            normalized_invite_email = _normalize_email(superadmin_invite.email)
+            existing_user, existing_tenant, existing_superadmin = await _get_platform_email_conflicts(
+                db,
+                normalized_invite_email,
+            )
+
+            if existing_superadmin is not None and existing_superadmin.is_active:
+                return {"status": "used", "purpose": "superadmin_invite"}
+
+            if existing_user is not None or existing_tenant is not None or existing_superadmin is not None:
+                return {"status": "invalid", "purpose": "superadmin_invite"}
+
+            if superadmin_invite.is_used:
+                return {"status": "used", "purpose": "superadmin_invite"}
+
+            if superadmin_invite.expires_at.replace(tzinfo=timezone.utc) < now:
+                return {"status": "expired", "purpose": "superadmin_invite"}
+
+            return {"status": "valid", "purpose": "superadmin_invite"}
+
+        tenant_result = await db.execute(select(Tenant).where(Tenant.id == record.tenant_id))
         tenant = tenant_result.scalar_one_or_none()
 
-        if record.purpose == AuthPurpose.USER_INVITE and not _tenant_allows_user_invite_completion(tenant):
-            return {"status": "invalid", "purpose": None}
+        if record.purpose == AuthPurpose.USER_INVITE:
+            if not _tenant_allows_user_invite_completion(tenant):
+                return {"status": "invalid", "purpose": None}
 
         if record.purpose == AuthPurpose.TENANT_ACTIVATION and not _tenant_allows_activation_completion(tenant):
             return {"status": "invalid", "purpose": None}
@@ -480,9 +643,7 @@ class UserInviteService:
         invite_record = invite_result.scalar_one_or_none()
 
         if invite_record is None:
-            raise BadRequestException(
-                "This invite link is invalid or has expired. Please request a new invite from your school admin."
-            )
+            return await UserInviteService.accept_superadmin_invite(db, payload)
 
         if invite_record.is_used:
             raise BadRequestException(
@@ -522,7 +683,7 @@ class UserInviteService:
                 "This invite link is invalid or has expired. Please request a new invite from your school admin."
             )
 
-        if user.role in (UserRole.ADMIN, UserRole.SUPERADMIN):
+        if user.role == UserRole.ADMIN:
             raise BadRequestException("This invite link is not valid for administrator setup.")
 
         if user.account_status != AccountStatus.PENDING or user.is_verified:
@@ -547,6 +708,69 @@ class UserInviteService:
         )
         await db.commit()
 
+        return {"detail": "Account setup completed successfully. You may now log in."}
+
+    @staticmethod
+    async def accept_superadmin_invite(
+        db: AsyncSession,
+        payload: UserInviteAcceptanceRequest,
+    ) -> dict[str, str]:
+        hashed_token = hash_auth_secret(payload.token)
+        now = datetime.now(timezone.utc)
+
+        invite_record = await SuperAdminRepository.get_invite_by_hashed_token(
+            db,
+            hashed_token,
+        )
+        if invite_record is None:
+            raise BadRequestException(
+                "This invite link is invalid or has expired. Please request a new invite from the platform owner."
+            )
+        if invite_record.is_used:
+            raise BadRequestException(
+                "This invite link has already been used. Please log in instead."
+            )
+        if invite_record.expires_at.replace(tzinfo=timezone.utc) < now:
+            raise BadRequestException(
+                "This invite link has expired. Please request a new invite from the platform owner."
+            )
+
+        normalized_email = _normalize_email(payload.email)
+        if invite_record.email.strip().lower() != normalized_email:
+            raise BadRequestException("Invite link does not match this email address.")
+
+        existing_user, existing_tenant, existing_superadmin = await _get_platform_email_conflicts(
+            db,
+            normalized_email,
+        )
+
+        if existing_user is not None or existing_tenant is not None:
+            raise BadRequestException(
+                "This invite can no longer be used because this email already belongs to another platform account."
+            )
+
+        if existing_superadmin is not None and existing_superadmin.is_active:
+            invite_record.is_used = True
+            await db.commit()
+            raise BadRequestException(
+                "This invite link has already been used. Please log in instead."
+            )
+
+        if existing_superadmin is not None:
+            raise BadRequestException(
+                "A superadmin account record already exists for this email. Ask another superadmin to reset or reactivate that account instead of accepting a new invite."
+            )
+
+        superadmin = SuperAdmin(
+            email=normalized_email,
+            password_hash=hash_password(payload.password),
+            is_active=True,
+        )
+        await SuperAdminRepository.create(db, superadmin)
+
+        invite_record.is_used = True
+        await SuperAdminRepository.delete_active_invites_for_email(db, normalized_email)
+        await db.commit()
         return {"detail": "Account setup completed successfully. You may now log in."}
 
 
@@ -761,4 +985,3 @@ class OTPService:
         await db.commit()
 
         return response_data
-

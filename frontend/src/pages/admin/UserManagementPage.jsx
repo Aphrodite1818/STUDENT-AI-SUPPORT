@@ -4,7 +4,7 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import { userService } from "../../services/user.service";
-import { getErrorMessage } from "../../services/api";
+import { getErrorMessage, parseApiError } from "../../services/api";
 
 const INITIAL_FORM = {
   firstname: "",
@@ -23,6 +23,7 @@ function UserManagementPage() {
   const [resendingUserId, setResendingUserId] = useState(null);
   const [deletingUserId, setDeletingUserId] = useState(null);
   const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState(null);
 
   const loadUsers = useCallback(async () => {
@@ -50,12 +51,15 @@ function UserManagementPage() {
       ...prev,
       [event.target.name]: event.target.value,
     }));
+    setFieldErrors((prev) => ({ ...prev, [event.target.name]: undefined }));
+    setError(null);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
+    setFieldErrors({});
     setSuccessMessage(null);
 
     try {
@@ -67,7 +71,11 @@ function UserManagementPage() {
       setSuccessMessage("Invite created and emailed successfully.");
       await loadUsers();
     } catch (err) {
-      setError(getErrorMessage(err, "Failed to create user invite."));
+      const apiError = parseApiError(err, "Failed to create user invite.");
+      if (Object.keys(apiError.fieldErrors).length > 0) {
+        setFieldErrors(apiError.fieldErrors);
+      }
+      setError(apiError.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -153,6 +161,7 @@ function UserManagementPage() {
                   name="firstname"
                   value={formData.firstname}
                   onChange={handleChange}
+                  error={fieldErrors.firstname}
                   required
                 />
                 <Input
@@ -160,6 +169,7 @@ function UserManagementPage() {
                   name="lastname"
                   value={formData.lastname}
                   onChange={handleChange}
+                  error={fieldErrors.lastname}
                   required
                 />
               </div>
@@ -170,6 +180,7 @@ function UserManagementPage() {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
+                error={fieldErrors.email}
                 required
               />
 
@@ -180,6 +191,7 @@ function UserManagementPage() {
                   value={formData.phone_number}
                   onChange={handleChange}
                   placeholder="+2348012345678"
+                  error={fieldErrors.phone_number}
                   required
                 />
                 <Input
@@ -188,6 +200,7 @@ function UserManagementPage() {
                   value={formData.whatsapp_id}
                   onChange={handleChange}
                   placeholder="+2348012345678"
+                  error={fieldErrors.whatsapp_id}
                 />
               </div>
 
@@ -205,6 +218,9 @@ function UserManagementPage() {
                   <option value="student">Student</option>
                   <option value="parent">Parent</option>
                 </select>
+                {fieldErrors.role && (
+                  <p className="mt-1 text-sm text-error">{fieldErrors.role}</p>
+                )}
               </div>
 
               <Button type="submit" className="w-full" disabled={isSubmitting}>

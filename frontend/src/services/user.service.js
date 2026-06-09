@@ -5,8 +5,8 @@ export const userService = {
     getMe: () => api.get("/users/get-authenticated-user"),
     
     // General user endpoints
-    inviteUser: (data) => api.post("/users", data),
-    registerUser: (data) => api.post("/users", data),
+    inviteUser: (data) => api.post("/users/user-create", data),
+    registerUser: (data) => api.post("/users/user-create", data),
     getUsers: (skip = 0, limit = 100) => api.get(`/users?skip=${skip}&limit=${limit}`),
     getUser: (userId) => api.get(`/users/${userId}`),
     resendInvite: (userId) => api.post(`/users/${userId}/resend-invite`, {}),

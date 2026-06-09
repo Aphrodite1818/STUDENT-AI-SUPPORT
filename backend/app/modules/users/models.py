@@ -12,7 +12,6 @@ from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 
 class UserRole(str, Enum):
-    SUPERADMIN = "superadmin"
     TEACHER = "teacher"
     STUDENT = "student"
     ADMIN = "admin"

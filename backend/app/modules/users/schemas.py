@@ -89,7 +89,7 @@ class UserInviteCreate(UserBase):
     @field_validator("role")
     @classmethod
     def validate_role(cls, value: UserRole) -> UserRole:
-        if value in (UserRole.ADMIN, UserRole.SUPERADMIN):
+        if value == UserRole.ADMIN:
             raise ValueError("tenant invite flow only supports normal tenant users")
         return value
 

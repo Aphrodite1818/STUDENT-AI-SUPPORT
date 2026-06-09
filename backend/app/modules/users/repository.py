@@ -109,16 +109,21 @@ class UserRepository:
         skip: int = 0,
         limit: int = 100,
         tenant_id: uuid.UUID | None = None,
+        role: str | None = None,
     ) -> list[User]:
         log_extra = {"skip": skip, "limit": limit}
         if tenant_id is not None:
             log_extra["tenant_id"] = str(tenant_id)
+        if role is not None:
+            log_extra["role"] = str(role)
 
         logger.debug("Querying users", extra=log_extra)
 
         statement = select(User)
         if tenant_id is not None:
             statement = statement.where(User.tenant_id == tenant_id)
+        if role is not None:
+            statement = statement.where(User.role == role)
 
         result = await db.execute(
             statement.offset(skip).limit(limit)

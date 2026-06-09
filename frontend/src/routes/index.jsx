@@ -25,24 +25,30 @@ function AppRoutes() {
         <Route path="/verify-otp" element={<OTPValidationPage />} />
         <Route path="/invite" element={<InvitePage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
         <Route element={<ProtectedRoute />}>
-          <Route element={<RoleGuard allowedRoles={["admin"]} />}>
+          <Route element={<RoleGuard allowedRoles={["ADMIN"]} />}>
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="/admin/users" element={<UserManagementPage />} />
           </Route>
-          <Route element={<RoleGuard allowedRoles={["teacher"]} />}>
+
+          <Route element={<RoleGuard allowedRoles={["TEACHER"]} />}>
             <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
           </Route>
-          <Route element={<RoleGuard allowedRoles={["student"]} />}>
+
+          <Route element={<RoleGuard allowedRoles={["STUDENT"]} />}>
             <Route path="/student/dashboard" element={<StudentDashboardPage />} />
           </Route>
-          <Route element={<RoleGuard allowedRoles={["parent"]} />}>
+
+          <Route element={<RoleGuard allowedRoles={["PARENT"]} />}>
             <Route path="/parent/dashboard" element={<ParentDashboardPage />} />
           </Route>
-          <Route element={<RoleGuard allowedRoles={["superadmin"]} />}>
+
+          <Route element={<RoleGuard allowedRoles={["SUPERADMIN"]} />}>
             <Route path="/superadmin/dashboard" element={<SuperadminDashboardPage />} />
           </Route>
         </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

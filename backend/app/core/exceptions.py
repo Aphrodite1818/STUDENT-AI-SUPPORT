@@ -2,14 +2,23 @@
 #         core/exceptions.py           #
 #======================================#
 
+from typing import Any
+
 from fastapi import status
 
 class AppException(Exception):
     """Base class for all custom application exceptions."""
-    def __init__(self, status_code: int, detail: str, headers: dict | None = None) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: str,
+        headers: dict | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
         self.status_code = status_code
         self.detail = detail
         self.headers = headers
+        self.payload = payload or {}
         super().__init__(self.detail)
 
 class NotFoundException(AppException):
@@ -33,11 +42,13 @@ class AccountNotVerifiedException(AppException):
         self,
         detail: str = "Account not verified",
         headers: dict | None = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
             headers=headers,
+            payload=payload,
         )
 
 class TooManyRequestsException(AppException):

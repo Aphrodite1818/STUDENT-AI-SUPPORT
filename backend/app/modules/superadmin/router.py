@@ -1,0 +1,111 @@
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+
+from app.core.dependencies.db import DbSession
+from app.core.dependencies.route_guards import require_superadmin
+from app.core.utils.frontend_urls import resolve_frontend_app_url
+from app.modules.superadmin.models import SuperAdmin
+from app.modules.superadmin.schemas import SuperadminInviteCreate, SuperadminResponse
+from app.modules.superadmin.service import SuperadminService
+from app.tenant_management.schemas import TenantAdminResponse, TenantCreate, TenantStatusUpdate
+
+
+router = APIRouter(prefix="/api/v1/superadmin", tags=["Superadmin"])
+
+
+@router.post("/tenants", response_model=TenantAdminResponse, status_code=status.HTTP_201_CREATED)
+async def create_tenant(
+    payload: TenantCreate,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> TenantAdminResponse:
+    return await SuperadminService.create_tenant(
+        db,
+        payload,
+        background_tasks=background_tasks,
+        frontend_app_url=resolve_frontend_app_url(request),
+    )
+
+
+@router.get("/tenants", response_model=list[TenantAdminResponse], status_code=status.HTTP_200_OK)
+async def list_tenants(
+    db: DbSession,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    include_deleted: bool = Query(default=True),
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> list[TenantAdminResponse]:
+    return await SuperadminService.list_tenants(
+        db,
+        skip=skip,
+        limit=limit,
+        include_deleted=include_deleted,
+    )
+
+
+@router.get("/tenants/{tenant_id}", response_model=TenantAdminResponse, status_code=status.HTTP_200_OK)
+async def get_tenant(
+    tenant_id: uuid.UUID,
+    db: DbSession,
+    include_deleted: bool = Query(default=True),
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> TenantAdminResponse:
+    return await SuperadminService.get_tenant(db, tenant_id, include_deleted=include_deleted)
+
+
+@router.patch("/tenants/{tenant_id}/status", response_model=TenantAdminResponse, status_code=status.HTTP_200_OK)
+async def update_tenant_status(
+    tenant_id: uuid.UUID,
+    payload: TenantStatusUpdate,
+    db: DbSession,
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> TenantAdminResponse:
+    return await SuperadminService.update_tenant_status(db, tenant_id, payload)
+
+
+@router.patch("/tenants/{tenant_id}/restore", response_model=TenantAdminResponse, status_code=status.HTTP_200_OK)
+async def restore_tenant(
+    tenant_id: uuid.UUID,
+    db: DbSession,
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> TenantAdminResponse:
+    return await SuperadminService.restore_tenant(db, tenant_id)
+
+
+@router.delete("/tenants/{tenant_id}", status_code=status.HTTP_200_OK)
+async def delete_tenant(
+    tenant_id: uuid.UUID,
+    db: DbSession,
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> dict[str, str]:
+    return await SuperadminService.delete_tenant(db, tenant_id)
+
+
+@router.get("/superadmins", response_model=list[SuperadminResponse], status_code=status.HTTP_200_OK)
+async def list_superadmins(
+    db: DbSession,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> list[SuperadminResponse]:
+    return await SuperadminService.list_superadmins(db, skip=skip, limit=limit)
+
+
+@router.post("/superadmins/invite", status_code=status.HTTP_201_CREATED)
+async def invite_superadmin(
+    payload: SuperadminInviteCreate,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    current_superadmin: SuperAdmin = Depends(require_superadmin),
+) -> dict[str, str]:
+    return await SuperadminService.invite_superadmin(
+        db,
+        invited_by=current_superadmin,
+        payload=payload,
+        background_tasks=background_tasks,
+        frontend_app_url=resolve_frontend_app_url(request),
+    )

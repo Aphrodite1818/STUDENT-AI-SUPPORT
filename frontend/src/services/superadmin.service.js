@@ -1,0 +1,47 @@
+import { api } from "./api";
+
+const buildQuery = (params) => {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      searchParams.set(key, String(value));
+    }
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+};
+
+export const superadminService = {
+  createTenant: (data) => api.post("/superadmin/tenants", data),
+
+  getTenants: (skip = 0, limit = 50, includeDeleted = true) =>
+    api.get(
+      `/superadmin/tenants${buildQuery({
+        skip,
+        limit,
+        include_deleted: includeDeleted,
+      })}`
+    ),
+
+  getTenant: (tenantId, includeDeleted = true) =>
+    api.get(
+      `/superadmin/tenants/${tenantId}${buildQuery({
+        include_deleted: includeDeleted,
+      })}`
+    ),
+
+  updateTenantStatus: (tenantId, statusData) =>
+    api.patch(`/superadmin/tenants/${tenantId}/status`, statusData),
+
+  deleteTenant: (tenantId) => api.delete(`/superadmin/tenants/${tenantId}`),
+
+  restoreTenant: (tenantId) =>
+    api.patch(`/superadmin/tenants/${tenantId}/restore`, {}),
+
+  getSuperadmins: (skip = 0, limit = 100) =>
+    api.get(`/superadmin/superadmins${buildQuery({ skip, limit })}`),
+
+  inviteSuperadmin: (data) => api.post("/superadmin/superadmins/invite", data),
+};

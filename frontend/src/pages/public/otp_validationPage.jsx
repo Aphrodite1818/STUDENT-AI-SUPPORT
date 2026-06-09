@@ -4,7 +4,7 @@ import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
-import { getErrorMessage } from "../../services/api";
+import { parseApiError } from "../../services/api";
 
 function OTPValidationPage() {
   const [searchParams] = useSearchParams();
@@ -12,8 +12,13 @@ function OTPValidationPage() {
   const location = useLocation();
   const emailParam = searchParams.get("email");
   const purpose = searchParams.get("purpose") || "verification";
-  const email = emailParam || "";
+  const email =
+    emailParam ||
+    (purpose === "verification"
+      ? authService.getPendingVerificationEmail() || ""
+      : "");
   const notice = location.state?.notice || null;
+  const isPasswordResetFlow = purpose === "password_reset";
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,13 +28,14 @@ function OTPValidationPage() {
   const inputRefs = useRef([]);
 
   useEffect(() => {
-    // No email in URL — nothing to verify, send them back
-    if (!emailParam) {
-      navigate("/register", { replace: true });
+    if (!email) {
+      navigate(isPasswordResetFlow ? "/forgot-password" : "/register", {
+        replace: true,
+      });
       return;
     }
     inputRefs.current[0]?.focus();
-  }, [emailParam, navigate]);
+  }, [email, isPasswordResetFlow, navigate]);
 
   const handleChange = (index, e) => {
     const value = e.target.value.replace(/\D/g, "");
@@ -84,7 +90,8 @@ function OTPValidationPage() {
         navigate("/login?verified=true", { replace: true });
       }
     } catch (err) {
-      setError(getErrorMessage(err, "Invalid OTP code."));
+      const apiError = parseApiError(err, "Invalid code. Please try again.");
+      setError(apiError.fieldErrors.code || apiError.message);
     } finally {
       setIsLoading(false);
     }
@@ -96,11 +103,24 @@ function OTPValidationPage() {
     setIsResending(true);
     try {
       await authService.requestOtp(email, purpose);
-      setResendMessage("A new code has been sent to your email.");
+      setResendMessage(
+        isPasswordResetFlow
+          ? "A new reset code has been sent to your email."
+          : "A new verification code has been sent to your email."
+      );
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } catch (err) {
-      setError(getErrorMessage(err, "Failed to resend code."));
+      const apiError = parseApiError(err, "Failed to resend code.");
+      if (apiError.status === 429) {
+        setError(
+          apiError.retryAfter
+            ? `Too many requests. Please wait ${apiError.retryAfter} seconds before requesting another code.`
+            : apiError.message
+        );
+      } else {
+        setError(apiError.message);
+      }
     } finally {
       setIsResending(false);
     }
@@ -135,7 +155,10 @@ function OTPValidationPage() {
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-text">Check your email</h1>
             <p className="text-sm text-text-muted mt-2">
-              We sent a 6-digit verification code to <br />
+              {isPasswordResetFlow
+                ? "We sent a 6-digit reset code to"
+                : "We sent a 6-digit verification code to"}{" "}
+              <br />
               <span className="font-semibold text-text">{email}</span>
             </p>
           </div>
@@ -183,7 +206,7 @@ function OTPValidationPage() {
               <span
                 className={`transition-all duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
               >
-                Verify Code
+                {isPasswordResetFlow ? "Verify reset code" : "Verify code"}
               </span>
               {isLoading && (
                 <span className="absolute inset-0 flex items-center justify-center">

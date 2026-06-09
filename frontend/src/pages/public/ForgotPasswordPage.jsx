@@ -5,7 +5,11 @@ import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
-import { getErrorMessage } from "../../services/api";
+import { parseApiError, remapFieldErrors } from "../../services/api";
+
+const RESET_PASSWORD_FIELD_MAP = {
+  new_password: "password",
+};
 
 // ── shared layout ────────────────────────────────────────────────────
 // Defined outside the component so React never sees it as a new type
@@ -69,6 +73,7 @@ function ForgotPasswordPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // ── password strength ──────────────────────────────────────────────
   const getPasswordStrength = (pw) => {
@@ -94,6 +99,8 @@ function ForgotPasswordPage() {
   const handlePasswordChange = (e) => {
     setPassword(e.target.value);
     setPasswordStrength(getPasswordStrength(e.target.value));
+    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+    setError(null);
   };
 
   // ── step 1: request OTP ────────────────────────────────────────────
@@ -101,14 +108,37 @@ function ForgotPasswordPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setFieldErrors({});
 
     try {
       await authService.requestOtp(inputEmail, "password_reset");
       navigate(
-        `/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`
+        `/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`,
+        {
+          state: {
+            notice: "We sent a password reset code to your email.",
+          },
+        }
       );
     } catch (err) {
-      setError(getErrorMessage(err, "Something went wrong. Please try again."));
+      const apiError = parseApiError(err, "Something went wrong. Please try again.");
+      if (apiError.status === 429) {
+        navigate(
+          `/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`,
+          {
+            state: {
+              notice: apiError.retryAfter
+                ? `A reset code was sent recently. Please wait ${apiError.retryAfter} seconds before requesting another one.`
+                : "A reset code was sent recently. Please use that code or wait a moment before requesting another one.",
+            },
+          }
+        );
+        return;
+      }
+      if (Object.keys(apiError.fieldErrors).length > 0) {
+        setFieldErrors(apiError.fieldErrors);
+      }
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
@@ -119,23 +149,37 @@ function ForgotPasswordPage() {
     e.preventDefault();
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setFieldErrors({ confirmPassword: "Passwords do not match." });
       return;
     }
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setFieldErrors({ password: "Password must be at least 8 characters." });
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setFieldErrors({});
 
     try {
       await authService.resetPassword(resetEmail, resetToken, password);
       navigate("/login?reset=true", { replace: true });
     } catch (err) {
-      setError(getErrorMessage(err, "Failed to reset password. Please try again."));
+      const apiError = parseApiError(
+        err,
+        "Failed to reset password. Please try again."
+      );
+      const mappedFieldErrors = remapFieldErrors(
+        apiError.fieldErrors,
+        RESET_PASSWORD_FIELD_MAP
+      );
+
+      if (Object.keys(mappedFieldErrors).length > 0) {
+        setFieldErrors(mappedFieldErrors);
+      }
+
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
@@ -165,9 +209,14 @@ function ForgotPasswordPage() {
               type="email"
               name="email"
               value={inputEmail}
-              onChange={(e) => setInputEmail(e.target.value)}
+              onChange={(e) => {
+                setInputEmail(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                setError(null);
+              }}
               placeholder="name@school.edu"
               required
+              error={fieldErrors.email}
               className="transition-all duration-300 group-hover:border-primary/50"
             />
           </div>
@@ -223,6 +272,7 @@ function ForgotPasswordPage() {
             placeholder="••••••••"
             required
             minLength={8}
+            error={fieldErrors.password}
             className="transition-all duration-300 group-hover:border-primary/50"
           />
           {password.length > 0 && (
@@ -255,9 +305,14 @@ function ForgotPasswordPage() {
             type="password"
             name="confirmPassword"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+              setError(null);
+            }}
             placeholder="••••••••"
             required
+            error={fieldErrors.confirmPassword}
             className="transition-all duration-300 group-hover:border-primary/50"
           />
           {confirmPassword.length > 0 && password !== confirmPassword && (

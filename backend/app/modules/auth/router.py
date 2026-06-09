@@ -1,18 +1,19 @@
-#======================================#
-#            auth/router.py            #
-#======================================#
+# ====================================== #
+#             auth/router.py             #
+# ====================================== #
 
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks
-from app.core.dependencies.db import DbSession
+from fastapi import APIRouter, BackgroundTasks
+
 from app.config.security import create_access_token
+from app.core.dependencies.db import DbSession
 from app.modules.auth.schemas import (
     LoginRequest,
-    Token,
     RequestOTP,
     TenantActivationRequest,
+    Token,
+    UpdatePassword,
     UserInviteAcceptanceRequest,
     VerifyOTP,
-    UpdatePassword,
 )
 from app.modules.auth.service import (
     AuthService,
@@ -20,61 +21,73 @@ from app.modules.auth.service import (
     TenantActivationService,
     UserInviteService,
 )
-from app.core.exceptions import AccountNotVerifiedException, TooManyRequestsException
 
 router = APIRouter()
+
 
 class LoginResponse(Token):
     detail: str | None = None
     resend_otp_available: bool = False
     email: str | None = None
+    role: str | None = None
+    account_type: str | None = None
+
 
 @router.post("/login", response_model=LoginResponse)
-async def login(payload: LoginRequest, db: DbSession) -> LoginResponse:
-    try:
-        user = await AuthService.authenticate_user(db, payload)
-    except AccountNotVerifiedException as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e.detail),
-            headers=e.headers,
-        )
-    except TooManyRequestsException as e:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=str(e.detail),
-            headers={"Retry-After": str(e.retry_after)},
-        )
+async def login(
+    payload: LoginRequest,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+) -> LoginResponse:
+    actor = await AuthService.authenticate_actor(
+        db,
+        payload,
+        background_tasks=background_tasks,
+    )
 
     token_data = {
-        "sub": str(user.id),
-        "email": user.email,
-        "role": user.role.value,
+        "sub": str(actor.actor_id),
+        "email": actor.email,
+        "role": actor.role,
+        "account_type": actor.account_type,
     }
+    if actor.tenant_id is not None:
+        token_data["tenant_id"] = str(actor.tenant_id)
 
     access_token = create_access_token(data=token_data)
 
-    return LoginResponse(access_token=access_token, email=user.email)
+    return LoginResponse(
+        access_token=access_token,
+        email=actor.email,
+        role=actor.role,
+        account_type=actor.account_type,
+    )
+
 
 @router.post("/request-otp")
-async def request_otp(payload: RequestOTP, db: DbSession, background_tasks: BackgroundTasks) -> dict[str, str]:
-    try:
-        await OTPService.generate_otp(db, payload, background_tasks=background_tasks)
-    except TooManyRequestsException as e:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=str(e.detail),
-            headers={"Retry-After": str(e.retry_after)},
-        )
+async def request_otp(
+    payload: RequestOTP,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    await OTPService.generate_otp(
+        db,
+        payload,
+        background_tasks=background_tasks,
+    )
+
     return {"detail": f"OTP successfully sent to {payload.email}"}
+
 
 @router.post("/verify-otp")
 async def verify_otp(payload: VerifyOTP, db: DbSession):
     return await OTPService.verify_otp(db, payload)
 
+
 @router.post("/reset-password")
 async def reset_password(payload: UpdatePassword, db: DbSession) -> dict[str, str]:
     await AuthService.reset_password(db, payload)
+
     return {"detail": "Password has been successfully reset. You may now log in."}
 
 
@@ -97,4 +110,3 @@ async def accept_invite(
     db: DbSession,
 ) -> dict[str, str]:
     return await UserInviteService.accept_invite(db, payload)
-

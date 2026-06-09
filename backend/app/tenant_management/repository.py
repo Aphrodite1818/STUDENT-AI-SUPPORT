@@ -107,14 +107,14 @@ class TenantRepository:
         db: AsyncSession,
         skip: int = 0,
         limit: int = 50,
+        include_deleted: bool = False,
     ) -> list[Tenant]:
-        """Return a paginated list of non-deleted tenants."""
-        result = await db.execute(
-            select(Tenant)
-            .where(Tenant.is_deleted == False)
-            .offset(skip)
-            .limit(limit)
-        )
+        """Return a paginated list of tenants."""
+        statement = select(Tenant)
+        if not include_deleted:
+            statement = statement.where(Tenant.is_deleted == False)
+
+        result = await db.execute(statement.offset(skip).limit(limit))
         return list(result.scalars().all())
 
     @staticmethod
@@ -157,22 +157,33 @@ class TenantRepository:
         )
         return await TenantRepository.get_by_id(db, tenant_id)
 
+
+
     @staticmethod
     async def email_exists(db: AsyncSession, email: str) -> bool:
         """Return whether a tenant already exists for the given email."""
         normalized_email = _normalize_email(email)
+
         result = await db.execute(
-            select(Tenant.id).where(func.lower(Tenant.email) == normalized_email)
+            select(Tenant.id)
+            .where(Tenant.email == normalized_email)
+            .limit(1) #stop searching after first match
         )
+
         return result.scalar_one_or_none() is not None
+
 
     @staticmethod
     async def slug_exists(db: AsyncSession, slug: str) -> bool:
         """Return whether a tenant slug is already in use."""
         result = await db.execute(
-            select(Tenant.id).where(Tenant.slug == slug)
+            select(Tenant.id)
+            .where(Tenant.slug == slug)
+            .limit(1)
         )
+
         return result.scalar_one_or_none() is not None
+
 
     @staticmethod
     async def school_bot_whatssap_number_exists(
@@ -181,15 +192,23 @@ class TenantRepository:
     ) -> bool:
         """Return whether a WhatsApp bot number is already assigned."""
         result = await db.execute(
-            select(Tenant.id).where(Tenant.school_bot_whatssap_number == whatssap_number)
+            select(Tenant.id)
+            .where(Tenant.school_bot_whatssap_number == whatssap_number)
+            .limit(1)
         )
+
         return result.scalar_one_or_none() is not None
 
+
     @staticmethod
-    async def is_verified(db: AsyncSession, email: str):
+    async def is_verified(db: AsyncSession, email: str) -> bool:
         """Return whether the tenant linked to the email is verified."""
         normalized_email = _normalize_email(email)
+
         result = await db.execute(
-            select(Tenant.verification_status).where(func.lower(Tenant.email) == normalized_email)
+            select(Tenant.verification_status)
+            .where(Tenant.email == normalized_email)
+            .limit(1)
         )
+
         return result.scalar_one_or_none() == TenantVerificationStatus.ACTIVE

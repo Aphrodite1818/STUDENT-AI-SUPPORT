@@ -1,97 +1,112 @@
-#======================================#
-#     tenant_management/service.py     #
-#======================================#
+# ====================================== #
+#     tenant_management/service.py       #
+# ====================================== #
 
 """Implement the tenant management service layer."""
 
 import uuid
-import secrets
+from enum import StrEnum
 
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.tenant_management.repository import TenantRepository
-from app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
-from app.tenant_management.schemas import (
-    TenantCreate,
-    TenantUpdate,
-    TenantStatusUpdate,
-    TenantRegisterRequest
-)
-
+from app.config.logging import get_logger
+from app.config.security import hash_password
 from app.core.exceptions import (
     BadRequestException,
-    NotFoundException,
     ConflictException,
+    NotFoundException,
+    TooManyRequestsException,
 )
-
 from app.core.utils.validators import generate_slug
-from app.config.security import hash_password, verify_password
-from app.config.logging import get_logger
-
-from app.modules.users.models import User, UserRole, AccountStatus
-from app.modules.users.repository import UserRepository
-from app.modules.auth.service import OTPService, TenantActivationService
 from app.modules.auth.models import AuthPurpose
 from app.modules.auth.schemas import RequestOTP
+from app.modules.auth.service import OTPService
+from app.modules.users.models import AccountStatus, User, UserRole
+from app.modules.users.repository import UserRepository
+from app.tenant_management.models import (
+    Tenant,
+    TenantStatus,
+    TenantVerificationStatus,
+)
+from app.tenant_management.repository import TenantRepository
+from app.tenant_management.schemas import TenantRegisterRequest, TenantUpdate
 
 logger = get_logger(__name__)
+
+
+class EmailRegistrationState(StrEnum):
+    AVAILABLE = "AVAILABLE"
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    REJECTED = "REJECTED"
+    DELETED = "DELETED"
 
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def _normalize_school_name(school_name: str) -> str:
+    return school_name.strip()
+
+
 class TenantService:
     @staticmethod
-    def _email_belongs_to_verified_account(
+    def get_email_registration_state(
         user: User | None,
         tenant: Tenant | None,
-    ) -> bool:
-        if user is not None and user.account_status != AccountStatus.PENDING:
-            return True
-        return (
-            tenant is not None
-            and tenant.verification_status in (
-                TenantVerificationStatus.ACTIVE,
-                TenantVerificationStatus.REJECTED,
-            )
-        )
+    ) -> EmailRegistrationState:
+        """
+        Decide how tenant registration should treat an email.
 
-    @staticmethod
-    def _email_belongs_to_unverified_account(
-        user: User | None,
-        tenant: Tenant | None,
-    ) -> bool:
+        AVAILABLE:
+            No user or tenant owns this email yet.
+
+        PENDING:
+            A user or tenant exists but has not completed verification.
+
+        ACTIVE:
+            A user or tenant already owns this email.
+
+        REJECTED:
+            A tenant registration exists but was rejected.
+
+        DELETED:
+            A deleted tenant still owns this email.
+        """
+
+        if tenant is not None and tenant.is_deleted:
+            return EmailRegistrationState.DELETED
+
+        if user is None and tenant is None:
+            return EmailRegistrationState.AVAILABLE
+
         if user is not None and user.account_status == AccountStatus.PENDING:
-            return True
-        return (
+            return EmailRegistrationState.PENDING
+
+        if (
             tenant is not None
-            and tenant.verification_status == TenantVerificationStatus.PENDING_VERIFICATION
-        )
+            and tenant.verification_status
+            == TenantVerificationStatus.PENDING_VERIFICATION
+        ):
+            return EmailRegistrationState.PENDING
 
-    @staticmethod
-    def _matches_existing_unverified_registration(
-        payload: TenantRegisterRequest,
-        user: User | None,
-        tenant: Tenant | None,
-    ) -> bool:
-        if user is None or tenant is None:
-            return False
+        if tenant is not None and tenant.verification_status == TenantVerificationStatus.REJECTED:
+            return EmailRegistrationState.REJECTED
 
-        return (
-            tenant.school_name.strip().casefold() == payload.school_name.strip().casefold()
-            and verify_password(payload.password, user.password_hash)
-        )
+        return EmailRegistrationState.ACTIVE
 
     @staticmethod
     async def _unique_slug(db: AsyncSession, school_name: str) -> str:
         base_slug = generate_slug(school_name)
         slug = base_slug
         counter = 1
+
         while await TenantRepository.slug_exists(db, slug):
             slug = f"{base_slug}-{counter}"
             counter += 1
+
         return slug
 
     @staticmethod
@@ -101,14 +116,17 @@ class TenantService:
         tenant_id: uuid.UUID,
     ) -> str:
         """Generate a unique slug while allowing the current tenant to keep its own slug."""
+
         base_slug = generate_slug(school_name)
         slug = base_slug
         counter = 1
 
         while True:
             existing_tenant = await TenantRepository.get_by_slug(db, slug)
+
             if existing_tenant is None or existing_tenant.id == tenant_id:
                 return slug
+
             slug = f"{base_slug}-{counter}"
             counter += 1
 
@@ -118,8 +136,9 @@ class TenantService:
         payload: TenantRegisterRequest,
         background_tasks: BackgroundTasks | None = None,
     ) -> dict:
-        school_name = payload.school_name.strip()
+        school_name = _normalize_school_name(payload.school_name)
         normalized_email = _normalize_email(payload.email)
+
         tenant: Tenant | None = None
         reused_pending_account = False
 
@@ -128,54 +147,57 @@ class TenantService:
                 db,
                 school_name,
             )
-            existing_user = await UserRepository.get_user_by_email(db, normalized_email)
-            existing_tenant_by_email = await TenantRepository.get_by_email_including_deleted(
+            existing_user = await UserRepository.get_user_by_email(
                 db,
                 normalized_email,
             )
+            existing_tenant_by_email = (
+                await TenantRepository.get_by_email_including_deleted(
+                    db,
+                    normalized_email,
+                )
+            )
 
-            if (
-                existing_tenant_by_name is not None
-                and existing_tenant_by_email is not None
-                and existing_tenant_by_name.id != existing_tenant_by_email.id
-            ):
-                raise ConflictException("A school with this name already exists")
+            if existing_tenant_by_name is not None:
+                if existing_tenant_by_email is None:
+                    raise ConflictException("This school name is already registered.")
 
-            if existing_tenant_by_name is not None and existing_tenant_by_email is None:
-                raise ConflictException("A school with this name already exists")
+                if existing_tenant_by_name.id != existing_tenant_by_email.id:
+                    raise ConflictException("This school name is already registered.")
 
-            if existing_tenant_by_email is not None and existing_tenant_by_email.is_deleted:
-                raise ConflictException("A school or admin account with this email already exists")
-
-            if TenantService._email_belongs_to_verified_account(
+            email_state = TenantService.get_email_registration_state(
                 existing_user,
                 existing_tenant_by_email,
-            ):
-                raise ConflictException("A verified account with this email already exists")
+            )
 
-            if TenantService._email_belongs_to_unverified_account(
-                existing_user,
-                existing_tenant_by_email,
-            ):
-                if not TenantService._matches_existing_unverified_registration(
-                    payload,
-                    existing_user,
-                    existing_tenant_by_email,
-                ):
+            if email_state == EmailRegistrationState.DELETED:
+                raise ConflictException("This email is already registered. Please log in.")
+
+            if email_state == EmailRegistrationState.ACTIVE:
+                raise ConflictException("This email is already registered. Please log in.")
+
+            if email_state == EmailRegistrationState.REJECTED:
+                raise ConflictException(
+                    "This registration was rejected. Please contact support."
+                )
+
+            if email_state == EmailRegistrationState.PENDING:
+                if existing_user is None or existing_tenant_by_email is None:
                     raise ConflictException(
-                        "An unverified account with this email already exists. "
-                        "Please complete verification with the original registration details."
+                        "This email is already registered. Please contact support."
                     )
 
-                logger.info(
-                    "Tenant registration skipped for existing unverified account",
-                    extra={"email": normalized_email},
-                )
                 tenant = existing_tenant_by_email
                 reused_pending_account = True
+
+                logger.info(
+                    "Tenant registration reused existing pending account",
+                    extra={"email": normalized_email},
+                )
+
             else:
                 slug = await TenantService._unique_slug(db, school_name)
-                password_hashed = hash_password(payload.password)
+                password_hash = hash_password(payload.password)
 
                 tenant = Tenant(
                     school_name=school_name,
@@ -183,28 +205,26 @@ class TenantService:
                     email=normalized_email,
                     verification_status=TenantVerificationStatus.PENDING_VERIFICATION,
                 )
-                await TenantRepository.create(db, tenant)
 
-                logger.info(
-                    "Tenant created during registration",
-                    extra={"tenant_id": str(tenant.id), "email": normalized_email},
-                )
+                await TenantRepository.create(db, tenant)
+                await db.flush()
 
                 admin_user = User(
                     email=normalized_email,
-                    password_hash=password_hashed,
+                    password_hash=password_hash,
                     role=UserRole.ADMIN,
                     account_status=AccountStatus.PENDING,
                     tenant_id=tenant.id,
                     is_verified=False,
                 )
+
                 await UserRepository.create_user(db, admin_user)
 
                 logger.info(
-                    "Admin user created for tenant registration",
+                    "Tenant and admin user created during registration",
                     extra={
                         "tenant_id": str(tenant.id),
-                        "admin_email": normalized_email,
+                        "email": normalized_email,
                         "role": UserRole.ADMIN.value,
                     },
                 )
@@ -212,30 +232,63 @@ class TenantService:
         if tenant is None:
             raise ConflictException("Tenant registration could not be completed")
 
-        await OTPService.generate_otp(
-            db,
-            RequestOTP(email=normalized_email, purpose=AuthPurpose.VERIFICATION),
-            background_tasks=background_tasks,
+        message = (
+            "Registration successful. Please check your email for the verification code."
         )
+        resend_otp_available = True
+
+        try:
+            await OTPService.generate_otp(
+                db,
+                RequestOTP(
+                    email=normalized_email,
+                    purpose=AuthPurpose.VERIFICATION,
+                ),
+                background_tasks=background_tasks,
+            )
+        except TooManyRequestsException:
+            if not reused_pending_account:
+                raise
+            resend_otp_available = False
+            message = (
+                "Your registration already exists but needs verification. "
+                "A verification code was sent recently. Please use the latest code or wait before requesting another one."
+            )
+
         await db.refresh(tenant)
 
         if reused_pending_account:
+            if resend_otp_available:
+                message = (
+                    "Your registration already exists but needs verification. "
+                    "We sent you a new verification code."
+                )
+
             logger.info(
-                "OTP resent for existing unverified tenant registration",
-                extra={"tenant_id": str(tenant.id), "email": normalized_email},
+                "OTP resent for existing pending tenant registration",
+                extra={
+                    "tenant_id": str(tenant.id),
+                    "email": normalized_email,
+                },
             )
+
             return {
                 "created": False,
                 "email": tenant.email,
-                "message": (
-                    "Your account is not verified yet. "
-                    "We sent a new verification code to your email."
-                ),
+                "detail": message,
+                "message": message,
+                "verification_required": True,
+                "purpose": AuthPurpose.VERIFICATION.value,
+                "redirect_to": "/verify-otp",
+                "resend_otp_available": resend_otp_available,
             }
 
         logger.info(
             "OTP sent to newly registered tenant admin",
-            extra={"tenant_id": str(tenant.id), "email": normalized_email},
+            extra={
+                "tenant_id": str(tenant.id),
+                "email": normalized_email,
+            },
         )
 
         return {
@@ -252,96 +305,50 @@ class TenantService:
             "verification_status": tenant.verification_status,
             "created_at": tenant.created_at,
             "updated_at": tenant.updated_at,
-            "message": "Registration successful. Please check your email for the verification code.",
+            "detail": message,
+            "message": message,
+            "verification_required": True,
+            "purpose": AuthPurpose.VERIFICATION.value,
+            "redirect_to": "/verify-otp",
+            "resend_otp_available": resend_otp_available,
         }
 
     @staticmethod
-    async def get_tenant_by_id(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
-        tenant = await TenantRepository.get_by_id(db, tenant_id)
-        if not tenant:
-            raise NotFoundException("Tenant not found")
-        return tenant
-
-    @staticmethod
-    async def superadmin_create_tenant(
+    async def get_tenant_by_id(
         db: AsyncSession,
-        payload: TenantCreate,
-        background_tasks: BackgroundTasks | None = None,
-        frontend_app_url: str | None = None,
+        tenant_id: uuid.UUID,
     ) -> Tenant:
-        normalized_email = _normalize_email(payload.email)
-        existing_user = await UserRepository.get_user_by_email(db, normalized_email)
-        existing_tenant = await TenantRepository.get_by_email_including_deleted(
-            db,
-            normalized_email,
-        )
-        if existing_user is not None or existing_tenant is not None:
-            raise ConflictException("A school or admin account with this email already exists")
-
-        if payload.school_bot_whatssap_number:
-            if await TenantRepository.school_bot_whatssap_number_exists(db, payload.school_bot_whatssap_number):
-                raise ConflictException("This WhatsApp number is already in use by another school")
-
-        slug = await TenantService._unique_slug(db, payload.school_name)
-        tenant_data = payload.model_dump(
-            mode="json",
-            exclude={"log_slug_preview"},
-        )
-        tenant_data["email"] = normalized_email
-
-        tenant = Tenant(
-            **tenant_data,
-            slug=slug,
-            status=TenantStatus.INACTIVE,
-            verification_status=TenantVerificationStatus.PENDING_VERIFICATION,
-        )
-        db.add(tenant)
-        await db.flush()
-
-        admin_user = User(
-            email=normalized_email,
-            password_hash=hash_password(secrets.token_urlsafe(32)),
-            role=UserRole.ADMIN,
-            account_status=AccountStatus.PENDING,
-            tenant_id=tenant.id,
-            is_verified=False,
-        )
-        await UserRepository.create_user(db, admin_user)
-
-        invite_link = await TenantActivationService.create_activation_record(
-            db,
-            tenant=tenant,
-            admin_user=admin_user,
-            frontend_app_url=frontend_app_url,
-        )
-        await db.commit()
-
-        await db.refresh(tenant)
-        await TenantActivationService.send_activation_email(
-            email=normalized_email,
-            school_name=tenant.school_name,
-            invite_link=invite_link,
-            background_tasks=background_tasks,
-        )
-        return tenant
-
-    @staticmethod
-    async def get_all_tenants(db: AsyncSession, skip: int = 0, limit: int = 50) -> list[Tenant]:
-        return await TenantRepository.get_all(db, skip=skip, limit=limit)
-
-    @staticmethod
-    async def update_tenant_profile(db: AsyncSession, tenant_id: uuid.UUID, payload: TenantUpdate) -> Tenant:
         tenant = await TenantRepository.get_by_id(db, tenant_id)
+
         if not tenant:
             raise NotFoundException("Tenant not found")
 
-        update_data = payload.model_dump(mode="json", exclude_unset=True)
+        return tenant
+
+    @staticmethod
+    async def update_tenant_profile(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        payload: TenantUpdate,
+    ) -> Tenant:
+        tenant = await TenantRepository.get_by_id(db, tenant_id)
+
+        if not tenant:
+            raise NotFoundException("Tenant not found")
+
+        update_data = payload.model_dump(
+            mode="json",
+            exclude_unset=True,
+        )
+
         if not update_data:
             return tenant
 
         school_name = update_data.get("school_name")
+
         if school_name is not None:
             normalized_school_name = school_name.strip()
+
             if not normalized_school_name:
                 raise BadRequestException("school_name cannot be empty")
 
@@ -349,6 +356,7 @@ class TenantService:
                 db,
                 normalized_school_name,
             )
+
             if existing_tenant and existing_tenant.id != tenant_id:
                 raise ConflictException("A school with this name already exists")
 
@@ -362,56 +370,37 @@ class TenantService:
                 )
 
         email = update_data.get("email")
+
         if email is not None:
             normalized_email = _normalize_email(email)
+
             if normalized_email != _normalize_email(tenant.email):
                 raise BadRequestException(
                     "Tenant email cannot be changed from this endpoint because it is tied to administrator onboarding."
                 )
+
             update_data["email"] = normalized_email
 
-        whatsapp = update_data.get("school_bot_whatssap_number")
-        if whatsapp:
-            existing = await TenantRepository.get_by_school_bot_number(db, whatsapp)
+        whatsapp_number = update_data.get("school_bot_whatssap_number")
+
+        if whatsapp_number:
+            existing = await TenantRepository.get_by_school_bot_number(
+                db,
+                whatsapp_number,
+            )
+
             if existing and existing.id != tenant_id:
-                raise ConflictException("This WhatsApp number is already in use by another school")
-        updated_tenant = await TenantRepository.update(db, tenant_id, update_data)
+                raise ConflictException(
+                    "This WhatsApp number is already in use by another school"
+                )
+
+        updated_tenant = await TenantRepository.update(
+            db,
+            tenant_id,
+            update_data,
+        )
+
         await db.commit()
         await db.refresh(updated_tenant)
+
         return updated_tenant
-
-    @staticmethod
-    async def update_tenant_status(db: AsyncSession, tenant_id: uuid.UUID, payload: TenantStatusUpdate) -> Tenant:
-        tenant = await TenantRepository.get_by_id(db, tenant_id)
-        if not tenant:
-            raise NotFoundException("Tenant not found")
-
-        updated_tenant = await TenantRepository.update(db, tenant_id, {"status": payload.status})
-        await db.commit()
-        return updated_tenant
-
-    @staticmethod
-    async def delete_tenant(db: AsyncSession, tenant_id: uuid.UUID) -> dict:
-        tenant = await TenantRepository.get_by_id(db, tenant_id)
-        if not tenant:
-            raise NotFoundException("Tenant not found")
-
-        await TenantRepository.soft_delete(db, tenant_id)
-        await db.commit()
-        return {"detail": "Tenant successfully deleted"}
-
-    @staticmethod
-    async def restore_tenant(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
-        tenant = await TenantRepository.get_by_id_including_deleted(db, tenant_id)
-        if not tenant:
-            raise NotFoundException("Tenant not found")
-        if not tenant.is_deleted:
-            raise BadRequestException("Tenant is not deleted")
-
-        restored_tenant = await TenantRepository.restore(db, tenant_id)
-        await db.commit()
-        if not restored_tenant:
-            raise NotFoundException("Tenant not found")
-        await db.refresh(restored_tenant)
-        return restored_tenant
-

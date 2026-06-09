@@ -6,7 +6,11 @@ import Button from "../../components/ui/Button";
 import logoImage from "../../assets/images/favicon.png";
 import { tenantService } from "../../services/tenant.service";
 import { authService } from "../../services/auth.service";
-import { getErrorMessage } from "../../services/api";
+import { parseApiError, remapFieldErrors } from "../../services/api";
+
+const REGISTER_FIELD_MAP = {
+  school_name: "schoolName",
+};
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -18,11 +22,14 @@ function RegisterPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [passwordStrength, setPasswordStrength] = useState(0);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    setError(null);
 
     if (name === "password") {
       setPasswordStrength(getPasswordStrength(value));
@@ -49,17 +56,36 @@ function RegisterPage() {
     "bg-green-500",
   ];
 
+  const redirectToVerification = (
+    email,
+    notice,
+    purpose = "verification",
+    redirectTo = "/verify-otp"
+  ) => {
+    if (!email) return;
+
+    authService.setPendingVerificationEmail(email);
+    navigate(
+      `${redirectTo}?email=${encodeURIComponent(email)}&purpose=${encodeURIComponent(purpose)}`,
+      {
+        replace: true,
+        state: { notice },
+      }
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match.");
+      setFieldErrors({ confirmPassword: "Passwords do not match." });
       return;
     }
 
     if (formData.password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      setFieldErrors({ password: "Password must be at least 8 characters." });
       return;
     }
 
@@ -72,35 +98,45 @@ function RegisterPage() {
         password: formData.password,
       });
 
-      authService.setPendingVerificationEmail(formData.email);
-      navigate(
-        `/verify-otp?email=${encodeURIComponent(formData.email)}&purpose=verification`,
-        {
-          replace: true,
-          state: {
-            notice:
-              result?.message ||
-              "Please check your email for the verification code.",
-          },
-        }
-      );
-    } catch (err) {
-      if (err?.response?.status === 429) {
-        authService.setPendingVerificationEmail(formData.email);
-        navigate(
-          `/verify-otp?email=${encodeURIComponent(formData.email)}&purpose=verification`,
-          {
-            replace: true,
-            state: {
-              notice:
-                "A verification code was sent recently. Please use that code or wait a moment before requesting another one.",
-            },
-          }
+      if (result?.verification_required) {
+        redirectToVerification(
+          result.email || formData.email,
+          result.message || "Please check your email for the verification code.",
+          result.purpose || "verification",
+          result.redirect_to || "/verify-otp"
         );
         return;
       }
 
-      setError(getErrorMessage(err, "Registration failed. Please try again."));
+      setError(
+        "Something went wrong while processing your request. Please try again."
+      );
+    } catch (err) {
+      const apiError = parseApiError(
+        err,
+        "Something went wrong while processing your request. Please try again."
+      );
+
+      if (apiError.verificationRequired) {
+        redirectToVerification(
+          apiError.email || formData.email,
+          apiError.message,
+          apiError.purpose || "verification",
+          apiError.redirectTo || "/verify-otp"
+        );
+        return;
+      }
+
+      const mappedFieldErrors = remapFieldErrors(
+        apiError.fieldErrors,
+        REGISTER_FIELD_MAP
+      );
+
+      if (Object.keys(mappedFieldErrors).length > 0) {
+        setFieldErrors(mappedFieldErrors);
+      }
+
+      setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
@@ -156,6 +192,7 @@ function RegisterPage() {
                 onChange={handleChange}
                 placeholder="Greenwood High School"
                 required
+                error={fieldErrors.schoolName}
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
             </div>
@@ -169,6 +206,7 @@ function RegisterPage() {
                 onChange={handleChange}
                 placeholder="name@school.edu"
                 required
+                error={fieldErrors.email}
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
             </div>
@@ -183,6 +221,7 @@ function RegisterPage() {
                 placeholder="············"
                 required
                 minLength={8}
+                error={fieldErrors.password}
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
               {/* Password strength meter */}
@@ -219,6 +258,7 @@ function RegisterPage() {
                 onChange={handleChange}
                 placeholder="············"
                 required
+                error={fieldErrors.confirmPassword}
                 className="transition-all duration-300 group-hover:border-primary/50"
               />
               {/* Inline mismatch hint */}

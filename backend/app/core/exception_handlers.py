@@ -25,9 +25,12 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
         headers = getattr(exc, "headers", None)
+        content = {"detail": exc.detail}
+        if getattr(exc, "payload", None):
+            content.update(exc.payload)
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.detail},
+            content=content,
             headers=headers,
         )
 
