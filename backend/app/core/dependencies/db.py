@@ -29,4 +29,4 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await db.close()
 
 
-DbSession = Annotated[AsyncSession, Depends(get_db)]
+DbSession = Annotated[AsyncSession, Depends(get_db)] #reusable annotation

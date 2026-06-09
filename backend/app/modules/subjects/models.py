@@ -1,0 +1,24 @@
+#==========================#
+#    subject/models.py     #
+#==========================#
+
+"""Tenant-scoped subject catalog for each school."""
+
+from sqlalchemy import Boolean, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.shared.base_model import BaseModel
+
+
+class Subject(BaseModel):
+    __tablename__ = "subjects"
+
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_subject_tenant_name"),
+        UniqueConstraint("tenant_id", "code", name="uq_subject_tenant_code"),
+    )

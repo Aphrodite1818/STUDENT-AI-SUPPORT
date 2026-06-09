@@ -12,6 +12,7 @@ import app.tenant_management.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.superadmin.models  # noqa: F401
+import app.modules.subjects.models  # noqa: F401
 
 PUBLIC_SCHEMA = "public"
 
@@ -522,6 +523,52 @@ async def migrate_legacy_superadmins(conn) -> None:
     )
 
 
+async def remove_superadmin_from_userrole_enum(conn) -> None:
+    await execute(
+        conn,
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                JOIN pg_enum e ON e.enumtypid = t.oid
+                WHERE n.nspname = '{PUBLIC_SCHEMA}'
+                  AND t.typname = 'userrole'
+                  AND e.enumlabel = 'SUPERADMIN'
+            ) THEN
+                IF EXISTS (
+                    SELECT 1
+                    FROM {PUBLIC_SCHEMA}.users
+                    WHERE role::text = 'SUPERADMIN'
+                ) THEN
+                    RAISE EXCEPTION
+                        'Cannot remove SUPERADMIN from public.userrole while users still reference it.';
+                END IF;
+
+                ALTER TABLE {PUBLIC_SCHEMA}.users
+                ALTER COLUMN role TYPE TEXT
+                USING role::text;
+
+                DROP TYPE {PUBLIC_SCHEMA}.userrole;
+
+                CREATE TYPE {PUBLIC_SCHEMA}.userrole AS ENUM (
+                    'TEACHER',
+                    'STUDENT',
+                    'ADMIN',
+                    'PARENT'
+                );
+
+                ALTER TABLE {PUBLIC_SCHEMA}.users
+                ALTER COLUMN role TYPE {PUBLIC_SCHEMA}.userrole
+                USING role::text::{PUBLIC_SCHEMA}.userrole;
+            END IF;
+        END $$;
+        """,
+    )
+
+
 async def sync_indexes(conn) -> None:
     await execute(
         conn,
@@ -614,6 +661,7 @@ async def create_tables() -> None:
         await sync_user_columns(conn)
         await sync_auth_columns(conn)
         await migrate_legacy_superadmins(conn)
+        await remove_superadmin_from_userrole_enum(conn)
         await sync_indexes(conn)
 
 
