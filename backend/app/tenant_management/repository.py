@@ -6,6 +6,7 @@
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,7 +129,7 @@ class TenantRepository:
     async def update(
         db: AsyncSession,
         tenant_id: uuid.UUID,
-        update_data: dict,
+        update_data: dict[str, Any],
     ) -> Tenant | None:
         """Update a tenant and return the refreshed record."""
         await db.execute(
@@ -139,7 +140,7 @@ class TenantRepository:
         return await TenantRepository.get_by_id(db, tenant_id)
 
     @staticmethod
-    async def soft_delete(db: AsyncSession, tenant_id: uuid.UUID) -> int:
+    async def soft_delete(db: AsyncSession, tenant_id: uuid.UUID) -> None:
         """Mark a tenant as deleted without removing the row."""
         await db.execute(
             update(Tenant).where(

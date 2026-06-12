@@ -4,6 +4,7 @@
 
 import secrets
 import uuid
+from typing import Any
 
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,13 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config.logging import get_logger
 from app.config.security import hash_password
 from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from app.modules.auth.service import UserInviteService
+from app.modules.teachers.models import Teacher, TeacherStatus
+from app.modules.teachers.repository import TeacherRepository
 from app.modules.users.models import AccountStatus, User, UserRole
 from app.modules.users.repository import UserRepository
 from app.modules.users.schemas import UserAdminUpdate, UserInviteCreate, UserUpdate
-from app.modules.auth.service import UserInviteService
 from app.tenant_management.repository import TenantRepository
 
 logger = get_logger(__name__)
+
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
@@ -25,6 +29,66 @@ def _normalize_email(email: str) -> str:
 
 class UserService:
     """Handle user-related business logic."""
+
+    @staticmethod
+    async def _activate_teacher_profile(
+        db: AsyncSession,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> Teacher:
+        teacher = await TeacherRepository.get_teacher_by_user_id(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
+        if teacher:
+            return await TeacherRepository.update_teacher_status(
+                db=db,
+                teacher=teacher,
+                status=TeacherStatus.ACTIVE,
+            )
+
+        return await TeacherRepository.create_teacher(
+            db=db,
+            teacher=Teacher(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                status=TeacherStatus.ACTIVE,
+            ),
+        )
+
+    @staticmethod
+    async def _archive_teacher_profile(
+        db: AsyncSession,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        teacher = await TeacherRepository.get_teacher_by_user_id(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+
+        if not teacher:
+            logger.warning(
+                "Teacher user has no teacher profile to archive",
+                extra={"tenant_id": str(tenant_id), "user_id": str(user_id)},
+            )
+            return
+
+        await TeacherRepository.update_teacher_status(
+            db=db,
+            teacher=teacher,
+            status=TeacherStatus.ARCHIVED,
+        )
+        await TeacherRepository.delete_all_teacher_subject_links(
+            db=db,
+            tenant_id=tenant_id,
+            teacher_id=teacher.id,
+        )
 
     @staticmethod
     async def register_user(
@@ -116,7 +180,7 @@ class UserService:
 
         user_dict["email"] = normalized_email
         user_dict["tenant_id"] = actor.tenant_id
-        user_dict["password_hash"] = hash_password(secrets.token_urlsafe(32))#temporary password to be reset by user
+        user_dict["password_hash"] = hash_password(secrets.token_urlsafe(32))
         user_dict["account_status"] = AccountStatus.PENDING
         user_dict["is_verified"] = False
 
@@ -126,6 +190,17 @@ class UserService:
             created_user = await UserRepository.create_user(db, new_user)
 
             await db.flush()
+
+            if created_user.role == UserRole.TEACHER:
+                teacher = Teacher(
+                    tenant_id=created_user.tenant_id,
+                    user_id=created_user.id,
+                    status=TeacherStatus.ACTIVE,
+                )
+                await TeacherRepository.create_teacher(
+                    db=db,
+                    teacher=teacher,
+                )
 
             invite_link = await UserInviteService.create_invite_record(
                 db,
@@ -260,7 +335,7 @@ class UserService:
         tenant_id: uuid.UUID | None = None,
     ) -> list[User]:
         """Return a paginated list of users."""
-        log_extra = {"skip": skip, "limit": limit}
+        log_extra: dict[str, Any] = {"skip": skip, "limit": limit}
         if tenant_id is not None:
             log_extra["tenant_id"] = str(tenant_id)
 
@@ -272,7 +347,11 @@ class UserService:
             tenant_id=tenant_id,
         )
 
-        info_extra = {"count": len(users), "skip": skip, "limit": limit}
+        info_extra: dict[str, Any] = {
+            "count": len(users),
+            "skip": skip,
+            "limit": limit,
+        }
         if tenant_id is not None:
             info_extra["tenant_id"] = str(tenant_id)
 
@@ -374,6 +453,15 @@ class UserService:
             "Attempting admin-level user update",
             extra={"user_id": str(user_id), "changed_fields": changed_fields},
         )
+
+        if actor.role != UserRole.ADMIN:
+            raise ForbiddenException(
+                detail="Only tenant admins can perform admin-level user updates."
+            )
+
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="Admin user is not attached to a tenant.")
+
         db_user = await UserRepository.get_user_by_id(db, user_id)
         if not db_user:
             logger.warning(
@@ -382,7 +470,14 @@ class UserService:
             )
             raise NotFoundException(detail="User not found.")
 
+        if db_user.tenant_id != actor.tenant_id:
+            raise ForbiddenException(
+                detail="Admins can only manage users inside their own tenant."
+            )
+
         requested_role = admin_data.role
+        current_role = db_user.role
+
         if db_user.role == UserRole.ADMIN:
             raise ForbiddenException(
                 detail="Tenant admins cannot manage other administrator accounts."
@@ -392,10 +487,47 @@ class UserService:
                 detail="Tenant admins cannot assign administrator roles."
             )
 
-        for key, value in update_dict.items():
-            setattr(db_user, key, value)
+        try:
+            for key, value in update_dict.items():
+                setattr(db_user, key, value)
 
-        updated_user = await UserRepository.save_user(db, db_user)
+            updated_user = await UserRepository.save_user(db, db_user)
+
+            if requested_role is not None and requested_role != current_role:
+                if (
+                    current_role != UserRole.TEACHER
+                    and requested_role == UserRole.TEACHER
+                ):
+                    await UserService._activate_teacher_profile(
+                        db=db,
+                        tenant_id=actor.tenant_id,
+                        user_id=db_user.id,
+                    )
+                elif (
+                    current_role == UserRole.TEACHER
+                    and requested_role != UserRole.TEACHER
+                ):
+                    await UserService._archive_teacher_profile(
+                        db=db,
+                        tenant_id=actor.tenant_id,
+                        user_id=db_user.id,
+                    )
+
+            await db.commit()
+            await db.refresh(updated_user)
+
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "Admin-level user update failed",
+                extra={
+                    "user_id": str(user_id),
+                    "tenant_id": str(actor.tenant_id),
+                    "changed_fields": changed_fields,
+                },
+            )
+            raise
+
         logger.info(
             "User updated by admin",
             extra={"user_id": str(user_id), "changed_fields": changed_fields},
@@ -406,7 +538,7 @@ class UserService:
 
 
     @staticmethod
-    async def delete_user(db: AsyncSession, user_id: uuid.UUID) -> dict:
+    async def delete_user(db: AsyncSession, user_id: uuid.UUID) -> dict[str, str]:
         """Delete a user and return a confirmation payload."""
         logger.debug("Attempting user deletion", extra={"user_id": str(user_id)})
         db_user = await UserRepository.get_user_by_id(db, user_id)
@@ -416,6 +548,19 @@ class UserService:
                 extra={"user_id": str(user_id)},
             )
             raise NotFoundException(detail="User not found.")
+
+        teacher_profile = await TeacherRepository.get_teacher_by_user_id(
+            db=db,
+            tenant_id=db_user.tenant_id,
+            user_id=db_user.id,
+        )
+        if teacher_profile:
+            raise BadRequestException(
+                detail=(
+                    "Users with teacher history cannot be permanently deleted. "
+                    "Change their role or deactivate the account to preserve audit history."
+                )
+            )
 
         await UserRepository.delete_user(db, db_user)
         logger.info("User deleted successfully", extra={"user_id": str(user_id)})

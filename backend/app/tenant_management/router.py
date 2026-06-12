@@ -3,6 +3,7 @@
 # ====================================== #
 
 import uuid
+from typing import Annotated, TypeAlias
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.encoders import jsonable_encoder
@@ -14,6 +15,7 @@ from app.core.dependencies.route_guards import (
     require_tenant_ownership,
 )
 from app.modules.users.models import User, UserRole
+from app.tenant_management.models import Tenant
 from app.tenant_management.schemas import (
     TenantAdminResponse,
     TenantRegisterRequest,
@@ -23,10 +25,20 @@ from app.tenant_management.service import TenantService
 
 
 router = APIRouter(tags=["Tenants"])
+TenantAdminUser: TypeAlias = Annotated[
+    User,
+    Depends(require_tenant_role([UserRole.ADMIN])),
+]
+TenantAdminOrTeacherUser: TypeAlias = Annotated[
+    User,
+    Depends(require_tenant_role([UserRole.ADMIN, UserRole.TEACHER])),
+]
+TenantOwnedUser: TypeAlias = Annotated[User, Depends(require_tenant_ownership)]
 
 
 @router.post(
     "/register",
+    response_model=None,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new school tenant",
 )
@@ -34,7 +46,7 @@ async def register_tenant(
     payload: TenantRegisterRequest,
     db: DbSession,
     background_tasks: BackgroundTasks,
-) -> dict:
+) -> dict | JSONResponse:
     result = await TenantService.register_tenant(
         db,
         payload,
@@ -59,11 +71,9 @@ async def register_tenant(
 async def get_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,
-    current_user: User = Depends(
-        require_tenant_role([UserRole.ADMIN, UserRole.TEACHER])
-    ),
-    owned_user: User = Depends(require_tenant_ownership),
-) -> TenantAdminResponse:
+    current_user: TenantAdminOrTeacherUser,
+    owned_user: TenantOwnedUser,
+) -> Tenant:
     return await TenantService.get_tenant_by_id(db, tenant_id)
 
 
@@ -77,9 +87,9 @@ async def update_tenant(
     tenant_id: uuid.UUID,
     payload: TenantUpdate,
     db: DbSession,
-    current_user: User = Depends(require_tenant_role([UserRole.ADMIN])),
-    owned_user: User = Depends(require_tenant_ownership),
-) -> TenantAdminResponse:
+    current_user: TenantAdminUser,
+    owned_user: TenantOwnedUser,
+) -> Tenant:
     return await TenantService.update_tenant_profile(
         db,
         tenant_id,

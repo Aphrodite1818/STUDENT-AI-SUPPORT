@@ -190,7 +190,7 @@ class AuthService:
                 db,
                 RequestOTP(
                     email=normalized_email,
-                    purpose=AuthPurpose.VERIFICATION,
+                    purpose=AuthPurpose.VERIFICATION.value,
                 ),
                 background_tasks=background_tasks,
             )

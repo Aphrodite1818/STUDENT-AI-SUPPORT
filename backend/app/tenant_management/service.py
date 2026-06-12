@@ -242,7 +242,7 @@ class TenantService:
                 db,
                 RequestOTP(
                     email=normalized_email,
-                    purpose=AuthPurpose.VERIFICATION,
+                    purpose=AuthPurpose.VERIFICATION.value,
                 ),
                 background_tasks=background_tasks,
             )
@@ -399,6 +399,8 @@ class TenantService:
             tenant_id,
             update_data,
         )
+        if updated_tenant is None:
+            raise NotFoundException("Tenant not found")
 
         await db.commit()
         await db.refresh(updated_tenant)

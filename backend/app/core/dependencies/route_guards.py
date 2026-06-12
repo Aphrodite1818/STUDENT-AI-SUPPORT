@@ -1,6 +1,8 @@
 """Authentication and authorization dependencies for tenant users and superadmins."""
 
 import uuid
+from collections.abc import Callable, Coroutine
+from typing import Annotated, Any, TypeAlias
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -19,11 +21,13 @@ from app.tenant_management.repository import TenantRepository
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+TokenDependency: TypeAlias = Annotated[str, Depends(oauth2_scheme)]
+DbDependency: TypeAlias = Annotated[AsyncSession, Depends(get_db)]
 
 
 async def get_current_actor(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+    token: TokenDependency,
+    db: DbDependency,
 ) -> User | SuperAdmin:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -51,8 +55,8 @@ async def get_current_actor(
 
 
 async def get_current_tenant_user(
-    actor: User | SuperAdmin = Depends(get_current_actor),
-    db: AsyncSession = Depends(get_db),
+    actor: Annotated[User | SuperAdmin, Depends(get_current_actor)],
+    db: DbDependency,
 ) -> User:
     if isinstance(actor, SuperAdmin):
         raise ForbiddenException("Tenant user credentials are required for this operation")
@@ -72,7 +76,7 @@ async def get_current_tenant_user(
 
 
 async def get_current_superadmin(
-    actor: User | SuperAdmin = Depends(get_current_actor),
+    actor: Annotated[User | SuperAdmin, Depends(get_current_actor)],
 ) -> SuperAdmin:
     if isinstance(actor, User):
         raise ForbiddenException("Superadmin credentials are required for this operation")
@@ -82,14 +86,16 @@ async def get_current_superadmin(
 
 
 async def require_superadmin(
-    current_superadmin: SuperAdmin = Depends(get_current_superadmin),
+    current_superadmin: Annotated[SuperAdmin, Depends(get_current_superadmin)],
 ) -> SuperAdmin:
     return current_superadmin
 
 
-def require_tenant_role(allowed_roles: list[UserRole]):
+def require_tenant_role(
+    allowed_roles: list[UserRole],
+) -> Callable[..., Coroutine[Any, Any, User]]:
     async def role_checker(
-        current_user: User = Depends(get_current_tenant_user),
+        current_user: Annotated[User, Depends(get_current_tenant_user)],
     ) -> User:
         if current_user.role not in allowed_roles:
             roles_str = ", ".join(role.value for role in allowed_roles)
@@ -103,7 +109,7 @@ def require_tenant_role(allowed_roles: list[UserRole]):
 
 async def require_tenant_ownership(
     tenant_id: uuid.UUID,
-    current_user: User = Depends(get_current_tenant_user),
+    current_user: Annotated[User, Depends(get_current_tenant_user)],
 ) -> User:
     if current_user.tenant_id != tenant_id:
         raise ForbiddenException("You do not have access to this tenant's resources")

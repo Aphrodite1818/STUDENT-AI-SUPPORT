@@ -3,47 +3,49 @@
 #==========================#
 
 """Define request and message schemas used by the AI module."""
-from attr import field
-from pydantic import BaseModel , field_validator
-from typing import List , Optional , Any , Dict
+
 from enum import Enum
 import re
 
-class Role(str , Enum):
+from pydantic import BaseModel, field_validator
+
+
+class Role(str, Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
 
+
 class ConversationMessage(BaseModel):
-    role : Role
-    content : str
-    tool_name: Optional[str] = None 
-    tool_call_id : Optional[str] = None
+    role: Role
+    content: str
+    tool_name: str | None = None
+    tool_call_id: str | None = None
 
 
 class AIChatRequest(BaseModel):
-    message : str
-    phone_number : str
-    tenant_id : Optional[str] = None
-    provider: Optional[str] = None
+    message: str
+    phone_number: str
+    tenant_id: str | None = None
+    provider: str | None = None
 
     @field_validator("phone_number")
     @classmethod
-    def validate_phone_number(cls, value : str):
-        pattern = r'^\+?[1-9]\d{6,14}$'
-        cleaned = re.sub(r'[\s\-().]+', '', value.strip())
+    def validate_phone_number(cls, value: str) -> str:
+        pattern = r"^\+?[1-9]\d{6,14}$"
+        cleaned = re.sub(r"[\s\-().]+", "", value.strip())
 
-        if not re.match(pattern , cleaned):
+        if not re.match(pattern, cleaned):
             raise ValueError(f"invalid phone number: {value}")
         return cleaned
-    
 
-def validate_phone_number(phone_number):
-        pattern = r'^\+?[1-9]\d{6,14}$'
-        cleaned = re.sub(r'[\s\-().]+', '', phone_number.strip())
 
-        if not re.match(pattern , cleaned):
-            # raise ValueError(f"invalud phone number: {phone_number}")
-            print("weird number format")
-        return cleaned
+def validate_phone_number(phone_number: str) -> str:
+    pattern = r"^\+?[1-9]\d{6,14}$"
+    cleaned = re.sub(r"[\s\-().]+", "", phone_number.strip())
+
+    if not re.match(pattern, cleaned):
+        # Keep legacy behavior: this helper reports the issue but does not raise.
+        print("weird number format")
+    return cleaned

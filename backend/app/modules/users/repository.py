@@ -3,6 +3,7 @@
 #======================================#
 
 import uuid
+from typing import Any
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession  # to be used as annotation
@@ -111,7 +112,7 @@ class UserRepository:
         tenant_id: uuid.UUID | None = None,
         role: str | None = None,
     ) -> list[User]:
-        log_extra = {"skip": skip, "limit": limit}
+        log_extra: dict[str, Any] = {"skip": skip, "limit": limit}
         if tenant_id is not None:
             log_extra["tenant_id"] = str(tenant_id)
         if role is not None:
@@ -131,7 +132,11 @@ class UserRepository:
 
         users = list(result.scalars().all())
 
-        info_extra = {"count": len(users), "skip": skip, "limit": limit}
+        info_extra: dict[str, Any] = {
+            "count": len(users),
+            "skip": skip,
+            "limit": limit,
+        }
         if tenant_id is not None:
             info_extra["tenant_id"] = str(tenant_id)
 

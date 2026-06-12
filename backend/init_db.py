@@ -7,11 +7,14 @@ from app.shared.base_model import Base
 
 # Import mounted-domain models so Base.metadata knows the current table shapes.
 # Students are still omitted because students.class_id references public.classes,
-# and the current backend does not define/register that table yet.
+# and the current backend does not define/register that table yet. Keep the
+# students mapper out of init_db until the classes domain has a real model.
 import app.tenant_management.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.superadmin.models  # noqa: F401
+import app.modules.subjects.models  # noqa: F401
+import app.modules.teachers.models  # noqa: F401
 
 PUBLIC_SCHEMA = "public"
 
@@ -47,6 +50,27 @@ async def add_enum_values(conn, enum_name: str, labels: list[str]) -> None:
             END $$;
             """,
         )
+
+
+async def create_enum_if_missing(conn, enum_name: str, labels: list[str]) -> None:
+    quoted_labels = ", ".join(f"'{label}'" for label in labels)
+    await execute(
+        conn,
+        f"""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                WHERE n.nspname = '{PUBLIC_SCHEMA}'
+                  AND t.typname = '{enum_name}'
+            ) THEN
+                CREATE TYPE {PUBLIC_SCHEMA}.{enum_name} AS ENUM ({quoted_labels});
+            END IF;
+        END $$;
+        """,
+    )
 
 
 async def add_column(conn, table_name: str, column_sql: str) -> None:
@@ -288,6 +312,16 @@ async def sync_enum_values(conn) -> None:
         "accountstatus",
         ["ACTIVE", "BANNED", "SUSPENDED", "DEACTIVATED", "PENDING"],
     )
+    await create_enum_if_missing(
+        conn,
+        "teacherstatus",
+        ["ACTIVE", "INACTIVE", "ARCHIVED"],
+    )
+    await add_enum_values(
+        conn,
+        "teacherstatus",
+        ["ACTIVE", "INACTIVE", "ARCHIVED"],
+    )
     await add_enum_values(
         conn,
         "otppurpose",
@@ -418,6 +452,14 @@ async def sync_user_columns(conn) -> None:
     )
 
 
+async def sync_teacher_columns(conn) -> None:
+    await add_column(conn, "teachers", "status public.teacherstatus DEFAULT 'ACTIVE'")
+
+    await set_column_default(conn, "teachers", "status", "'ACTIVE'")
+    await backfill_nulls(conn, "teachers", "status", "'ACTIVE'")
+    await set_not_null_if_populated(conn, "teachers", "status")
+
+
 async def sync_auth_columns(conn) -> None:
     await add_column(conn, "auth", "email VARCHAR(100)")
     await add_column(conn, "auth", "hashed_value VARCHAR(255)")
@@ -522,6 +564,52 @@ async def migrate_legacy_superadmins(conn) -> None:
     )
 
 
+async def remove_superadmin_from_userrole_enum(conn) -> None:
+    await execute(
+        conn,
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                JOIN pg_enum e ON e.enumtypid = t.oid
+                WHERE n.nspname = '{PUBLIC_SCHEMA}'
+                  AND t.typname = 'userrole'
+                  AND e.enumlabel = 'SUPERADMIN'
+            ) THEN
+                IF EXISTS (
+                    SELECT 1
+                    FROM {PUBLIC_SCHEMA}.users
+                    WHERE role::text = 'SUPERADMIN'
+                ) THEN
+                    RAISE EXCEPTION
+                        'Cannot remove SUPERADMIN from public.userrole while users still reference it.';
+                END IF;
+
+                ALTER TABLE {PUBLIC_SCHEMA}.users
+                ALTER COLUMN role TYPE TEXT
+                USING role::text;
+
+                DROP TYPE {PUBLIC_SCHEMA}.userrole;
+
+                CREATE TYPE {PUBLIC_SCHEMA}.userrole AS ENUM (
+                    'TEACHER',
+                    'STUDENT',
+                    'ADMIN',
+                    'PARENT'
+                );
+
+                ALTER TABLE {PUBLIC_SCHEMA}.users
+                ALTER COLUMN role TYPE {PUBLIC_SCHEMA}.userrole
+                USING role::text::{PUBLIC_SCHEMA}.userrole;
+            END IF;
+        END $$;
+        """,
+    )
+
+
 async def sync_indexes(conn) -> None:
     await execute(
         conn,
@@ -554,6 +642,22 @@ async def sync_indexes(conn) -> None:
     await execute(
         conn,
         f"CREATE INDEX IF NOT EXISTS ix_users_tenant_role ON {PUBLIC_SCHEMA}.users (tenant_id, role)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_teachers_tenant_user ON {PUBLIC_SCHEMA}.teachers (tenant_id, user_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_teachers_tenant_status ON {PUBLIC_SCHEMA}.teachers (tenant_id, status)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_teacher_subjects_tenant_teacher ON {PUBLIC_SCHEMA}.teacher_subjects (tenant_id, teacher_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_teacher_subjects_tenant_subject ON {PUBLIC_SCHEMA}.teacher_subjects (tenant_id, subject_id)",
     )
 
     await execute(
@@ -612,8 +716,10 @@ async def create_tables() -> None:
         await sync_enum_values(conn)
         await sync_tenant_columns(conn)
         await sync_user_columns(conn)
+        await sync_teacher_columns(conn)
         await sync_auth_columns(conn)
         await migrate_legacy_superadmins(conn)
+        await remove_superadmin_from_userrole_enum(conn)
         await sync_indexes(conn)
 
 

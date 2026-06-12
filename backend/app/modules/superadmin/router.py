@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated, TypeAlias
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 
@@ -8,10 +9,12 @@ from app.core.utils.frontend_urls import resolve_frontend_app_url
 from app.modules.superadmin.models import SuperAdmin
 from app.modules.superadmin.schemas import SuperadminInviteCreate, SuperadminResponse
 from app.modules.superadmin.service import SuperadminService
+from app.tenant_management.models import Tenant
 from app.tenant_management.schemas import TenantAdminResponse, TenantCreate, TenantStatusUpdate
 
 
-router = APIRouter(prefix="/api/v1/superadmin", tags=["Superadmin"])
+router = APIRouter(prefix="/superadmin", tags=["Superadmin"])
+SuperadminActor: TypeAlias = Annotated[SuperAdmin, Depends(require_superadmin)]
 
 
 @router.post("/tenants", response_model=TenantAdminResponse, status_code=status.HTTP_201_CREATED)
@@ -20,8 +23,8 @@ async def create_tenant(
     db: DbSession,
     background_tasks: BackgroundTasks,
     request: Request,
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
-) -> TenantAdminResponse:
+    current_superadmin: SuperadminActor,
+) -> Tenant:
     return await SuperadminService.create_tenant(
         db,
         payload,
@@ -33,11 +36,11 @@ async def create_tenant(
 @router.get("/tenants", response_model=list[TenantAdminResponse], status_code=status.HTTP_200_OK)
 async def list_tenants(
     db: DbSession,
+    current_superadmin: SuperadminActor,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     include_deleted: bool = Query(default=True),
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
-) -> list[TenantAdminResponse]:
+) -> list[Tenant]:
     return await SuperadminService.list_tenants(
         db,
         skip=skip,
@@ -50,9 +53,9 @@ async def list_tenants(
 async def get_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,
+    current_superadmin: SuperadminActor,
     include_deleted: bool = Query(default=True),
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
-) -> TenantAdminResponse:
+) -> Tenant:
     return await SuperadminService.get_tenant(db, tenant_id, include_deleted=include_deleted)
 
 
@@ -61,8 +64,8 @@ async def update_tenant_status(
     tenant_id: uuid.UUID,
     payload: TenantStatusUpdate,
     db: DbSession,
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
-) -> TenantAdminResponse:
+    current_superadmin: SuperadminActor,
+) -> Tenant:
     return await SuperadminService.update_tenant_status(db, tenant_id, payload)
 
 
@@ -70,8 +73,8 @@ async def update_tenant_status(
 async def restore_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
-) -> TenantAdminResponse:
+    current_superadmin: SuperadminActor,
+) -> Tenant:
     return await SuperadminService.restore_tenant(db, tenant_id)
 
 
@@ -79,7 +82,7 @@ async def restore_tenant(
 async def delete_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
+    current_superadmin: SuperadminActor,
 ) -> dict[str, str]:
     return await SuperadminService.delete_tenant(db, tenant_id)
 
@@ -87,10 +90,10 @@ async def delete_tenant(
 @router.get("/superadmins", response_model=list[SuperadminResponse], status_code=status.HTTP_200_OK)
 async def list_superadmins(
     db: DbSession,
+    current_superadmin: SuperadminActor,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
-) -> list[SuperadminResponse]:
+) -> list[SuperAdmin]:
     return await SuperadminService.list_superadmins(db, skip=skip, limit=limit)
 
 
@@ -100,7 +103,7 @@ async def invite_superadmin(
     db: DbSession,
     background_tasks: BackgroundTasks,
     request: Request,
-    current_superadmin: SuperAdmin = Depends(require_superadmin),
+    current_superadmin: SuperadminActor,
 ) -> dict[str, str]:
     return await SuperadminService.invite_superadmin(
         db,

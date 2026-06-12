@@ -1,0 +1,162 @@
+from uuid import UUID
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.modules.subjects.models import Subject
+from app.modules.teachers.models import Teacher, TeacherSubject
+
+
+class SubjectRepository:
+    """Low-level database queries for the subjects table."""
+
+    @staticmethod
+    async def create_subject(db: AsyncSession, subject: Subject) -> Subject:
+        db.add(subject)
+        await db.flush()
+        await db.refresh(subject)
+        return subject
+
+    @staticmethod
+    async def create_teacher_subject_links(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_id: UUID,
+        teacher_ids: list[UUID],
+    ) -> list[TeacherSubject]:
+        teacher_subject_links = [
+            TeacherSubject(
+                tenant_id=tenant_id,
+                subject_id=subject_id,
+                teacher_id=teacher_id,
+            )
+            for teacher_id in teacher_ids
+        ]
+
+        db.add_all(teacher_subject_links)
+        await db.flush()
+        return teacher_subject_links
+
+    @staticmethod
+    async def get_subject_by_id(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_id: UUID,
+    ) -> Subject | None:
+        result = await db.execute(
+            select(Subject)
+            .options(
+                selectinload(Subject.teacher_links)
+                .selectinload(TeacherSubject.teacher)
+                .selectinload(Teacher.user)
+            )
+            .where(
+                Subject.tenant_id == tenant_id,
+                Subject.id == subject_id,
+            )
+        )
+
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_subject_by_name(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_name: str,
+    ) -> Subject | None:
+        result = await db.execute(
+            select(Subject).where(
+                Subject.tenant_id == tenant_id,
+                Subject.name == subject_name,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_subject_by_code(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_code: str,
+    ) -> Subject | None:
+        result = await db.execute(
+            select(Subject).where(
+                Subject.tenant_id == tenant_id,
+                Subject.code == subject_code,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_subjects_by_id(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_ids: list[UUID],
+    ) -> list[Subject]:
+        if not subject_ids:
+            return []
+
+        result = await db.execute(
+            select(Subject).where(
+                Subject.tenant_id == tenant_id,
+                Subject.id.in_(subject_ids),
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_all_subjects(
+        db: AsyncSession,
+        tenant_id: UUID,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        is_active: bool | None = None,
+        search: str | None = None,
+    ) -> tuple[list[Subject], int]:
+        filters = [Subject.tenant_id == tenant_id]
+
+        if is_active is not None:
+            filters.append(Subject.is_active == is_active)
+
+        if search:
+            filters.append(Subject.name.ilike(f"%{search}%"))
+
+        total_result = await db.execute(
+            select(func.count()).select_from(Subject).where(*filters)
+        )
+        total = total_result.scalar_one()
+
+        result = await db.execute(
+            select(Subject)
+            .options(
+                selectinload(Subject.teacher_links)
+                .selectinload(TeacherSubject.teacher)
+                .selectinload(Teacher.user)
+            )
+            .where(*filters)
+            .order_by(Subject.name.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        return list(result.scalars().all()), total
+
+    @staticmethod
+    async def update_subject(
+        db: AsyncSession,
+        subject: Subject,
+        update_data: dict[str, Any],
+    ) -> Subject:
+        for field, value in update_data.items():
+            setattr(subject, field, value)
+
+        await db.flush()
+        await db.refresh(subject)
+        return subject
+
+    @staticmethod
+    async def delete_subject(db: AsyncSession, subject: Subject) -> None:
+        await db.delete(subject)
+        await db.flush()

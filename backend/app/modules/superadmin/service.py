@@ -220,6 +220,9 @@ class SuperadminService:
             raise BadRequestException("Deleted tenants must be restored before status updates.")
 
         updated_tenant = await TenantRepository.update(db, tenant_id, {"status": payload.status})
+        if updated_tenant is None:
+            raise NotFoundException("Tenant not found")
+
         await db.commit()
         await db.refresh(updated_tenant)
         return updated_tenant

@@ -4,7 +4,7 @@
 
 """Provide database session dependencies for FastAPI routes."""
 
-from typing import Annotated, AsyncGenerator
+from typing import Annotated, AsyncGenerator, TypeAlias
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,4 +29,4 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await db.close()
 
 
-DbSession = Annotated[AsyncSession, Depends(get_db)]
+DbSession: TypeAlias = Annotated[AsyncSession, Depends(get_db)]

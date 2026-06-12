@@ -177,11 +177,6 @@ class TenantUpdate(InputBase):
 
     onboarding_completed: bool | None = True
 
-    plan: SubscriptionPlan | None = None
-    max_students: int | None = Field(default=None, ge=1, le=100_000)
-    max_teachers: int | None = Field(default=None, ge=1, le=100_000)
-    feature_flags: dict[str, Any] | None = None
-
     @field_validator(
         "school_name",
         "phone",

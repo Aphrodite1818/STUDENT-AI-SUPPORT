@@ -75,7 +75,6 @@ class Students(BaseModel):
 
     parent: Mapped["User"] = relationship(
         "User",
-        back_populates="students",
         foreign_keys=[parent_id],
     )
 

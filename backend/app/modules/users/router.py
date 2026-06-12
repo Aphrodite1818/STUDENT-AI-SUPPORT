@@ -3,6 +3,7 @@
 # ====================================== #
 
 import uuid
+from typing import Annotated, TypeAlias
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 
@@ -26,6 +27,11 @@ from app.modules.users.service import UserService
 logger = get_logger(__name__)
 
 router = APIRouter(tags=["Users"])
+CurrentTenantUser: TypeAlias = Annotated[User, Depends(get_current_tenant_user)]
+TenantAdminUser: TypeAlias = Annotated[
+    User,
+    Depends(require_tenant_role([UserRole.ADMIN])),
+]
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
@@ -41,8 +47,8 @@ async def register_user(
     db: DbSession,
     background_tasks: BackgroundTasks,
     request: Request,
-    current_user: User = Depends(require_tenant_role([UserRole.ADMIN])),
-) -> UserResponse:
+    current_user: TenantAdminUser,
+) -> User:
     """
     Create a normal tenant user and email an invite link.
 
@@ -68,7 +74,7 @@ async def resend_invite(
     db: DbSession,
     background_tasks: BackgroundTasks,
     request: Request,
-    current_user: User = Depends(require_tenant_role([UserRole.ADMIN])),
+    current_user: TenantAdminUser,
 ) -> dict[str, str]:
     return await UserService.resend_invite(
         db,
@@ -88,8 +94,8 @@ async def resend_invite(
     summary="Get current authenticated user profile",
 )
 async def get_current_user_profile(
-    current_user: User = Depends(get_current_tenant_user),
-) -> UserResponse:
+    current_user: CurrentTenantUser,
+) -> User:
     """
     Fetch the currently authenticated user's profile.
     """
@@ -110,10 +116,10 @@ async def get_current_user_profile(
 )
 async def list_users(
     db: DbSession,
+    current_user: TenantAdminUser,
     skip: int = Query(default=0, ge=0, description="Number of records to skip"),
     limit: int = Query(default=100, ge=1, le=500, description="Max records to return"),
-    current_user: User = Depends(require_tenant_role([UserRole.ADMIN])),
-) -> list[UserResponse]:
+) -> list[User]:
     """
     Return a paginated list of all users.
     """
@@ -134,8 +140,8 @@ async def list_users(
 async def get_user(
     user_id: uuid.UUID,
     db: DbSession,
-    current_user: User = Depends(get_current_tenant_user),
-) -> UserResponse:
+    current_user: CurrentTenantUser,
+) -> User:
     """
     Fetch a user by their UUID. Returns 404 if not found.
     """
@@ -166,8 +172,8 @@ async def update_profile(
     user_id: uuid.UUID,
     payload: UserUpdate,
     db: DbSession,
-    current_user: User = Depends(get_current_tenant_user),
-) -> UserResponse:
+    current_user: CurrentTenantUser,
+) -> User:
     """
     Partial update of a user's own profile fields.
     Only fields included in the request body are changed.
@@ -195,8 +201,8 @@ async def update_admin_status(
     user_id: uuid.UUID,
     payload: UserAdminUpdate,
     db: DbSession,
-    current_user: User = Depends(require_tenant_role([UserRole.ADMIN])),
-) -> UserResponse:
+    current_user: TenantAdminUser,
+) -> User:
     """
     Admin-only endpoint to update privileged fields
     (e.g. role, is_active, is_verified).
@@ -218,8 +224,8 @@ async def update_admin_status(
 async def delete_user(
     user_id: uuid.UUID,
     db: DbSession,
-    current_user: User = Depends(require_tenant_role([UserRole.ADMIN])),
-) -> dict:
+    current_user: TenantAdminUser,
+) -> dict[str, str]:
     """
     Permanently delete a user. Returns 404 if not found.
     """
