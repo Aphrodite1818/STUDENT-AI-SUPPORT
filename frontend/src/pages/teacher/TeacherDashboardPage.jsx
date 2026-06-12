@@ -51,7 +51,7 @@ function TeacherDashboardPage() {
         </Link>
       }
     >
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {overview.stats.map((stat, index) => {
           const icons = [BookOpen, GraduationCap, ClipboardList, CheckSquare];
           const Icon = icons[index];
@@ -59,9 +59,9 @@ function TeacherDashboardPage() {
         })}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-6">
-          <Card className="p-5">
+      <section className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="space-y-8">
+          <Card className="p-5 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Today's Teaching Plan</h2>
@@ -69,43 +69,47 @@ function TeacherDashboardPage() {
               </div>
               <Badge variant="primary">4 periods</Badge>
             </div>
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {[
                 ["09:30", "Grade 8 - A", "Mathematics", "Room 204"],
                 ["10:20", "Grade 7 - B", "English", "Room 112"],
                 ["12:45", "Grade 9 - A", "Science", "Lab 2"],
                 ["13:35", "Grade 8 - A", "Computer Science", "Lab 1"],
               ].map(([time, className, subject, room]) => (
-                <div key={`${time}-${subject}`} className="rounded-2xl border border-border bg-surface-muted/40 p-4">
-                  <p className="text-xs font-bold text-primary">{time}</p>
-                  <p className="mt-2 font-semibold">{className}</p>
-                  <p className="text-sm text-text-soft">{subject}</p>
-                  <p className="mt-2 text-xs text-text-muted">{room}</p>
+                <div key={`${time}-${subject}`} className="flex min-h-[156px] flex-col items-start rounded-[16px] border border-border/40 bg-surface p-5 text-left transition hover:shadow-sm">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-primary">{time}</p>
+                  <p className="mt-4 text-sm font-semibold text-text">{className}</p>
+                  <p className="mt-1 flex-1 text-sm text-text-soft">{subject}</p>
+                  <div className="mt-4 flex w-full items-center justify-between border-t border-border/40 pt-4">
+                    <span className="text-xs text-text-muted">{room}</span>
+                  </div>
                 </div>
               ))}
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Assigned Subjects</h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {["Mathematics", "Computer Science", "Science", "English", "Physics", "Chemistry"].map((subject) => (
-                <div key={subject} className="rounded-2xl border border-border bg-surface p-4">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                    <BookOpen className="h-5 w-5" />
+                <div key={subject} className="flex items-center gap-4 rounded-[16px] border border-border/40 bg-surface p-4 transition hover:shadow-sm hover:border-border/80">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-primary-soft text-primary">
+                    <BookOpen className="h-6 w-6" />
                   </span>
-                  <p className="mt-3 font-semibold">{subject}</p>
-                  <p className="mt-1 text-sm text-text-muted">Active this term</p>
+                  <div>
+                    <p className="font-semibold">{subject}</p>
+                    <p className="text-[13px] text-text-muted">Active this term</p>
+                  </div>
                 </div>
               ))}
             </div>
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <Card className="p-5">
+        <div className="space-y-8">
+          <Card className="p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Quick Actions</h2>
-            <div className="mt-4 grid gap-3">
+            <div className="mt-5 grid gap-3">
               {shortcuts.map((shortcut) => {
                 const Icon = shortcut.icon;
                 return (
@@ -118,9 +122,9 @@ function TeacherDashboardPage() {
             </div>
           </Card>
 
-          <Card className="p-5">
+          <Card className="p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Recent Notices</h2>
-            <div className="mt-4 space-y-4">
+            <div className="mt-5 space-y-4">
               {["Unit test schedule published", "Staff meeting at 3 PM", "Grade 8 intervention list ready"].map((notice) => (
                 <div key={notice} className="rounded-2xl bg-surface-muted/50 p-4">
                   <p className="font-semibold">{notice}</p>

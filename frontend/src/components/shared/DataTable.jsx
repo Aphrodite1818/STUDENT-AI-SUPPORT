@@ -28,8 +28,8 @@ function DataTable({
           {data.map((item, index) => (
             <tr key={item.id || index}>
               {columns.map((column) => (
-                <td key={column.key}>
-                  {column.render ? column.render(item) : item[column.key] || "N/A"}
+                <td key={column.key} data-label={column.label}>
+                  <span>{column.render ? column.render(item) : item[column.key] || "N/A"}</span>
                 </td>
               ))}
             </tr>

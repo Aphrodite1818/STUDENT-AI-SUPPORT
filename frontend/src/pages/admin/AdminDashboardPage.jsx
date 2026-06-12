@@ -56,7 +56,7 @@ const subjectTone = {
 
 function TimetableCard({ items = [] }) {
   return (
-    <Card className="p-5">
+    <Card className="p-5 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
@@ -70,27 +70,27 @@ function TimetableCard({ items = [] }) {
         <Button variant="ghost" size="sm">View full timetable</Button>
       </div>
 
-      <div className="mt-5 overflow-x-auto pb-2">
-        <div className="grid min-w-[760px] grid-cols-6 gap-3">
+      <div className="mt-6 pb-1">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
           {items.map((item) => (
             <div
               key={`${item.time}-${item.subject}`}
               className={cn(
-                "rounded-2xl border p-4 text-center transition",
+                "flex min-h-[164px] flex-col items-start rounded-[16px] border border-border/40 p-5 text-left transition hover:shadow-sm",
                 item.active
-                  ? "border-primary bg-primary-subtle shadow-sm"
-                  : "border-border bg-surface hover:border-primary/30"
+                  ? "bg-primary-subtle border-primary/20"
+                  : "bg-surface hover:border-border/80"
               )}
             >
-              <p className="text-xs font-semibold text-primary">{item.time}</p>
-              <p className="mt-3 text-sm font-semibold">{item.className}</p>
-              <p className="mt-1 text-sm font-bold text-primary">{item.subject}</p>
-              <p className="mt-1 text-xs text-text-muted">{item.room}</p>
-              {item.students && (
-                <p className="mt-3 text-xs font-semibold text-text-muted">
-                  {item.students} students
-                </p>
-              )}
+              <p className="text-[11px] font-bold uppercase tracking-wider text-primary">{item.time}</p>
+              <p className="mt-4 text-sm font-semibold text-text">{item.className}</p>
+              <p className="mt-1 flex-1 text-sm text-text-soft">{item.subject}</p>
+              <div className="mt-4 flex w-full items-center justify-between border-t border-border/40 pt-4">
+                <span className="text-xs text-text-muted">{item.room}</span>
+                {item.students && (
+                  <span className="text-xs font-semibold text-text-soft">{item.students} students</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -101,7 +101,7 @@ function TimetableCard({ items = [] }) {
 
 function AttendanceActions({ classes = [] }) {
   return (
-    <Card className="p-5">
+    <Card className="p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
@@ -113,31 +113,33 @@ function AttendanceActions({ classes = [] }) {
           </div>
         </div>
       </div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {classes.map((item) => (
           <button
             key={item.className}
             type="button"
             className={cn(
-              "rounded-2xl border p-4 text-left transition hover:-translate-y-0.5",
+              "flex flex-col items-start rounded-[16px] border p-5 text-left transition hover:-translate-y-0.5",
               item.active
                 ? "border-primary bg-primary text-white shadow-sm shadow-primary/20"
-                : "border-border bg-surface hover:border-primary/30 hover:bg-primary-subtle"
+                : "border-border/40 bg-surface hover:border-border/80 hover:shadow-sm"
             )}
           >
-            <span className={cn("flex h-10 w-10 items-center justify-center rounded-full", item.active ? "bg-white/15" : "bg-primary-soft text-primary")}>
-              <Users className="h-5 w-5" />
-            </span>
-            <p className="mt-3 text-sm font-semibold">{item.className}</p>
-            <p className={cn("text-sm", item.active ? "text-white/80" : "text-text-muted")}>{item.subject}</p>
-            <p className={cn("mt-2 text-xs font-semibold", item.active ? "text-white/80" : "text-text-muted")}>
-              {item.students} students
-            </p>
+            <div className="flex w-full items-center justify-between">
+              <span className={cn("flex h-10 w-10 items-center justify-center rounded-[12px]", item.active ? "bg-white/20 text-white" : "bg-primary-soft text-primary")}>
+                <Users className="h-5 w-5" />
+              </span>
+              <p className={cn("text-xs font-semibold", item.active ? "text-white/90" : "text-text-muted")}>
+                {item.students} students
+              </p>
+            </div>
+            <p className="mt-4 text-base font-semibold">{item.className}</p>
+            <p className={cn("mt-1 text-sm", item.active ? "text-white/80" : "text-text-soft")}>{item.subject}</p>
           </button>
         ))}
         <button
           type="button"
-          className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface text-sm font-semibold text-text-muted transition hover:border-primary/40 hover:bg-primary-subtle hover:text-primary"
+          className="flex min-h-[140px] flex-col items-center justify-center rounded-[16px] border border-dashed border-border/60 bg-surface/50 text-sm font-semibold text-text-muted transition hover:border-primary/40 hover:bg-primary-subtle hover:text-primary"
         >
           <Plus className="mb-2 h-5 w-5" />
           Other class
@@ -151,16 +153,16 @@ function PerformanceCard({ data = [] }) {
   const chartData = [{ name: "Average", value: data[0]?.value || 78 }];
 
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between gap-3">
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Student Performance Overview</h2>
           <p className="text-sm text-text-muted">This term at a glance.</p>
         </div>
         <Button variant="outline" size="sm">This Term</Button>
       </div>
-      <div className="mt-5 grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
-        <div className="relative h-44">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-center">
+        <div className="relative mx-auto h-52 w-full max-w-[240px] xl:h-56">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -198,7 +200,7 @@ function PerformanceCard({ data = [] }) {
             ["Average Attendance", "92%", "+3% vs last term", "success"],
             ["Assessments Done", "24", "This term", "primary"],
           ].map(([label, value, detail, tone]) => (
-            <div key={label} className="rounded-2xl border border-border bg-surface-muted/40 p-4">
+            <div key={label} className="min-h-[112px] rounded-2xl border border-border bg-surface-muted/40 p-4">
               <p className="text-xs font-semibold text-text-muted">{label}</p>
               <p className="mt-2 text-2xl font-semibold">{value}</p>
               <p className={cn("mt-1 text-xs font-semibold", tone === "error" ? "text-error" : tone === "success" ? "text-success" : "text-primary")}>
@@ -208,14 +210,14 @@ function PerformanceCard({ data = [] }) {
           ))}
         </div>
       </div>
-      <Button variant="outline" size="sm" className="mt-4">View detailed analytics</Button>
+      <Button variant="outline" size="sm" className="mt-5 w-full sm:w-auto">View detailed analytics</Button>
     </Card>
   );
 }
 
 function AssignedClasses({ classes = [] }) {
   return (
-    <Card className="p-5">
+    <Card className="p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
@@ -225,7 +227,7 @@ function AssignedClasses({ classes = [] }) {
         </div>
         <Button variant="ghost" size="sm">View all</Button>
       </div>
-      <div className="mt-5 space-y-3">
+      <div className="mt-6 space-y-4">
         {classes.map((item) => (
           <button key={item.className} type="button" className="w-full rounded-2xl border border-border bg-surface p-4 text-left transition hover:border-primary/30 hover:bg-primary-subtle">
             <div className="flex items-start gap-3">
@@ -256,12 +258,12 @@ function AssignedClasses({ classes = [] }) {
 
 function ListCard({ title, items = [], action = "View all", icon: Icon = Megaphone }) {
   return (
-    <Card className="p-5">
+    <Card className="p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{title}</h2>
         <Button variant="ghost" size="sm">{action}</Button>
       </div>
-      <div className="mt-4 divide-y divide-border">
+      <div className="mt-5 divide-y divide-border">
         {items.map((item) => {
           const ToneIcon = toneIcons[item.tone] || Icon;
           return (
@@ -301,13 +303,13 @@ function AttendanceSnapshot({ weeklyAttendance = [] }) {
   ];
 
   return (
-    <Card className="p-5">
+    <Card className="p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Attendance Snapshot</h2>
         <Button variant="outline" size="sm">This Week</Button>
       </div>
-      <div className="mt-5 grid gap-5 md:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[170px_minmax(0,1fr)]">
-        <div className="relative h-44">
+      <div className="mt-6 grid gap-6 md:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[190px_minmax(0,1fr)]">
+        <div className="relative mx-auto h-52 w-full max-w-[230px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={totals} dataKey="value" innerRadius={54} outerRadius={76} paddingAngle={3}>
@@ -334,7 +336,7 @@ function AttendanceSnapshot({ weeklyAttendance = [] }) {
           ))}
         </div>
       </div>
-      <div className="mt-5 h-40">
+      <div className="mt-6 h-48 rounded-2xl border border-border/50 bg-surface-muted/30 p-3">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={weeklyAttendance}>
             <CartesianGrid vertical={false} stroke="#E2E8F0" />
@@ -361,7 +363,7 @@ function AiActivity({ items = [] }) {
           <p className="text-sm text-text-muted">Automations and summaries from the last 24 hours.</p>
         </div>
       </div>
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
           <div key={item.title} className="rounded-2xl border border-border bg-surface-muted/40 p-4">
             <p className="text-sm font-semibold text-primary">{item.title}</p>
@@ -413,7 +415,7 @@ function AdminDashboardPage() {
         </>
       }
     >
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {overview.stats.map((stat, index) => (
           <StatCard
             key={stat.label}
@@ -424,25 +426,25 @@ function AdminDashboardPage() {
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="space-y-6">
+      <section className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-8">
           <TimetableCard items={overview.timetable} />
           <AttendanceActions classes={overview.attendanceClasses} />
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-8 2xl:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
             <PerformanceCard data={overview.performance} />
             <AssignedClasses classes={overview.assignedClasses} />
           </div>
           <AiActivity items={overview.aiActivity} />
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-8">
           <ListCard title="Recent Notices" items={overview.notices} />
           <ListCard title="AI Insights" items={overview.insights} icon={Sparkles} />
           <AttendanceSnapshot weeklyAttendance={overview.weeklyAttendance} />
-          <Card className="p-5">
+          <Card className="p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Enrollment Trends</h2>
             <p className="text-sm text-text-muted">New admissions across recent terms.</p>
-            <div className="mt-5 h-48">
+            <div className="mt-6 h-56 rounded-2xl border border-border/50 bg-surface-muted/30 p-3">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={[
@@ -452,12 +454,19 @@ function AdminDashboardPage() {
                     { month: "Apr", students: 1160 },
                     { month: "May", students: 1248 },
                   ]}
+                  margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
                 >
-                  <CartesianGrid vertical={false} stroke="#E2E8F0" />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                  <defs>
+                    <linearGradient id="colorStudents" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} stroke="#E2E8F0" strokeDasharray="4 4" />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#64748B' }} dy={10} />
                   <YAxis hide />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="students" stroke="#2563EB" fill="#DBEAFE" strokeWidth={3} />
+                  <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 30px rgba(15, 23, 42, 0.08)', padding: '12px' }} />
+                  <Area type="monotone" dataKey="students" stroke="#2563EB" fill="url(#colorStudents)" strokeWidth={3} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>

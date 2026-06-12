@@ -24,26 +24,26 @@ function StatCard({
   const TrendIcon = trend === "down" ? ArrowDownRight : ArrowUpRight;
 
   return (
-    <Card className={cn("p-5", className)}>
+    <Card className={cn("min-h-[148px] p-4 sm:p-5 md:p-6 bg-surface shadow-sm border-border/40", className)}>
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-text-muted">{label}</p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight text-text">{value}</p>
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium tracking-wide text-text-muted uppercase">{label}</p>
+          <p className="mt-2 truncate text-2xl font-semibold tracking-tight text-text sm:text-3xl md:text-4xl">{value}</p>
         </div>
         {Icon && (
-          <span className={cn("flex h-11 w-11 items-center justify-center rounded-2xl", toneClasses[tone] || toneClasses.primary)}>
-            <Icon className="h-5 w-5" />
+          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] sm:h-12 sm:w-12", toneClasses[tone] || toneClasses.primary)}>
+            <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
           </span>
         )}
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-5 flex flex-wrap items-center gap-2">
         {change && (
           <Badge variant={trend === "down" ? "error" : "success"}>
             <TrendIcon className="h-3.5 w-3.5" />
             {change}
           </Badge>
         )}
-        {description && <span className="text-xs text-text-muted">{description}</span>}
+        {description && <span className="text-xs font-medium text-text-muted">{description}</span>}
       </div>
     </Card>
   );

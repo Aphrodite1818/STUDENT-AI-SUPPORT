@@ -286,19 +286,19 @@ function ResourcePage({ config }) {
   return (
     <div className="mx-auto max-w-7xl space-y-5">
       {error && (
-        <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+        <div className="rounded-2xl border border-error/30 bg-error-soft px-4 py-3 text-sm font-medium text-error">
           {error}
         </div>
       )}
       {successMessage && (
-        <div className="rounded-md border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700">
+        <div className="rounded-2xl border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-emerald-700">
           {successMessage}
         </div>
       )}
 
-      <div className={`grid gap-5 ${showForm ? "xl:grid-cols-[420px_minmax(0,1fr)]" : ""}`}>
+      <div className={`grid gap-5 ${showForm ? "xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]" : ""}`}>
         {showForm && (
-          <Card className="p-5">
+          <Card className="p-4 sm:p-5 xl:sticky xl:top-28 xl:self-start">
             <h2 className="text-lg font-semibold">
               {editingItem ? `Edit ${config.singularLabel.toLowerCase()}` : `Create ${config.singularLabel.toLowerCase()}`}
             </h2>
@@ -320,12 +320,12 @@ function ResourcePage({ config }) {
                   />
                 ))}
 
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={isSubmitting}>
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
+                <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                   {isSubmitting ? "Saving..." : editingItem ? "Save changes" : "Create"}
                 </Button>
                 {editingItem && (
-                  <Button type="button" variant="outline" onClick={resetForm}>
+                  <Button type="button" variant="outline" onClick={resetForm} className="w-full sm:w-auto">
                     Cancel
                   </Button>
                 )}
@@ -334,7 +334,7 @@ function ResourcePage({ config }) {
           </Card>
         )}
 
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-lg font-semibold">{config.pluralLabel}</h2>
@@ -342,7 +342,7 @@ function ResourcePage({ config }) {
                 {total} record{total === 1 ? "" : "s"} found.
               </p>
             </div>
-            <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
+            <Button variant="outline" onClick={handleRefresh} disabled={isLoading} className="w-full md:w-auto">
               Refresh
             </Button>
           </div>
@@ -353,7 +353,7 @@ function ResourcePage({ config }) {
                 event.preventDefault();
                 loadItems(filters);
               }}
-              className="mt-5 grid gap-3 rounded-md border border-border bg-background/70 p-4 md:grid-cols-3 xl:grid-cols-4"
+              className="mt-5 grid gap-3 rounded-2xl border border-border bg-surface-muted/40 p-4 md:grid-cols-3 xl:grid-cols-4"
             >
               {filterFields.map((field) => (
                 <FormControl
@@ -363,28 +363,28 @@ function ResourcePage({ config }) {
                   onChange={handleFilterChange}
                 />
               ))}
-              <div className="flex items-end gap-2">
-                <Button type="submit" size="small">
+              <div className="grid gap-2 sm:flex sm:items-end">
+                <Button type="submit" size="small" className="w-full sm:w-auto">
                   Apply
                 </Button>
-                <Button type="button" variant="outline" size="small" onClick={clearFilters}>
+                <Button type="button" variant="outline" size="small" onClick={clearFilters} className="w-full sm:w-auto">
                   Clear
                 </Button>
               </div>
             </form>
           )}
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-border text-text-muted">
+          <div className="mt-5 table-wrap">
+            <table className="data-table">
+              <thead>
                 <tr>
                   {columns.map((column) => (
-                    <th key={column.key} className="py-3 pr-4 font-medium">
+                    <th key={column.key}>
                       {column.label}
                     </th>
                   ))}
                   {(config.canUpdate || config.canDelete) && (
-                    <th className="py-3 font-medium">Actions</th>
+                    <th>Actions</th>
                   )}
                 </tr>
               </thead>
@@ -393,31 +393,31 @@ function ResourcePage({ config }) {
                   <tr>
                     <td
                       colSpan={columns.length + 1}
-                      className="py-6 text-text-muted"
+                      className="text-text-muted"
                     >
-                      Loading {config.pluralLabel.toLowerCase()}...
+                      <span>Loading {config.pluralLabel.toLowerCase()}...</span>
                     </td>
                   </tr>
                 ) : items.length === 0 ? (
                   <tr>
                     <td
                       colSpan={columns.length + 1}
-                      className="py-6 text-text-muted"
+                      className="text-text-muted"
                     >
-                      No records found.
+                      <span>No records found.</span>
                     </td>
                   </tr>
                 ) : (
                   items.map((item) => (
-                    <tr key={item.id} className="border-b border-border/60">
+                    <tr key={item.id}>
                       {columns.map((column) => (
-                        <td key={column.key} className="py-4 pr-4 align-top">
-                          {column.render ? column.render(item, context) : item[column.key] || "N/A"}
+                        <td key={column.key} data-label={column.label}>
+                          <span>{column.render ? column.render(item, context) : item[column.key] || "N/A"}</span>
                         </td>
                       ))}
                       {(config.canUpdate || config.canDelete) && (
-                        <td className="py-4 align-top">
-                          <div className="flex flex-wrap gap-2">
+                        <td data-label="Actions">
+                          <div className="grid w-full gap-2 sm:flex sm:flex-wrap md:w-auto">
                             {config.canUpdate && (
                               <Button
                                 type="button"
@@ -425,6 +425,7 @@ function ResourcePage({ config }) {
                                 size="small"
                                 onClick={() => handleEdit(item)}
                                 disabled={busyId === item.id}
+                                className="w-full sm:w-auto"
                               >
                                 Edit
                               </Button>
@@ -436,6 +437,7 @@ function ResourcePage({ config }) {
                                 size="small"
                                 onClick={() => handleDelete(item)}
                                 disabled={busyId === item.id}
+                                className="w-full sm:w-auto"
                               >
                                 {busyId === item.id ? "Deleting..." : "Delete"}
                               </Button>

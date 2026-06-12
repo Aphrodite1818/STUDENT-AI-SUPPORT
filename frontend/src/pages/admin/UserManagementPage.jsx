@@ -218,15 +218,15 @@ function UserManagementPage() {
 
                     return (
                       <tr key={user.id}>
-                        <td className="font-semibold">{fullName || "No name"}</td>
-                        <td className="capitalize">{user.role}</td>
-                        <td>
+                        <td className="font-semibold" data-label="Name">{fullName || "No name"}</td>
+                        <td className="capitalize" data-label="Role">{user.role}</td>
+                        <td data-label="Status">
                           <Badge variant={statusVariant(user.account_status)}>
                             {user.account_status || "unknown"}
                           </Badge>
                         </td>
-                        <td>{user.email}</td>
-                        <td>
+                        <td data-label="Email">{user.email}</td>
+                        <td data-label="Actions">
                           <div className="flex flex-wrap gap-2">
                             {canResend ? (
                               <Button variant="outline" size="sm" onClick={() => handleResendInvite(user.id)} disabled={resendingUserId === user.id}>

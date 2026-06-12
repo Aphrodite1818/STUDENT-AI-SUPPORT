@@ -1,3 +1,5 @@
+import EmptyState from "../shared/EmptyState";
+
 function Table({ columns = [], rows = [], emptyText = "No records found.", isLoading = false }) {
   return (
     <div className="table-wrap">
@@ -18,16 +20,18 @@ function Table({ columns = [], rows = [], emptyText = "No records found.", isLoa
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="text-text-muted">
-                {emptyText}
+              <td colSpan={columns.length} className="p-0 border-none">
+                <div className="p-6 md:p-12 border-none">
+                  <EmptyState title="No data found" description={emptyText} />
+                </div>
               </td>
             </tr>
           ) : (
             rows.map((row, index) => (
               <tr key={row.id || index}>
                 {columns.map((column) => (
-                  <td key={column.key}>
-                    {column.render ? column.render(row) : row[column.key] || "N/A"}
+                  <td key={column.key} data-label={column.label}>
+                    <span>{column.render ? column.render(row) : row[column.key] || "N/A"}</span>
                   </td>
                 ))}
               </tr>

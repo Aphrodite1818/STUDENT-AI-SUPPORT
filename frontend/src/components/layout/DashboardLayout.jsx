@@ -39,6 +39,7 @@ import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
 import { authSession } from "../../services/api";
 import { cn } from "../../utils/cn";
+import BottomNav from "./BottomNav";
 
 const roleLabels = {
   admin: "Administrator",
@@ -267,7 +268,7 @@ function Topbar({ title, role, onOpenMobileNav }) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-xl">
-      <div className="flex min-h-20 items-center gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="flex min-h-16 items-center gap-3 px-4 sm:min-h-20 sm:px-6 lg:px-8">
         <Button
           type="button"
           variant="ghost"
@@ -288,6 +289,7 @@ function Topbar({ title, role, onOpenMobileNav }) {
           <Search className="h-4 w-4 text-text-faint" />
           <input
             type="search"
+            aria-label="Search workspace"
             placeholder="Search students, classes, teachers, notes..."
             className="w-full bg-transparent text-sm text-text outline-none placeholder:text-text-faint"
           />
@@ -345,7 +347,7 @@ function Topbar({ title, role, onOpenMobileNav }) {
 
           <Dropdown
             trigger={
-              <button type="button" className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-1.5 pr-3 shadow-sm transition hover:bg-surface-muted">
+              <button type="button" className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-1.5 pr-3 shadow-sm transition hover:bg-surface-muted" aria-label="Open account menu">
                 <Avatar name={userName} />
                 <span className="hidden min-w-0 text-left xl:block">
                   <span className="block max-w-32 truncate text-sm font-semibold">{userName}</span>
@@ -424,6 +426,12 @@ function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background text-text">
+      <a
+        href="#dashboard-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to content
+      </a>
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-surface lg:block",
@@ -454,8 +462,8 @@ function DashboardLayout({
       <div className={cn("min-h-screen transition-all duration-300", collapsed ? "lg:pl-[88px]" : "lg:pl-[272px]")}>
         <Topbar title={pageTitle} role={role} onOpenMobileNav={() => setMobileOpen(true)} />
 
-        <main className="px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-          <div className="mx-auto max-w-[1400px] space-y-6">
+        <main id="dashboard-content" className="px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-6 lg:pb-6">
+          <div className="mx-auto max-w-[1400px] w-full space-y-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
@@ -480,6 +488,7 @@ function DashboardLayout({
           </div>
         </main>
       </div>
+      <BottomNav role={role} onOpenMenu={() => setMobileOpen(true)} />
     </div>
   );
 }

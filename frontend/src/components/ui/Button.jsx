@@ -1,13 +1,13 @@
 import { cn } from "../../utils/cn";
 
 const variantStyles = {
-  primary: "bg-primary text-text-inverse shadow-sm shadow-primary/20 hover:bg-primary-hover",
-  secondary: "bg-secondary text-text-inverse hover:bg-secondary-hover",
-  accent: "bg-accent text-text-inverse shadow-sm shadow-accent/20 hover:bg-accent-hover",
-  outline: "border border-border bg-surface text-text-soft hover:border-primary/40 hover:bg-primary-subtle hover:text-primary",
-  ghost: "bg-transparent text-text-soft hover:bg-surface-muted hover:text-text",
-  danger: "bg-error text-text-inverse hover:bg-error-hover",
-  success: "bg-success text-text-inverse hover:bg-success-hover",
+  primary: "bg-gradient-to-b from-primary/90 to-primary text-text-inverse shadow-sm shadow-primary/20 hover:from-primary hover:to-primary-hover border border-primary/20",
+  secondary: "bg-gradient-to-b from-secondary/90 to-secondary text-text-inverse shadow-sm hover:from-secondary hover:to-secondary-hover border border-secondary/20",
+  accent: "bg-gradient-to-b from-accent/90 to-accent text-text-inverse shadow-sm shadow-accent/20 hover:from-accent hover:to-accent-hover border border-accent/20",
+  outline: "border border-border/80 bg-surface text-text-soft shadow-sm hover:border-border hover:bg-surface-muted/50 hover:text-text",
+  ghost: "bg-transparent text-text-soft hover:bg-surface-muted/50 hover:text-text",
+  danger: "bg-gradient-to-b from-error/90 to-error text-text-inverse shadow-sm hover:from-error hover:to-error-hover border border-error/20",
+  success: "bg-gradient-to-b from-success/90 to-success text-text-inverse shadow-sm hover:from-success hover:to-success-hover border border-success/20",
 };
 
 const sizeStyles = {
@@ -24,10 +24,12 @@ function Button({
   variant = "primary",
   size = "medium",
   className = "",
+  type = "button",
   ...props
 }) {
   return (
     <button
+      type={type}
       className={cn(
         "btn-base",
         variantStyles[variant] || variantStyles.primary,
