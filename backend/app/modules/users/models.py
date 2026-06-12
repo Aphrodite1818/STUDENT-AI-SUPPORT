@@ -11,6 +11,7 @@ from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 
 class UserRole(str, Enum):
+    """Represent the UserRole type."""
     TEACHER = "teacher"
     STUDENT = "student"
     ADMIN = "admin"
@@ -18,6 +19,7 @@ class UserRole(str, Enum):
 
 
 class AccountStatus(str, Enum):
+    """Enumeration of supported users values."""
     ACTIVE = "active"
     BANNED = "banned"
     SUSPENDED = "suspended"
@@ -26,6 +28,7 @@ class AccountStatus(str, Enum):
 
 
 class User(BaseModel):
+    """Represent the User type."""
     __tablename__ = "users"
 
     firstname: Mapped[str | None] = mapped_column(String(100), nullable=True)

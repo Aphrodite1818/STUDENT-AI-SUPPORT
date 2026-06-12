@@ -14,12 +14,14 @@ from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 
 class TeacherStatus(str, Enum):
+    """Enumeration of supported teachers values."""
     ACTIVE = "active"
     INACTIVE = "inactive"
     ARCHIVED = "archived"
 
 
 class Teacher(BaseModel):
+    """Represent the Teacher type."""
     __tablename__ = "teachers"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -57,18 +59,22 @@ class Teacher(BaseModel):
 
     @property
     def firstname(self) -> str | None:
+        """Return the firstname value for the teacher."""
         return self.user.firstname if self.user else None
 
     @property
     def lastname(self) -> str | None:
+        """Return the lastname value for the teacher."""
         return self.user.lastname if self.user else None
 
     @property
     def email(self) -> str | None:
+        """Return the email value for the teacher."""
         return self.user.email if self.user else None
 
     @property
     def subjects(self) -> list[Any]:
+        """Return the subjects value for the teacher."""
         return [link.subject for link in self.subject_links if link.subject is not None]
 
     __table_args__ = (

@@ -14,6 +14,7 @@ class SubjectRepository:
 
     @staticmethod
     async def create_subject(db: AsyncSession, subject: Subject) -> Subject:
+        """Create subject."""
         db.add(subject)
         await db.flush()
         await db.refresh(subject)
@@ -26,6 +27,7 @@ class SubjectRepository:
         subject_id: UUID,
         teacher_ids: list[UUID],
     ) -> list[TeacherSubject]:
+        """Create teacher subject links."""
         teacher_subject_links = [
             TeacherSubject(
                 tenant_id=tenant_id,
@@ -45,6 +47,7 @@ class SubjectRepository:
         tenant_id: UUID,
         subject_id: UUID,
     ) -> Subject | None:
+        """Return subject by id."""
         result = await db.execute(
             select(Subject)
             .options(
@@ -66,6 +69,7 @@ class SubjectRepository:
         tenant_id: UUID,
         subject_name: str,
     ) -> Subject | None:
+        """Return subject by name."""
         result = await db.execute(
             select(Subject).where(
                 Subject.tenant_id == tenant_id,
@@ -80,6 +84,7 @@ class SubjectRepository:
         tenant_id: UUID,
         subject_code: str,
     ) -> Subject | None:
+        """Return subject by code."""
         result = await db.execute(
             select(Subject).where(
                 Subject.tenant_id == tenant_id,
@@ -94,6 +99,7 @@ class SubjectRepository:
         tenant_id: UUID,
         subject_ids: list[UUID],
     ) -> list[Subject]:
+        """Return subjects by id."""
         if not subject_ids:
             return []
 
@@ -115,6 +121,7 @@ class SubjectRepository:
         is_active: bool | None = None,
         search: str | None = None,
     ) -> tuple[list[Subject], int]:
+        """List all subjects."""
         filters = [Subject.tenant_id == tenant_id]
 
         if is_active is not None:
@@ -149,6 +156,7 @@ class SubjectRepository:
         subject: Subject,
         update_data: dict[str, Any],
     ) -> Subject:
+        """Update subject."""
         for field, value in update_data.items():
             setattr(subject, field, value)
 
@@ -158,5 +166,6 @@ class SubjectRepository:
 
     @staticmethod
     async def delete_subject(db: AsyncSession, subject: Subject) -> None:
+        """Delete subject."""
         await db.delete(subject)
         await db.flush()

@@ -5,6 +5,7 @@ from typing import Self
 
 
 class OTPRateLimiter:
+    """Represent the OTPRateLimiter type."""
     _instance = None
     _lock = Lock()
     _records: defaultdict[str, list[float]]
@@ -12,6 +13,7 @@ class OTPRateLimiter:
     _window_seconds: int
 
     def __new__(cls) -> Self:
+        """Create or return the singleton instance."""
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -23,6 +25,7 @@ class OTPRateLimiter:
         return cls._instance
 
     def is_allowed(self, email: str, purpose: str) -> tuple[bool, int]:
+        """Return whether allowed."""
         key = f"{email}:{purpose}"
         now = time.time()
 

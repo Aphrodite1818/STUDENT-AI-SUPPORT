@@ -6,10 +6,12 @@ from app.config.settings import settings
 
 
 def normalize_url(url: str) -> str:
+    """Normalize a URL string."""
     return url.strip().rstrip("/")
 
 
 def extract_base_url(url: str) -> str | None:
+    """Extract the base URL from a URL string."""
     parsed = urlsplit(url.strip())
 
     if not parsed.scheme or not parsed.netloc:
@@ -19,6 +21,7 @@ def extract_base_url(url: str) -> str | None:
 
 
 def get_allowed_frontend_origins() -> set[str]:
+    """Return the allowed frontend origins."""
     allowed_origins = getattr(settings, "ALLOWED_ORIGINS", [])
 
     return {
@@ -29,6 +32,7 @@ def get_allowed_frontend_origins() -> set[str]:
 
 
 def resolve_frontend_app_url(request: Request | None = None) -> str:
+    """Resolve the frontend application URL."""
     fallback_url = normalize_url(settings.FRONTEND_APP_URL)
     allowed_origins = get_allowed_frontend_origins()
 

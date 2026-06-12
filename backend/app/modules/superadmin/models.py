@@ -9,6 +9,7 @@ from app.shared.mixins import TimestampMixin, UUIDMixin
 
 
 class SuperAdmin(UUIDMixin, TimestampMixin, Base):
+    """Represent the SuperAdmin type."""
     __tablename__ = "superadmins"
 
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
@@ -18,6 +19,7 @@ class SuperAdmin(UUIDMixin, TimestampMixin, Base):
 
 
 class SuperAdminInvite(UUIDMixin, TimestampMixin, Base):
+    """Represent the SuperAdminInvite type."""
     __tablename__ = "superadmin_invites"
 
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)

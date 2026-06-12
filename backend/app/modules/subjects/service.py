@@ -21,6 +21,7 @@ class SubjectService:
 
     @staticmethod
     def _ensure_admin(actor: User) -> None:
+        """Internal helper for ensure admin."""
         if actor.role != UserRole.ADMIN:
             raise ForbiddenException(detail="Only tenant admins can perform this action.")
 
@@ -33,6 +34,7 @@ class SubjectService:
         actor: User,
         subject_data: SubjectCreate,
     ) -> Subject:
+        """Create subject."""
         SubjectService._ensure_admin(actor)
 
         existing_name = await SubjectRepository.get_subject_by_name(
@@ -116,6 +118,7 @@ class SubjectService:
         actor: User,
         subject_id: UUID,
     ) -> Subject:
+        """Return subject."""
         if actor.role not in (UserRole.ADMIN, UserRole.TEACHER):
             raise ForbiddenException(detail="You are not allowed to view subjects.")
 
@@ -142,6 +145,7 @@ class SubjectService:
         is_active: bool | None = None,
         search: str | None = None,
     ) -> tuple[list[Subject], int]:
+        """List subjects."""
         if actor.role not in (UserRole.ADMIN, UserRole.TEACHER):
             raise ForbiddenException(detail="You are not allowed to view subjects.")
 
@@ -166,6 +170,7 @@ class SubjectService:
         subject_id: UUID,
         subject_data: SubjectUpdate,
     ) -> Subject:
+        """Update subject."""
         SubjectService._ensure_admin(actor)
 
         subject = await SubjectRepository.get_subject_by_id(
@@ -242,6 +247,7 @@ class SubjectService:
         actor: User,
         subject_id: UUID,
     ) -> Subject:
+        """Perform activate subject."""
         SubjectService._ensure_admin(actor)
 
         subject = await SubjectRepository.get_subject_by_id(
@@ -282,6 +288,7 @@ class SubjectService:
         actor: User,
         subject_id: UUID,
     ) -> Subject:
+        """Perform deactivate subject."""
         SubjectService._ensure_admin(actor)
 
         subject = await SubjectRepository.get_subject_by_id(
@@ -322,6 +329,7 @@ class SubjectService:
         actor: User,
         subject_id: UUID,
     ) -> None:
+        """Delete subject."""
         SubjectService._ensure_admin(actor)
 
         subject = await SubjectRepository.get_subject_by_id(

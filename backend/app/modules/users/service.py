@@ -24,6 +24,7 @@ logger = get_logger(__name__)
 
 
 def _normalize_email(email: str) -> str:
+    """Normalize the email address."""
     return email.strip().lower()
 
 
@@ -37,6 +38,7 @@ class UserService:
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> Teacher:
+        """Internal helper for activate teacher profile."""
         teacher = await TeacherRepository.get_teacher_by_user_id(
             db=db,
             tenant_id=tenant_id,
@@ -66,6 +68,7 @@ class UserService:
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> None:
+        """Internal helper for archive teacher profile."""
         teacher = await TeacherRepository.get_teacher_by_user_id(
             db=db,
             tenant_id=tenant_id,
@@ -257,6 +260,7 @@ class UserService:
         background_tasks: BackgroundTasks | None = None,
         frontend_app_url: str | None = None,
     ) -> dict[str, str]:
+        """Perform resend invite."""
         if actor.role != UserRole.ADMIN:
             raise ForbiddenException(
                 detail="Only tenant admins can resend tenant user invites."

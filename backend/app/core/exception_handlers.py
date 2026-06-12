@@ -12,8 +12,11 @@ logger = get_logger(__name__)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    """Register application exception handlers."""
+
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
+        """Handle application-specific exceptions."""
         log_fn = logger.warning if exc.status_code < 500 else logger.error
         log_fn(
             "Application error",
@@ -36,6 +39,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Handle unexpected exceptions."""
         logger.exception(
             "Unhandled server error",
             extra={"method": request.method, "path": request.url.path},

@@ -5,6 +5,7 @@
 from datetime import datetime
 
 def get_otp_email_html(code: str, purpose: str, expiration_minutes: int) -> str:
+    """Return otp email html."""
     purpose_text = "account verification" if purpose == "verification" else "password reset"
     year = datetime.now().year
     
@@ -60,6 +61,7 @@ def get_teacher_onboarding_email_html(
     school_name: str,
     setup_link: str,
 ) -> str:
+    """Return teacher onboarding email html."""
     year = datetime.now().year
     return f"""
 <!DOCTYPE html>
@@ -98,6 +100,7 @@ def get_user_invite_email_html(
     school_name: str,
     setup_link: str,
 ) -> str:
+    """Return user invite email html."""
     year = datetime.now().year
     return f"""
 <!DOCTYPE html>
@@ -132,6 +135,7 @@ def get_user_invite_email_html(
 
 
 def get_tenant_invite_email_html(school_name: str, invite_link: str) -> str:
+    """Return tenant invite email html."""
     year = datetime.now().year
     return f"""
 <!DOCTYPE html>

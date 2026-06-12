@@ -17,12 +17,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class EnvironmentType(str, Enum): 
+    """Supported application environments."""
     DEVELOPMENT = "dev"
     PRODUCTION = "prod"
     STAGING = "stg"
 
 
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
@@ -83,6 +85,7 @@ class Settings(BaseSettings):
     @computed_field  #creates and compute the value of this property method
     @property
     def is_development(self) -> bool:
+        """Return whether the application is running in development mode."""
         return self.ENV == EnvironmentType.DEVELOPMENT #returns True if the env is a development environment
 
 

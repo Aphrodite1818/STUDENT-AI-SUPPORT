@@ -33,6 +33,7 @@ class OutputBase(BaseModel):
 def _clean_optional_string(
     value: str | None,
 ) -> str | None:
+    """Internal helper for clean optional string."""
     if value is None:
         return None
 
@@ -42,6 +43,7 @@ def _clean_optional_string(
 
 
 class TeacherUpdate(InputBase):
+    """Pydantic schema for the teachers domain."""
     staff_id: str | None = Field(
         default=None,
         max_length=50,
@@ -73,16 +75,19 @@ class TeacherUpdate(InputBase):
         cls,
         value: str | None,
     ) -> str | None:
+        """Normalize optional text fields."""
         return _clean_optional_string(value)
 
 
 class SubjectSummaryResponse(OutputBase):
+    """Pydantic schema for the teachers domain."""
     id: uuid.UUID
     name: str
     code: str | None
 
 
 class TeacherResponse(OutputBase):
+    """Pydantic schema for the teachers domain."""
     id: uuid.UUID
     tenant_id: uuid.UUID
     user_id: uuid.UUID
@@ -99,5 +104,6 @@ class TeacherResponse(OutputBase):
 
 
 class TeacherListResponse(OutputBase):
+    """Pydantic schema for the teachers domain."""
     items: list[TeacherResponse]
     total: int

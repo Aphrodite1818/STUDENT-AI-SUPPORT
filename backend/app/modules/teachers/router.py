@@ -38,6 +38,7 @@ async def list_teachers(
     limit: int = Query(default=50, ge=1, le=100),
     search: str | None = Query(default=None, min_length=1, max_length=200),
 ) -> TeacherListResponse:
+    """List teachers."""
     teachers, total = await TeacherService.list_teachers(
         db=db,
         actor=current_user,
@@ -62,6 +63,7 @@ async def get_teacher_by_id(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> Teacher:
+    """Return teacher by id."""
     return await TeacherService.get_teacher(
         db=db,
         actor=current_user,
@@ -80,6 +82,7 @@ async def update_teacher(
     current_user: CurrentTenantUser,
     db: DbSession,
 ) -> Teacher:
+    """Update teacher."""
     return await TeacherService.update_teacher(
         db=db,
         actor=current_user,
@@ -98,6 +101,7 @@ async def delete_teacher(
     teacher_id: UUID,
     current_user: CurrentTenantUser,
 ) -> None:
+    """Delete teacher."""
     await TeacherService.delete_teacher(
         db=db,
         actor=current_user,

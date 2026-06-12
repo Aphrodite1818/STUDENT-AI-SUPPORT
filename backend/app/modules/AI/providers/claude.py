@@ -16,7 +16,9 @@ from app.modules.AI.providers.utils import (
 
 class ClaudeProvider(BaseLLMProvider):
 
+    """Represent the ClaudeProvider type."""
     def __init__(self, api_key: str | None, model: str, max_tokens: int) -> None:
+        """Initialize the ClaudeProvider instance."""
         self.api_key = require_api_key(api_key, "Anthropic")
         self.model = model
         self.max_tokens = max_tokens
@@ -26,6 +28,7 @@ class ClaudeProvider(BaseLLMProvider):
         messages: list[dict[str, str]],
         tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        """Perform chat."""
         system_messages = [
             text_from_content(message.get("content"))
             for message in messages

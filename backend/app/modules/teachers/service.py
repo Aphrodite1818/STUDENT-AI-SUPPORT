@@ -20,11 +20,13 @@ class TeacherService:
 
     @staticmethod
     def _ensure_tenant_user(actor: User) -> None:
+        """Internal helper for ensure tenant user."""
         if not actor.tenant_id:
             raise ForbiddenException(detail="User is not attached to a tenant")
 
     @staticmethod
     def _ensure_admin(actor: User) -> None:
+        """Internal helper for ensure admin."""
         if actor.role != UserRole.ADMIN:
             raise ForbiddenException(detail="Only tenant admins can perform this action")
 
@@ -36,6 +38,7 @@ class TeacherService:
         actor: User,
         teacher_id: UUID,
     ) -> Teacher:
+        """Return teacher."""
         TeacherService._ensure_tenant_user(actor)
 
         if actor.role not in (UserRole.ADMIN, UserRole.TEACHER):
@@ -63,6 +66,7 @@ class TeacherService:
         limit: int = 50,
         search: str | None = None,
     ) -> tuple[list[Teacher], int]:
+        """List teachers."""
         TeacherService._ensure_admin(actor)
         limit = min(limit, 100)
 
@@ -81,6 +85,7 @@ class TeacherService:
         teacher_id: UUID,
         teacher_data: TeacherUpdate,
     ) -> Teacher:
+        """Update teacher."""
         TeacherService._ensure_admin(actor)
 
         teacher = await TeacherRepository.get_teacher_by_id(
@@ -200,6 +205,7 @@ class TeacherService:
         actor: User,
         teacher_id: UUID,
     ) -> None:
+        """Delete teacher."""
         TeacherService._ensure_admin(actor)
 
         teacher = await TeacherRepository.get_teacher_by_id(

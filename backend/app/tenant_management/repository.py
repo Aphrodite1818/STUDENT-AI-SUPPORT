@@ -15,6 +15,7 @@ from app.tenant_management.models import Tenant, TenantVerificationStatus
 
 
 def _normalize_email(email: str) -> str:
+    """Normalize the email address."""
     return email.strip().lower()
 
 

@@ -38,6 +38,7 @@ async def create_subject(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> Subject:
+    """Create subject."""
     return await SubjectService.create_subject(
         db=db,
         actor=current_user,
@@ -58,6 +59,7 @@ async def list_subjects(
     is_active: bool | None = Query(default=None),
     search: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> SubjectListResponse:
+    """List subjects."""
     subjects, total = await SubjectService.list_subjects(
         db=db,
         actor=current_user,
@@ -83,6 +85,7 @@ async def get_subject(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> Subject:
+    """Return subject."""
     return await SubjectService.get_subject(
         db=db,
         actor=current_user,
@@ -101,6 +104,7 @@ async def update_subject(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> Subject:
+    """Update subject."""
     return await SubjectService.update_subject(
         db=db,
         actor=current_user,
@@ -119,6 +123,7 @@ async def activate_subject(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> Subject:
+    """Perform activate subject."""
     return await SubjectService.activate_subject(
         db=db,
         actor=current_user,
@@ -136,6 +141,7 @@ async def deactivate_subject(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> Subject:
+    """Perform deactivate subject."""
     return await SubjectService.deactivate_subject(
         db=db,
         actor=current_user,
@@ -153,6 +159,7 @@ async def delete_subject(
     db: DbSession,
     current_user: CurrentTenantUser,
 ) -> None:
+    """Delete subject."""
     await SubjectService.delete_subject(
         db=db,
         actor=current_user,

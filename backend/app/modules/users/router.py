@@ -76,6 +76,7 @@ async def resend_invite(
     request: Request,
     current_user: TenantAdminUser,
 ) -> dict[str, str]:
+    """Perform resend invite."""
     return await UserService.resend_invite(
         db,
         current_user,

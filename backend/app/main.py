@@ -27,6 +27,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # fixed: was [None, Any, None]
+    """Perform lifespan."""
     logger.info("Starting up — school-ai-assistant API")
     yield
     logger.info("Shutting down — closing DB connections")
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # fixed: was [N
 # ── App factory ───────────────────────────────────────────────────────────────
 
 def create_app() -> FastAPI:
+    """Create app."""
     app = FastAPI(
         title="LearnlyAI Assistant",
         description="WhatsApp-powered school management assistant API",
@@ -73,6 +75,7 @@ def create_app() -> FastAPI:
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])
     async def health() -> dict[str, str]:
+        """Perform health."""
         return {"status": "ok"}
 
     return app

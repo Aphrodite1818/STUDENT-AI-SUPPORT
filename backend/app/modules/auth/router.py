@@ -26,6 +26,7 @@ router = APIRouter()
 
 
 class LoginResponse(Token):
+    """Pydantic schema for the auth domain."""
     detail: str | None = None
     resend_otp_available: bool = False
     email: str | None = None
@@ -39,6 +40,7 @@ async def login(
     db: DbSession,
     background_tasks: BackgroundTasks,
 ) -> LoginResponse:
+    """Perform login."""
     actor = await AuthService.authenticate_actor(
         db,
         payload,
@@ -70,6 +72,7 @@ async def request_otp(
     db: DbSession,
     background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
+    """Perform request otp."""
     await OTPService.generate_otp(
         db,
         payload,
@@ -81,11 +84,13 @@ async def request_otp(
 
 @router.post("/verify-otp")
 async def verify_otp(payload: VerifyOTP, db: DbSession):
+    """Perform verify otp."""
     return await OTPService.verify_otp(db, payload)
 
 
 @router.post("/reset-password")
 async def reset_password(payload: UpdatePassword, db: DbSession) -> dict[str, str]:
+    """Perform reset password."""
     await AuthService.reset_password(db, payload)
 
     return {"detail": "Password has been successfully reset. You may now log in."}
@@ -96,11 +101,13 @@ async def activate_tenant(
     payload: TenantActivationRequest,
     db: DbSession,
 ) -> dict[str, str]:
+    """Perform activate tenant."""
     return await TenantActivationService.activate_tenant(db, payload)
 
 
 @router.get("/invite-status")
 async def get_invite_status(token: str, db: DbSession) -> dict[str, str | None]:
+    """Return invite status."""
     return await UserInviteService.get_invite_status(db, token)
 
 
@@ -109,4 +116,5 @@ async def accept_invite(
     payload: UserInviteAcceptanceRequest,
     db: DbSession,
 ) -> dict[str, str]:
+    """Perform accept invite."""
     return await UserInviteService.accept_invite(db, payload)

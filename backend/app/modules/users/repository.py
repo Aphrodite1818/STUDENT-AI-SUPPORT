@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 
 
 def _normalize_email(email: str) -> str:
+    """Normalize the email address."""
     return email.strip().lower()
 
 
@@ -27,6 +28,7 @@ class UserRepository:
     # create
     @staticmethod
     async def create_user(db: AsyncSession, user: User) -> User:
+        """Create user."""
         logger.debug(
             "Persisting new user to session",
             extra={"tenant_id": str(user.tenant_id), "email": user.email},
@@ -50,6 +52,7 @@ class UserRepository:
     # read
     @staticmethod
     async def get_user_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
+        """Return user by id."""
         logger.debug(
             "Querying user by ID",
             extra={"user_id": str(user_id)},
@@ -63,6 +66,7 @@ class UserRepository:
 
     @staticmethod
     async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+        """Return user by email."""
         normalized_email = _normalize_email(email)
         logger.debug(
             "Querying user by email",
@@ -78,6 +82,7 @@ class UserRepository:
 
     @staticmethod
     async def get_by_phone_number(db: AsyncSession, phone_number: str) -> User | None:
+        """Return the record matched by phone number."""
         logger.debug(
             "Querying user by phone number",
             extra={"phone_number": phone_number},
@@ -92,6 +97,7 @@ class UserRepository:
 
     @staticmethod
     async def get_by_whatsapp_id(db: AsyncSession, whatsapp_id: str) -> User | None:
+        """Return the record matched by whatsapp id."""
         logger.debug(
             "Querying user by WhatsApp ID",
             extra={"whatsapp_id": whatsapp_id},
@@ -112,6 +118,7 @@ class UserRepository:
         tenant_id: uuid.UUID | None = None,
         role: str | None = None,
     ) -> list[User]:
+        """Return all users."""
         log_extra: dict[str, Any] = {"skip": skip, "limit": limit}
         if tenant_id is not None:
             log_extra["tenant_id"] = str(tenant_id)
@@ -147,6 +154,7 @@ class UserRepository:
 
     @staticmethod
     async def check_email_exists(db: AsyncSession, email: str) -> bool:
+        """Perform check email exists."""
         normalized_email = _normalize_email(email)
         result = await db.execute(
             select(exists().where(func.lower(User.email) == normalized_email))
@@ -156,6 +164,7 @@ class UserRepository:
 
     @staticmethod
     async def save_user(db: AsyncSession, user: User) -> User:
+        """Perform save user."""
         logger.debug(
             "Flushing user changes",
             extra={"tenant_id": str(user.tenant_id), "user_id": str(user.id)},
@@ -176,6 +185,7 @@ class UserRepository:
 
     @staticmethod
     async def delete_user(db: AsyncSession, user: User) -> None:
+        """Delete user."""
         logger.debug(
             "Deleting user",
             extra={"tenant_id": str(user.tenant_id), "user_id": str(user.id)},
