@@ -5,6 +5,8 @@
 @layer base {
   :root {
     color-scheme: light;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
   }
 
   html {
@@ -12,228 +14,122 @@
   }
 
   body {
-    @apply m-0 bg-background text-text antialiased font-sans;
+    @apply m-0 bg-background font-sans text-text antialiased;
+  }
+
+  * {
+    @apply border-border;
   }
 
   ::selection {
-    background-color: #FFF8E1;
-    color: #F59E0B;
+    @apply bg-primary-soft text-primary-deep;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display font-semibold text-text;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
 }
 
 @layer components {
-
-  /* --- CARD --- */
   .card-base {
-    @apply rounded-2xl border border-border bg-surface shadow-premium;
+    @apply rounded-2xl border border-border bg-surface shadow-soft-card;
   }
 
-  /* --- BUTTON --- */
   .btn-base {
-    @apply inline-flex min-h-10 items-center justify-center rounded-xl
-    text-sm font-semibold shadow-sm transition-all duration-200
-    focus:outline-none focus:ring-2 focus:ring-primary/30
-    disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2
+    text-sm font-semibold transition-all duration-200
+    focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-2 focus:ring-offset-background
+    disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* --- INPUT --- */
   .input-base {
-    @apply block w-full rounded-xl border border-border
-    bg-surface-raised px-4 py-2.5 text-sm text-text
-    outline-none transition-all duration-200
-    placeholder:text-text-muted
-    focus:border-primary focus:ring-2 focus:ring-primary/20
-    disabled:cursor-not-allowed disabled:opacity-40;
+    @apply block w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-text
+    outline-none transition-all duration-200 placeholder:text-text-faint
+    focus:border-primary focus:ring-4 focus:ring-primary/10
+    disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-muted;
   }
 
-  /* --- PANEL HEADING --- */
-  .panel-heading {
-    @apply text-base font-semibold text-text;
+  .surface-panel {
+    @apply rounded-2xl border border-border bg-surface shadow-soft-card;
   }
 
-  /* --- METRIC CARDS --- */
-  .metric-card {
-    @apply rounded-2xl border border-border px-4 py-4 shadow-sm;
+  .subtle-panel {
+    @apply rounded-2xl border border-border bg-surface/90;
   }
 
-  .metric-card-lavender {
-    @apply bg-surface-lavender border-border;
-  }
-
-  .metric-card-peach {
-    @apply bg-surface-peach border-border;
-  }
-
-  .metric-card-cyan {
-    @apply bg-surface-cyan border-border;
-  }
-
-  /* --- APP SHELL --- */
-  .app-shell {
-    @apply bg-background;
-  }
-
-  /* --- DASHBOARD CANVAS --- */
-  .dashboard-canvas {
-    @apply rounded-3xl border border-border
-    bg-surface p-4 shadow-premium sm:p-6 lg:p-8;
-  }
-
-  /* --- LANDING PAGE --- */
   .section-container {
-    @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 
-  .landing-nav-link {
-    @apply text-sm font-semibold text-text-soft transition-colors duration-300 hover:text-primary;
+  .dashboard-grid {
+    @apply grid gap-4 sm:gap-5 xl:gap-6;
   }
 
-  .landing-primary-link {
-    @apply btn-base rounded-2xl bg-primary px-7 py-4 text-base font-semibold text-text
-    transition-all duration-300 hover:-translate-y-1 hover:bg-primary-hover
-    hover:text-text-inverse hover:shadow-xl hover:shadow-primary/30;
+  .nav-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200;
   }
 
-  .landing-secondary-link {
-    @apply btn-base rounded-2xl border border-border bg-surface px-7 py-4 text-base
-    font-semibold text-text-soft transition-all duration-300 hover:-translate-y-1
-    hover:bg-surface-muted hover:text-text hover:shadow-lg;
+  .nav-item-active {
+    @apply bg-primary text-text-inverse shadow-sm shadow-primary/20;
   }
 
-  .landing-eyebrow {
-    @apply text-sm font-bold uppercase tracking-wide text-primary;
+  .nav-item-idle {
+    @apply text-text-soft hover:bg-surface-muted hover:text-text;
   }
 
-  .landing-heading {
-    @apply text-4xl font-extrabold tracking-tight text-text sm:text-5xl;
+  .table-wrap {
+    @apply w-full overflow-x-auto rounded-2xl border border-border bg-surface;
   }
 
-  .landing-copy {
-    @apply text-lg leading-8 text-text-muted;
+  .data-table {
+    @apply min-w-full text-left text-sm;
   }
 
-  .landing-hover-card {
-    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
+  .data-table thead {
+    @apply bg-surface-muted/70 text-xs uppercase tracking-wide text-text-muted;
   }
 
-  .landing-feature-card {
-    @apply group rounded-3xl border border-border bg-surface p-7 shadow-sm
-    transition-all duration-300 hover:-translate-y-2 hover:border-primary/20 hover:shadow-2xl;
+  .data-table th {
+    @apply px-4 py-3 font-semibold;
   }
 
-  .landing-icon-tile {
-    @apply flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary
-    transition-transform duration-300 group-hover:scale-110;
+  .data-table td {
+    @apply border-t border-border px-4 py-4 align-top;
   }
-
-  .landing-module-pill {
-    @apply flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4
-    text-sm font-semibold text-text-soft shadow-sm transition-all duration-300
-    hover:-translate-y-1 hover:border-primary/20 hover:bg-primary-soft/30 hover:shadow-lg;
-  }
-
-  .landing-check-tile {
-    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent;
-  }
-
-  .landing-step-card {
-    @apply flex gap-5 rounded-3xl border border-border bg-surface-raised p-5 shadow-sm
-    transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:shadow-xl;
-  }
-
-  .landing-pricing-card {
-    @apply relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-sm
-    transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl;
-  }
-
-  .landing-chat-header {
-    @apply flex items-start justify-between gap-4 rounded-2xl border border-white/10
-    bg-white/10 p-4 shadow-inner-soft;
-  }
-
 }
 
 @layer utilities {
-
-  /* --- TOAST ANIMATION --- */
   .animate-fadein {
-    animation: fadein 0.3s ease-out;
+    animation: fadein 0.25s ease-out;
   }
 
   @keyframes fadein {
     from {
       opacity: 0;
-      transform: translateY(12px);
+      transform: translateY(10px);
     }
     to {
       opacity: 1;
       transform: translateY(0);
     }
   }
-
-  .animate-text-gradient {
-    background-size: 200% auto;
-    animation: textGradient 5s linear infinite, textExpand 5s ease-in-out infinite;
-  }
-
-  @keyframes textGradient {
-    to {
-      background-position: 200% center;
-    }
-  }
-
-  @keyframes textExpand {
-    0%, 100% {
-      letter-spacing: -0.025em;
-    }
-    50% {
-      letter-spacing: 0.01em;
-    }
-  }
-
-  .animation-delay-2000 {
-    animation-delay: 2s;
-  }
-
-  .animation-delay-4000 {
-    animation-delay: 4s;
-  }
-
-  .animate-chat-1 { animation: chat1 12s infinite cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; }
-  .animate-chat-2 { animation: chat2 12s infinite cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; }
-  .animate-chat-3 { animation: chat3 12s infinite cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; }
-  .animate-chat-4 { animation: chat4 12s infinite cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; }
-
-  @keyframes chat1 {
-    0%, 5% { opacity: 0; transform: translateY(10px) scale(0.95); }
-    10%, 85% { opacity: 1; transform: translateY(0) scale(1); }
-    90%, 100% { opacity: 0; transform: translateY(-10px) scale(0.95); }
-  }
-  @keyframes chat2 {
-    0%, 15% { opacity: 0; transform: translateY(10px) scale(0.95); }
-    20%, 85% { opacity: 1; transform: translateY(0) scale(1); }
-    90%, 100% { opacity: 0; transform: translateY(-10px) scale(0.95); }
-  }
-  @keyframes chat3 {
-    0%, 35% { opacity: 0; transform: translateY(10px) scale(0.95); }
-    40%, 85% { opacity: 1; transform: translateY(0) scale(1); }
-    90%, 100% { opacity: 0; transform: translateY(-10px) scale(0.95); }
-  }
-  @keyframes chat4 {
-    0%, 50% { opacity: 0; transform: translateY(10px) scale(0.95); }
-    55%, 85% { opacity: 1; transform: translateY(0) scale(1); }
-    90%, 100% { opacity: 0; transform: translateY(-10px) scale(0.95); }
-  }
 }
 
-/* --- SCROLLBAR --- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  height: 8px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -241,37 +137,9 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-border transition-colors;
+  @apply rounded-full bg-border-strong/80;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-border-strong;
-}
-
-/* --- GLOBAL ANIMATIONS --- */
-.animate-blob {
-  animation: blob 10s infinite alternate ease-in-out;
-}
-
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-
-@keyframes blob {
-  0% {
-    transform: translate(0px, 0px) scale(1);
-  }
-  33% {
-    transform: translate(60px, -80px) scale(1.15);
-  }
-  66% {
-    transform: translate(-60px, 60px) scale(0.85);
-  }
-  100% {
-    transform: translate(0px, 0px) scale(1);
-  }
+  @apply bg-text-faint;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const COUNTRY_CODE_OPTIONS = [
   { code: "+234", label: "NG" },
@@ -59,22 +59,17 @@ function PhoneNumberInput({
   const [countryCode, setCountryCode] = useState(
     findCountryCode(value) || defaultCountryCode
   );
+  const detectedCountryCode = findCountryCode(value);
+  const effectiveCountryCode = detectedCountryCode || countryCode;
 
   const errorMessage =
     typeof error === "string"
       ? error
       : error?.message || (error ? JSON.stringify(error) : "");
 
-  useEffect(() => {
-    const detectedCode = findCountryCode(value);
-    if (detectedCode) {
-      setCountryCode(detectedCode);
-    }
-  }, [value]);
-
   const localNumber = useMemo(
-    () => getLocalNumber(value, countryCode),
-    [countryCode, value]
+    () => getLocalNumber(value, effectiveCountryCode),
+    [effectiveCountryCode, value]
   );
 
   const emitChange = (nextCountryCode, nextLocalNumber) => {
@@ -105,7 +100,7 @@ function PhoneNumberInput({
       return;
     }
 
-    emitChange(countryCode, rawValue);
+    emitChange(effectiveCountryCode, rawValue);
   };
 
   return (
@@ -120,7 +115,7 @@ function PhoneNumberInput({
       >
         <select
           aria-label={`${label || name} country code`}
-          value={countryCode}
+          value={effectiveCountryCode}
           onChange={handleCountryCodeChange}
           className="w-28 shrink-0 border-r border-border bg-surface-raised px-3 py-2.5 text-sm text-text outline-none"
         >

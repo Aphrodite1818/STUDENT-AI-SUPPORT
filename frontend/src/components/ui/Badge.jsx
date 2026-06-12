@@ -1,14 +1,23 @@
-const styles = {
-  success: "border-success/15 bg-success-soft text-success",
-  warning: "border-warning/20 bg-warning-soft text-warning",
-  error: "border-error/15 bg-error-soft text-error",
-  info: "border-secondary/10 bg-secondary-soft text-secondary",
+import { cn } from "../../utils/cn";
+
+const variants = {
+  default: "bg-surface-muted text-text-soft ring-border",
+  info: "bg-primary-soft text-primary ring-blue-200",
+  primary: "bg-primary-soft text-primary ring-blue-200",
+  accent: "bg-accent-soft text-accent ring-indigo-200",
+  success: "bg-success-soft text-emerald-700 ring-emerald-200",
+  warning: "bg-warning-soft text-amber-700 ring-amber-200",
+  error: "bg-error-soft text-rose-700 ring-rose-200",
 };
 
-function Badge({ variant = "info", children }) {
+function Badge({ variant = "default", children, className = "" }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[variant]}`}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+        variants[variant] || variants.default,
+        className
+      )}
     >
       {children}
     </span>

@@ -1,599 +1,234 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import AppIcon from "../../components/ui/AppIcon";
-import logoImage from "../../assets/images/favicon.png";
+import {
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  GraduationCap,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from "lucide-react";
+import Navbar from "../../components/layout/Navbar";
+import Button from "../../components/ui/Button";
+import Badge from "../../components/ui/Badge";
+import previewImage from "../../assets/images/academic-workspace-preview.png";
 
 const features = [
-  {
-    title: "WhatsApp assistant",
-    description:
-      "Parents get instant answers about attendance, assignments, school updates, and academic records without waiting for staff responses.",
-    stat: "24/7",
-    icon: "whatsapp",
-  },
-  {
-    title: "Academic workspace",
-    description:
-      "Teachers and school administrators manage exams, attendance, assignments, student records, and communication from one dashboard.",
-    stat: "One hub",
-    icon: "school",
-  },
-  {
-    title: "Operations insight",
-    description:
-      "Track engagement, AI response quality, communication activity, and operational performance with live analytics.",
-    stat: "Live data",
-    icon: "chart",
-  },
+  { title: "Student Management", description: "Centralized student profiles, guardians, class history, and academic status.", icon: GraduationCap },
+  { title: "Teacher Management", description: "Profiles, qualifications, subjects, schedules, and assignment visibility.", icon: Users },
+  { title: "Attendance", description: "Daily attendance marking with summaries for staff and parents.", icon: ClipboardCheck },
+  { title: "Grades", description: "Score entry, performance tracking, report-card-ready academic records.", icon: BookOpen },
+  { title: "Timetable", description: "Structured class schedules that make the school day easier to operate.", icon: CalendarDays },
+  { title: "Analytics", description: "Operational dashboards for attendance, enrollment, notices, and AI activity.", icon: BarChart3 },
 ];
 
-const modules = [
-  "Attendance tracking",
-  "Assignment updates",
-  "Exam schedules",
-  "Fee reminders",
-  "Teacher access",
-  "Announcement broadcasts",
-  "Result management",
-  "Parent engagement",
-  "School analytics",
+const benefits = [
+  "Role-specific workspaces for admins, teachers, students, parents, and platform admins.",
+  "Clean service boundaries so frontend pages do not own backend API logic.",
+  "Mobile-friendly screens that stack naturally while staying optimized for desktop use.",
 ];
 
-const pricingPlans = [
+const testimonials = [
   {
-    name: "Starter",
-    price: "COMING SOON",
-    description:
-      "For schools beginning digital parent communication and workflow automation.",
-    features: [
-      "School onboarding",
-      "WhatsApp AI assistant",
-      "Attendance management",
-      "Assignment updates",
-      "Parent messaging",
-    ],
+    quote: "The dashboard gives our admin team the daily picture without forcing them into giant tables.",
+    name: "Anita Sharma",
+    role: "School Administrator",
   },
   {
-    name: "Growth",
-    price: "COMING SOON",
-    description:
-      "For growing schools that need deeper automation and operational visibility.",
-    features: [
-      "Everything in Starter",
-      "AI analytics",
-      "Teacher management",
-      "Fee management",
-      "Priority support",
-      "Advanced reports",
-    ],
-    highlighted: true,
+    quote: "Attendance, notices, and class context finally live in one place that teachers can scan quickly.",
+    name: "David Mensah",
+    role: "Academic Lead",
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    description:
-      "For large institutions and multi-campus schools with advanced workflows.",
-    features: [
-      "Custom integrations",
-      "Dedicated onboarding",
-      "Advanced infrastructure",
-      "Custom reporting",
-      "Priority support",
-      "Multi-campus support",
-    ],
+    quote: "It feels calm and professional, which matters when parents and staff use the system every day.",
+    name: "Ada Okafor",
+    role: "Parent Liaison",
   },
-];
-
-const steps = [
-  "A parent sends a WhatsApp message",
-  "Learnly AI understands the request",
-  "The system checks school records instantly",
-  "The parent receives a clear response",
 ];
 
 function LandingPage() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-text">
-      <header className="sticky top-0 z-50 border-b border-border bg-surface/90 backdrop-blur-lg">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <a
-            href="/"
-            className="flex items-center gap-3 transition-opacity duration-300 hover:opacity-90"
-          >
-            <img
-              src={logoImage}
-              alt="Learnly AI logo"
-              className="h-11 w-11 rounded-xl border border-border bg-surface p-1.5 shadow-sm"
-            />
-
-            <div>
-              <p className="text-lg font-extrabold tracking-tight text-text">
-                Learnly AI
-              </p>
-
-              <p className="text-xs font-medium text-text-muted">
-                AI school platform
-              </p>
-            </div>
-          </a>
-
-          <nav className="hidden items-center gap-7 md:flex">
-            <a
-              href="#features"
-              className="text-sm font-semibold text-text-soft transition-colors duration-300 hover:text-primary"
-            >
-              Features
-            </a>
-
-            <a
-              href="#pricing"
-              className="text-sm font-semibold text-text-soft transition-colors duration-300 hover:text-primary"
-            >
-              Pricing
-            </a>
-
-            <Link
-              to="/login"
-              className="text-sm font-semibold text-text-soft transition-colors duration-300 hover:text-primary"
-            >
-              Log in
-            </Link>
-
-            <Link
-              to="/register"
-              className="btn-base rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-text transition-all duration-300 hover:-translate-y-0.5 hover:bg-primary-hover hover:text-text-inverse hover:shadow-lg hover:shadow-primary/20"
-            >
-              Join Learnly
-            </Link>
-          </nav>
-
-          <button
-            className="md:hidden flex items-center justify-center p-2 text-text transition-colors hover:text-primary"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              {isMobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              )}
-            </svg>
-          </button>
-        </div>
-
-        {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-surface px-6 py-5 shadow-xl animate-fadein">
-            <nav className="flex flex-col gap-5">
-              <a
-                href="#features"
-                className="text-base font-semibold text-text-soft transition-colors hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Features
-              </a>
-
-              <a
-                href="#pricing"
-                className="text-base font-semibold text-text-soft transition-colors hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Pricing
-              </a>
-
-              <Link
-                to="/login"
-                className="text-base font-semibold text-text-soft transition-colors hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Log in
-              </Link>
-
-              <Link
-                to="/register"
-                className="btn-base mt-2 w-full rounded-xl bg-primary px-5 py-3 text-base font-semibold text-text transition-all hover:bg-primary-hover hover:text-text-inverse shadow-sm block text-center"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Join Learnly
-              </Link>
-            </nav>
-          </div>
-        )}
-      </header>
+      <Navbar />
 
       <main>
-        <section className="relative overflow-hidden border-b border-border">
-          <div className="absolute inset-0 opacity-40">
-            <div className="absolute left-[-100px] top-[-100px] h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
-
-            <div className="absolute bottom-[-120px] right-[-100px] h-80 w-80 rounded-full bg-accent/20 blur-3xl" />
-          </div>
-
-          <div className="relative mx-auto grid max-w-7xl gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-28">
-            <div className="flex flex-col justify-center">
-              <p className="w-fit rounded-full border border-primary/20 bg-primary-soft px-4 py-1.5 text-sm font-semibold text-primary shadow-sm">
-                AI-powered school communication
-              </p>
-
-              <h1 className="mt-6 max-w-4xl text-5xl font-extrabold leading-[1.05] tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-primary animate-text-gradient sm:text-6xl">
-                Your school operations and parent communication in one AI
-                workspace.
+        <section className="relative min-h-[680px] overflow-hidden border-b border-border bg-slate-950 text-white sm:min-h-[760px] lg:min-h-[820px]">
+          <img
+            src={previewImage}
+            alt="Learnly AI dashboard preview"
+            className="absolute inset-0 h-full w-full object-cover opacity-35"
+          />
+          <div className="absolute inset-0 bg-slate-950/70" />
+          <div className="section-container relative flex min-h-[620px] flex-col justify-center py-16 sm:min-h-[700px] lg:min-h-[760px]">
+            <div className="max-w-3xl">
+              <Badge variant="primary" className="bg-white/10 text-white ring-white/15">
+                <Sparkles className="h-3.5 w-3.5" />
+                Premium school management SaaS
+              </Badge>
+              <h1 className="mt-6 text-5xl font-semibold leading-tight tracking-tight text-white sm:text-6xl lg:text-7xl">
+                Learnly AI
               </h1>
-
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-text-muted">
-                Learnly AI automates repetitive school communication, helps
-                parents get instant answers, and gives administrators one
-                centralized system for academic operations.
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200 sm:text-xl">
+                A modern workspace for school operations, attendance, classes, teachers, grades, notices, and parent communication.
               </p>
-
-              <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-                <Link
-                  to="/register"
-                  className="btn-base rounded-2xl bg-primary px-7 py-4 text-base font-semibold text-text transition-all duration-300 hover:-translate-y-1 hover:bg-primary-hover hover:text-text-inverse hover:shadow-xl hover:shadow-primary/30"
-                >
-                  Join Learnly AI
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link to="/register">
+                  <Button size="large" className="w-full sm:w-auto">
+                    Start your school workspace
+                  </Button>
                 </Link>
-
-                <a
-                  href="#features"
-                  className="btn-base rounded-2xl border border-border bg-surface px-7 py-4 text-base font-semibold text-text-soft transition-all duration-300 hover:-translate-y-1 hover:bg-surface-muted hover:text-text hover:shadow-lg"
-                >
-                  Explore platform
-                </a>
-              </div>
-
-              <div className="mt-12 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl">
-                  <p className="text-3xl font-extrabold text-text">Fast</p>
-
-                  <p className="mt-1 text-sm font-medium text-text-muted">
-                    Response time
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl">
-                  <p className="text-3xl font-extrabold text-text">100%</p>
-
-                  <p className="mt-1 text-sm font-medium text-text-muted">
-                    Automated updates
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-border bg-surface px-5 py-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl">
-                  <p className="text-3xl font-extrabold text-text">Zero</p>
-
-                  <p className="mt-1 text-sm font-medium text-text-muted">
-                    Learning curve
-                  </p>
-                </div>
+                <Link to="/login">
+                  <Button variant="outline" size="large" className="w-full border-white/20 bg-white/10 text-white hover:bg-white/15 sm:w-auto">
+                    Log in
+                  </Button>
+                </Link>
               </div>
             </div>
 
-            <div className="relative">
-              <div className="card-base overflow-hidden rounded-3xl border border-border shadow-2xl">
-                <div className="border-b border-border bg-secondary p-6 text-text-inverse">
-                  <div className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/10 p-4 shadow-inner-soft">
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-text shadow-sm">
-                        <AppIcon name="spark" className="h-5 w-5" />
-                      </span>
-
-                      <div>
-                        <p className="text-sm font-semibold text-primary-soft">
-                          Live assistant
-                        </p>
-
-                        <h2 className="mt-1 text-2xl font-bold text-white">
-                          Parent conversation
-                        </h2>
-                      </div>
-                    </div>
-
-                    <span className="rounded-full border border-success/20 bg-success-soft px-3 py-1 text-xs font-bold text-success">
-                      Online
-                    </span>
+            <div className="absolute bottom-6 left-4 right-4 hidden rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-xl sm:left-6 sm:right-6 md:block lg:left-auto lg:w-[560px]">
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                {[
+                  ["92%", "Attendance rate"],
+                  ["1,248", "Students tracked"],
+                  ["24/7", "AI-ready operations"],
+                ].map(([value, label]) => (
+                  <div key={label} className="rounded-xl bg-white/10 px-4 py-3">
+                    <p className="text-2xl font-semibold text-white">{value}</p>
+                    <p className="mt-1 text-xs text-slate-300">{label}</p>
                   </div>
-
-                  <div className="mt-8 space-y-5 text-sm">
-                    <div className="ml-auto max-w-[82%] rounded-2xl bg-slate-700 px-4 py-3 transition-transform duration-300 hover:scale-[1.02] animate-chat-1 origin-bottom-right">
-                      What assignment does Ada have today?
-                    </div>
-
-                    <div className="max-w-[86%] rounded-2xl bg-primary px-4 py-3 font-medium text-text shadow-lg shadow-primary/20 transition-transform duration-300 hover:scale-[1.02] animate-chat-2 origin-bottom-left">
-                      Mathematics: page 24, exercises 1 to 10. Due Friday.
-                    </div>
-
-                    <div className="ml-auto max-w-[82%] rounded-2xl bg-slate-700 px-4 py-3 transition-transform duration-300 hover:scale-[1.02] animate-chat-3 origin-bottom-right">
-                      Was she marked present?
-                    </div>
-
-                    <div className="max-w-[86%] rounded-2xl bg-primary px-4 py-3 font-medium text-text shadow-lg shadow-primary/20 transition-transform duration-300 hover:scale-[1.02] animate-chat-4 origin-bottom-left">
-                      Yes. Ada was marked present at 8:05 AM today.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 bg-surface p-5">
-                  <div className="metric-card metric-card-lavender transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
-                    <p className="text-2xl font-bold text-text">120+</p>
-                    <p className="mt-1 text-xs font-semibold text-text-muted">
-                      Schools
-                    </p>
-                  </div>
-
-                  <div className="metric-card metric-card-peach transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
-                    <p className="text-2xl font-bold text-text">50K+</p>
-                    <p className="mt-1 text-xs font-semibold text-text-muted">
-                      Messages
-                    </p>
-                  </div>
-
-                  <div className="metric-card metric-card-peach transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
-                    <p className="text-2xl font-bold text-text">24/7</p>
-                    <p className="mt-1 text-xs font-semibold text-text-muted">
-                      Support
-                    </p>
-                  </div>
-
-                  <div className="metric-card metric-card-lavender transition-all duration-300 hover:-translate-y-1 hover:border-primary/60 hover:shadow-lg">
-                    <p className="text-2xl font-bold text-text">98%</p>
-                    <p className="mt-1 text-xs font-semibold text-text-muted">
-                      Parent satisfaction
-                    </p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           </div>
         </section>
 
-        <section
-          id="features"
-          className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8"
-        >
+        <section id="features" className="section-container py-20">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold uppercase tracking-wide text-primary">
-              Features
-            </p>
-
-            <h2 className="mt-4 text-4xl font-extrabold tracking-tight text-text sm:text-5xl">
+            <p className="text-sm font-bold uppercase tracking-wide text-primary">Features</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
               Built around the workflows schools repeat every day.
             </h2>
-
-            <p className="mt-5 text-lg leading-8 text-text-muted">
-              Learnly AI centralizes communication, academic operations, and
-              reporting so school teams can move faster with less manual work.
+            <p className="mt-4 text-base leading-7 text-text-muted">
+              The platform keeps operational visibility high without burying teams in old-style admin templates.
             </p>
           </div>
-
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {features.map((feature) => (
-              <article
-                key={feature.title}
-                className="group rounded-3xl border border-border bg-surface p-7 shadow-sm transition-all duration-300 hover:-translate-y-2 hover:border-primary/20 hover:shadow-2xl"
-              >
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary transition-transform duration-300 group-hover:scale-110">
-                  <AppIcon name={feature.icon} className="h-7 w-7" />
-                </div>
-
-                <p className="mt-6 text-sm font-bold text-primary">
-                  {feature.stat}
-                </p>
-
-                <h3 className="mt-3 text-2xl font-bold text-text">
-                  {feature.title}
-                </h3>
-
-                <p className="mt-4 leading-7 text-text-muted">
-                  {feature.description}
-                </p>
-              </article>
-            ))}
-          </div>
-
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {modules.map((module) => (
-              <div
-                key={module}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-sm font-semibold text-text-soft shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary-soft/30 hover:shadow-lg"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
-                  <AppIcon name="check" className="h-4 w-4" />
-                </span>
-                {module}
-              </div>
-            ))}
+            {features.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <article key={feature.title} className="rounded-2xl border border-border bg-surface p-6 shadow-soft-card">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-5 text-lg font-semibold">{feature.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-text-muted">{feature.description}</p>
+                </article>
+              );
+            })}
           </div>
         </section>
 
-        <section className="border-y border-border bg-surface">
-          <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:px-8">
+        <section id="benefits" className="border-y border-border bg-surface">
+          <div className="section-container grid gap-10 py-20 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-primary">
-                How it works
-              </p>
-
-              <h2 className="mt-4 text-4xl font-extrabold tracking-tight text-text sm:text-5xl">
-                The AI handles routine parent communication automatically.
+              <p className="text-sm font-bold uppercase tracking-wide text-primary">Benefits</p>
+              <h2 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+                Calm software for busy school teams.
               </h2>
-
-              <p className="mt-5 text-lg leading-8 text-text-muted">
-                Learnly AI connects WhatsApp conversations directly to the
-                school data already managed by teachers and administrators.
+              <p className="mt-4 text-base leading-7 text-text-muted">
+                Learnly AI is designed for repeated daily use: scanning, acting, reviewing, and moving on.
               </p>
             </div>
-
-            <div className="space-y-4">
-              {steps.map((step, index) => (
-                <div
-                  key={step}
-                  className="flex gap-5 rounded-3xl border border-border bg-surface-raised p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:shadow-xl"
-                >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-text shadow-md">
-                    {index + 1}
-                  </span>
-
-                  <p className="self-center text-base font-semibold text-text-soft">
-                    {step}
-                  </p>
+            <div className="grid gap-3">
+              {benefits.map((benefit) => (
+                <div key={benefit} className="flex gap-3 rounded-2xl border border-border bg-background px-5 py-4">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+                  <p className="text-sm font-medium leading-6 text-text-soft">{benefit}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section
-          id="pricing"
-          className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8"
-        >
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-sm font-bold uppercase tracking-wide text-primary">
-              Pricing
-            </p>
-
-            <h2 className="mt-4 text-4xl font-extrabold tracking-tight text-text sm:text-5xl">
-              Flexible plans built for modern schools.
-            </h2>
-
-            <p className="mt-5 text-lg leading-8 text-text-muted">
-              Start with essential communication tools and scale into advanced
-              automation and reporting as your institution grows.
-            </p>
-          </div>
-
-          <div className="mt-14 grid gap-6 lg:grid-cols-3">
-            {pricingPlans.map((plan) => (
-              <article
-                key={plan.name}
-                className={`relative overflow-hidden rounded-3xl border border-border bg-surface p-7 shadow-sm transition-all duration-300 hover:-translate-y-2 hover:border-primary/60 hover:shadow-2xl ${
-                  plan.highlighted
-                    ? "scale-[1.02] border-primary bg-primary-soft/20 ring-2 ring-primary/20"
-                    : ""
-                }`}
-              >
-                {plan.highlighted && (
-                  <p className="mb-5 w-fit rounded-full bg-primary px-3 py-1 text-xs font-bold text-text">
-                    Most selected
-                  </p>
-                )}
-
-                <h3 className="text-3xl font-extrabold text-text">
-                  {plan.name}
-                </h3>
-
-                <p className="mt-4 min-h-[70px] text-sm leading-7 text-text-muted">
-                  {plan.description}
-                </p>
-
-                <p className="mt-7 text-4xl font-extrabold text-text">
-                  {plan.price}
-                </p>
-
-                {plan.price !== "Custom" && (
-                  <p className="mt-1 text-sm font-medium text-text-muted">
-                    per month
-                  </p>
-                )}
-
-                <ul className="mt-7 space-y-4">
-                  {plan.features.map((feature) => (
-                    <li
-                      key={feature}
-                      className="flex gap-3 text-sm font-medium text-text-soft"
-                    >
-                      <span className="mt-1.5 h-2 w-2 rounded-full bg-accent" />
-
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {plan.name === "Enterprise" ? (
-                  <a
-                    href="mailto:hello@learnly.ai"
-                    className={`btn-base mt-9 flex w-full items-center justify-center rounded-2xl px-5 py-3.5 text-sm font-bold transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
-                      plan.highlighted
-                        ? "bg-primary text-text hover:bg-primary-hover hover:text-text-inverse hover:shadow-primary/20"
-                        : "bg-secondary text-text-inverse hover:bg-secondary-hover"
-                    }`}
-                  >
-                    CONTACT SALES
-                  </a>
-                ) : (
-                  <Link
-                    to="/register"
-                    className={`btn-base mt-9 flex w-full items-center justify-center rounded-2xl px-5 py-3.5 text-sm font-bold transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
-                      plan.highlighted
-                        ? "bg-primary text-text hover:bg-primary-hover hover:text-text-inverse hover:shadow-primary/20"
-                        : "bg-secondary text-text-inverse hover:bg-secondary-hover"
-                    }`}
-                  >
-                    GET STARTED
-                  </Link>
-                )}
+        <section className="section-container py-20">
+          <div className="grid gap-6 lg:grid-cols-3">
+            {testimonials.map((testimonial) => (
+              <article key={testimonial.name} className="rounded-2xl border border-border bg-surface p-6 shadow-soft-card">
+                <p className="text-base leading-7 text-text-soft">"{testimonial.quote}"</p>
+                <div className="mt-6 flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-soft font-bold text-primary">
+                    {testimonial.name.split(" ").map((part) => part[0]).join("")}
+                  </span>
+                  <div>
+                    <p className="font-semibold">{testimonial.name}</p>
+                    <p className="text-sm text-text-muted">{testimonial.role}</p>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="border-t border-border bg-secondary">
-          <div className="mx-auto max-w-5xl px-4 py-24 text-center sm:px-6 lg:px-8">
-            <p className="text-sm font-bold uppercase tracking-wide text-accent">
-              Ready to modernize your school?
-            </p>
+        <section id="pricing" className="border-y border-border bg-surface">
+          <div className="section-container py-20">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-sm font-bold uppercase tracking-wide text-primary">Pricing</p>
+              <h2 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+                Future-ready plans for growing schools.
+              </h2>
+              <p className="mt-4 text-base leading-7 text-text-muted">
+                Pricing is prepared for staged rollout while the platform modules continue to mature.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 lg:grid-cols-3">
+              {[
+                ["Starter", "Coming soon", "Core school management and communication workflows."],
+                ["Growth", "Coming soon", "Advanced analytics, staff workflows, and parent engagement."],
+                ["Enterprise", "Custom", "Multi-campus support, integrations, and dedicated onboarding."],
+              ].map(([name, price, description], index) => (
+                <article key={name} className={`rounded-2xl border bg-surface p-6 shadow-soft-card ${index === 1 ? "border-primary ring-4 ring-primary/10" : "border-border"}`}>
+                  {index === 1 && <Badge variant="primary">Most selected</Badge>}
+                  <h3 className="mt-4 text-2xl font-semibold">{name}</h3>
+                  <p className="mt-3 text-3xl font-semibold">{price}</p>
+                  <p className="mt-3 text-sm leading-6 text-text-muted">{description}</p>
+                  <Button variant={index === 1 ? "primary" : "outline"} className="mt-6 w-full">
+                    {name === "Enterprise" ? "Contact sales" : "Get started"}
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
 
-            <h2 className="mt-5 text-4xl font-extrabold tracking-tight text-text-inverse sm:text-5xl">
-              Give parents instant answers with Learnly AI.
+        <section className="section-container py-20">
+          <div className="rounded-2xl border border-border bg-slate-950 px-6 py-12 text-center text-white shadow-premium sm:px-10">
+            <ShieldCheck className="mx-auto h-10 w-10 text-primary-soft" />
+            <h2 className="mt-5 text-4xl font-semibold tracking-tight text-white">
+              Modernize school operations without losing control.
             </h2>
-
-            <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-              Reduce repetitive communication, improve operational visibility,
-              and centralize school management in one powerful AI platform.
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300">
+              Give every role a cleaner workspace while preserving your backend model, tenant boundaries, and authentication flows.
             </p>
-
-            <Link
-              to="/register"
-              className="btn-base mt-9 inline-flex rounded-2xl bg-primary px-7 py-4 text-base font-semibold text-text transition-all duration-300 hover:-translate-y-1 hover:bg-primary-hover hover:text-text-inverse hover:shadow-2xl hover:shadow-primary/30"
-            >
-              Join us now
+            <Link to="/register" className="mt-8 inline-flex">
+              <Button size="large">Create workspace</Button>
             </Link>
           </div>
         </section>
       </main>
 
       <footer className="border-t border-border bg-surface">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+        <div className="section-container flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-lg font-extrabold text-text">Learnly AI</p>
-
-            <p className="mt-2 text-sm text-text-muted">
-              AI-powered school management and parent communication platform.
-            </p>
+            <p className="font-bold">Learnly AI</p>
+            <p className="mt-1 text-sm text-text-muted">Premium school management and AI-ready operations.</p>
           </div>
-
-          <div className="flex gap-6 text-sm font-semibold text-text-muted">
-            <a
-              href="#features"
-              className="transition-colors duration-300 hover:text-primary"
-            >
-              Features
-            </a>
-
-            <a
-              href="#pricing"
-              className="transition-colors duration-300 hover:text-primary"
-            >
-              Pricing
-            </a>
-
-            <a
-              href="mailto:hello@learnly.ai"
-              className="transition-colors duration-300 hover:text-primary"
-            >
-              Contact
-            </a>
+          <div className="flex flex-wrap gap-4 text-sm font-semibold text-text-muted">
+            <a href="#features" className="hover:text-primary">Features</a>
+            <a href="#benefits" className="hover:text-primary">Benefits</a>
+            <a href="#pricing" className="hover:text-primary">Pricing</a>
+            <Link to="/login" className="hover:text-primary">Log in</Link>
           </div>
         </div>
       </footer>

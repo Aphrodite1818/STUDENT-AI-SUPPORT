@@ -1,42 +1,90 @@
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { BookOpen, CalendarDays, CheckCircle2, ClipboardList } from "lucide-react";
+import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
-import Button from "../../components/ui/Button";
-import { authService } from "../../services/auth.service";
+import Badge from "../../components/ui/Badge";
+import StatCard from "../../components/shared/StatCard";
+import LoadingState from "../../components/shared/LoadingState";
+import { dashboardService } from "../../services/dashboard.service";
 
 function StudentDashboardPage() {
-  const navigate = useNavigate();
+  const [overview, setOverview] = useState(null);
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate("/login", { replace: true });
-  };
+  useEffect(() => {
+    let mounted = true;
+    dashboardService.getStudentOverview().then((data) => {
+      if (mounted) setOverview(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!overview) {
+    return (
+      <DashboardLayout role="student" title="Student Dashboard">
+        <LoadingState label="Loading learning portal..." />
+      </DashboardLayout>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background flex text-text">
-      <aside className="w-64 transition-all duration-300 bg-surface border-r border-border flex flex-col">
-        <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-          <Link to="/" className="flex items-center gap-3">
-            <span className="font-bold text-lg">Learnly AI</span>
-          </Link>
-        </div>
-        <nav className="p-4 space-y-2">
-          <Link to="/student/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary">
-            <span>Dashboard</span>
-          </Link>
-        </nav>
-      </aside>
-      <main className="flex-1 p-6 md:p-8">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-bold">Student Dashboard</h1>
-          <Button variant="secondary" size="small" onClick={handleLogout}>
-            Logout
-          </Button>
-        </div>
-        <Card className="p-6">
-          <p className="text-text-muted">Welcome to your learning portal.</p>
+    <DashboardLayout
+      role="student"
+      title="Learning Portal"
+      description="A clean overview of your timetable, assignments, notices, and academic performance."
+    >
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {overview.stats.map((stat, index) => {
+          const icons = [BookOpen, CheckCircle2, ClipboardList, CalendarDays];
+          const Icon = icons[index];
+          return <StatCard key={stat.label} {...stat} icon={Icon} />;
+        })}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <Card className="p-5">
+          <h2 className="text-lg font-semibold">Today's Classes</h2>
+          <div className="mt-5 space-y-3">
+            {[
+              ["09:30", "Mathematics", "Room 204", "Active"],
+              ["10:20", "Science", "Room 204", "Next"],
+              ["12:45", "Social Studies", "Room 204", "Later"],
+            ].map(([time, subject, room, status]) => (
+              <div key={subject} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-primary">{time}</p>
+                  <p className="mt-1 font-semibold">{subject}</p>
+                  <p className="text-sm text-text-muted">{room}</p>
+                </div>
+                <Badge variant={status === "Active" ? "success" : "default"}>{status}</Badge>
+              </div>
+            ))}
+          </div>
         </Card>
-      </main>
-    </div>
+
+        <div className="space-y-6">
+          <Card className="p-5">
+            <h2 className="text-lg font-semibold">Assignments</h2>
+            <div className="mt-4 space-y-3">
+              {["Mathematics exercises", "Science lab note", "English essay"].map((item) => (
+                <div key={item} className="rounded-2xl bg-surface-muted/50 p-4">
+                  <p className="font-semibold">{item}</p>
+                  <p className="mt-1 text-sm text-text-muted">Due this week</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="text-lg font-semibold">Recent Notices</h2>
+            <p className="mt-3 text-sm leading-6 text-text-muted">
+              Unit Test 1 schedule has been published. Annual Sports Day practice begins next week.
+            </p>
+          </Card>
+        </div>
+      </section>
+    </DashboardLayout>
   );
 }
 

@@ -1,17 +1,15 @@
-import DashboardShell from "../shared/DashboardShell";
-import ResourcePage from "../shared/ResourcePage";
+import ResourceModulePage from "../shared/ResourceModulePage";
 import { subjectReadOnlyResourceConfig } from "../shared/resourceConfigs";
 
-function TeacherSubjectsPage() {
+function SubjectsPage() {
   return (
-    <DashboardShell
+    <ResourceModulePage
       role="teacher"
       title="Subjects"
-      description="View active and inactive subjects available in the tenant catalog."
-    >
-      <ResourcePage config={subjectReadOnlyResourceConfig} />
-    </DashboardShell>
+      description="Browse the subjects available in your school workspace."
+      config={subjectReadOnlyResourceConfig}
+    />
   );
 }
 
-export default TeacherSubjectsPage;
+export default SubjectsPage;

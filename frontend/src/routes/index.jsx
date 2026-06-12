@@ -8,10 +8,26 @@ import InvitePage from "../pages/public/InvitePage";
 import ForgotPasswordPage from "../pages/public/ForgotPasswordPage";
 import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
 import UserManagementPage from "../pages/admin/UserManagementPage";
+import TeachersPage from "../pages/admin/TeachersPage";
+import StudentsPage from "../pages/admin/StudentsPage";
+import ClassesPage from "../pages/admin/ClassesPage";
+import SubjectsPage from "../pages/admin/SubjectsPage";
+import AttendancePage from "../pages/admin/AttendancePage";
+import ExamsPage from "../pages/admin/ExamsPage";
+import ResultsPage from "../pages/admin/ResultsPage";
+import FeesPage from "../pages/admin/FeesPage";
+import PaymentsPage from "../pages/admin/PaymentsPage";
 import TeacherDashboardPage from "../pages/teacher/TeacherDashboardPage";
+import TeacherClassesPage from "../pages/teacher/MyClassesPage";
+import TeacherStudentsPage from "../pages/teacher/StudentsPage";
+import TeacherSubjectsPage from "../pages/teacher/SubjectsPage";
+import TeacherAttendancePage from "../pages/teacher/AttendancePage";
+import TeacherExamsPage from "../pages/teacher/ExamsPage";
+import TeacherResultsPage from "../pages/teacher/ResultsPage";
 import StudentDashboardPage from "../pages/student/StudentDashboardPage";
 import ParentDashboardPage from "../pages/parent/ParentDashboardPage";
 import SuperadminDashboardPage from "../pages/superadmin/SuperadminDashboardPage";
+import StaticModulePage from "../pages/shared/StaticModulePage";
 import ProtectedRoute from "./ProtectedRoute";
 import RoleGuard from "./RoleGuard";
 
@@ -30,22 +46,56 @@ function AppRoutes() {
           <Route element={<RoleGuard allowedRoles={["ADMIN"]} />}>
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="/admin/users" element={<UserManagementPage />} />
+            <Route path="/admin/teachers" element={<TeachersPage />} />
+            <Route path="/admin/students" element={<StudentsPage />} />
+            <Route path="/admin/classes" element={<ClassesPage />} />
+            <Route path="/admin/subjects" element={<SubjectsPage />} />
+            <Route path="/admin/attendance" element={<AttendancePage />} />
+            <Route path="/admin/exams" element={<ExamsPage />} />
+            <Route path="/admin/results" element={<ResultsPage />} />
+            <Route path="/admin/fees" element={<FeesPage />} />
+            <Route path="/admin/payments" element={<PaymentsPage />} />
+            <Route path="/admin/timetable" element={<StaticModulePage role="admin" title="Timetable" description="Professional schedule grid and class timetable planning." type="timetable" />} />
+            <Route path="/admin/announcements" element={<StaticModulePage role="admin" title="Notices & Announcements" description="Create and publish school-wide notices and events." type="notices" />} />
+            <Route path="/admin/messages" element={<StaticModulePage role="admin" title="Messages" description="Parent and staff communication hub." type="notices" />} />
+            <Route path="/admin/ai-metrics" element={<StaticModulePage role="admin" title="AI Metrics" description="Monitor AI response quality, topics, and escalation trends." type="ai" />} />
+            <Route path="/admin/ai-config" element={<StaticModulePage role="admin" title="Reports & Analytics" description="Operational analytics and AI reporting configuration." type="ai" />} />
+            <Route path="/admin/settings" element={<StaticModulePage role="admin" title="Settings" description="School profile, security, users, and account configuration." type="settings" />} />
           </Route>
 
           <Route element={<RoleGuard allowedRoles={["TEACHER"]} />}>
             <Route path="/teacher/dashboard" element={<TeacherDashboardPage />} />
+            <Route path="/teacher/classes" element={<TeacherClassesPage />} />
+            <Route path="/teacher/students" element={<TeacherStudentsPage />} />
+            <Route path="/teacher/subjects" element={<TeacherSubjectsPage />} />
+            <Route path="/teacher/attendance" element={<TeacherAttendancePage />} />
+            <Route path="/teacher/exams" element={<TeacherExamsPage />} />
+            <Route path="/teacher/results" element={<TeacherResultsPage />} />
+            <Route path="/teacher/assignments" element={<StaticModulePage role="teacher" title="Assignments" description="Create, review, and track classroom assignments." />} />
+            <Route path="/teacher/timetable" element={<StaticModulePage role="teacher" title="Timetable" description="Daily teaching schedule and class periods." type="timetable" />} />
           </Route>
 
           <Route element={<RoleGuard allowedRoles={["STUDENT"]} />}>
             <Route path="/student/dashboard" element={<StudentDashboardPage />} />
+            <Route path="/student/timetable" element={<StaticModulePage role="student" title="Timetable" description="Your class schedule and upcoming periods." type="timetable" />} />
+            <Route path="/student/assignments" element={<StaticModulePage role="student" title="Assignments" description="Track assigned work and due dates." />} />
+            <Route path="/student/results" element={<StaticModulePage role="student" title="Results" description="Review academic performance and report summaries." />} />
+            <Route path="/student/notices" element={<StaticModulePage role="student" title="Notices" description="School announcements and academic updates." type="notices" />} />
           </Route>
 
           <Route element={<RoleGuard allowedRoles={["PARENT"]} />}>
             <Route path="/parent/dashboard" element={<ParentDashboardPage />} />
+            <Route path="/parent/attendance" element={<StaticModulePage role="parent" title="Attendance" description="Review attendance summaries for your children." />} />
+            <Route path="/parent/results" element={<StaticModulePage role="parent" title="Results" description="Academic performance summaries for your children." />} />
+            <Route path="/parent/notices" element={<StaticModulePage role="parent" title="Notices" description="School notices and parent updates." type="notices" />} />
+            <Route path="/parent/fees" element={<StaticModulePage role="parent" title="Fees" description="Fee statements, payment status, and due dates." />} />
           </Route>
 
           <Route element={<RoleGuard allowedRoles={["SUPERADMIN"]} />}>
             <Route path="/superadmin/dashboard" element={<SuperadminDashboardPage />} />
+            <Route path="/superadmin/verification" element={<StaticModulePage role="superadmin" title="Verification" description="Tenant verification activity and approval workflow." type="settings" />} />
+            <Route path="/superadmin/activity" element={<StaticModulePage role="superadmin" title="Platform Activity" description="Recent registrations, verification events, and system statistics." type="ai" />} />
+            <Route path="/superadmin/settings" element={<StaticModulePage role="superadmin" title="Platform Settings" description="Platform-wide configuration and administrator controls." type="settings" />} />
           </Route>
         </Route>
 

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import Card from "../../components/ui/Card";
+import { ArrowRight, CheckCircle2, TriangleAlert } from "lucide-react";
+import AuthLayout from "../../components/layout/AuthLayout";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
 import { parseApiError } from "../../services/api";
 
@@ -15,10 +15,24 @@ const ROLE_ROUTES = {
   PARENT: "/parent/dashboard",
 };
 
+function Notice({ type = "success", children }) {
+  const Icon = type === "error" ? TriangleAlert : CheckCircle2;
+  const styles =
+    type === "error"
+      ? "border-error/20 bg-error-soft text-error"
+      : "border-success/20 bg-success-soft text-emerald-700";
+
+  return (
+    <div className={`mb-4 flex gap-3 rounded-2xl border px-4 py-3 text-sm font-medium ${styles}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      {children}
+    </div>
+  );
+}
+
 function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
   const justVerified = searchParams.get("verified") === "true";
   const passwordReset = searchParams.get("reset") === "true";
   const inviteCompleted = searchParams.get("invite") === "success";
@@ -28,49 +42,28 @@ function LoginPage() {
     password: "",
     remember: true,
   });
-
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
 
-  const redirectToVerification = (
-    email,
-    notice,
-    purpose = "verification",
-    redirectTo = "/verify-otp"
-  ) => {
+  const redirectToVerification = (email, notice, purpose = "verification", redirectTo = "/verify-otp") => {
     if (!email) return;
-
     authService.setPendingVerificationEmail(email);
-
-    navigate(
-      `${redirectTo}?email=${encodeURIComponent(email)}&purpose=${encodeURIComponent(purpose)}`,
-      {
-        replace: true,
-        state: { notice },
-      }
-    );
+    navigate(`${redirectTo}?email=${encodeURIComponent(email)}&purpose=${encodeURIComponent(purpose)}`, {
+      replace: true,
+      state: { notice },
+    });
   };
 
   const handleChange = (event) => {
     const { checked, name, type, value } = event.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-
-    setFieldErrors((prev) => ({
-      ...prev,
-      [name]: undefined,
-    }));
-
+    setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
     setError(null);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     setIsLoading(true);
     setError(null);
     setFieldErrors({});
@@ -81,18 +74,13 @@ function LoginPage() {
       });
 
       authService.clearPendingVerificationEmail();
-
       const role = String(data?.role || data?.user?.role || "").toUpperCase();
-      const route = ROLE_ROUTES[role] || "/";
-
-      navigate(route, { replace: true });
+      navigate(ROLE_ROUTES[role] || "/", { replace: true });
     } catch (err) {
       const apiError = parseApiError(err, "Invalid email or password.");
-
       if (Object.keys(apiError.fieldErrors || {}).length > 0) {
         setFieldErrors(apiError.fieldErrors);
       }
-
       if (apiError.verificationRequired) {
         redirectToVerification(
           apiError.email || formData.email,
@@ -102,7 +90,6 @@ function LoginPage() {
         );
         return;
       }
-
       setError(apiError.message);
     } finally {
       setIsLoading(false);
@@ -110,144 +97,41 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-background p-4 text-text overflow-hidden">
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 h-72 w-72 rounded-full bg-primary opacity-30 blur-3xl animate-blob" />
-        <div className="absolute top-1/3 right-1/4 h-72 w-72 rounded-full bg-accent opacity-30 blur-3xl animate-blob animation-delay-2000" />
-        <div className="absolute -bottom-8 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-primary opacity-20 blur-3xl animate-blob animation-delay-4000" />
-      </div>
+    <AuthLayout
+      title="Welcome back"
+      description="Log in to manage your school workspace."
+      footer={
+        <p className="mt-7 text-center text-sm text-text-soft">
+          Do not have an account?{" "}
+          <Link to="/register" className="font-semibold text-primary hover:text-primary-hover">
+            Create a school workspace
+          </Link>
+        </p>
+      }
+    >
+      {justVerified && <Notice>Account verified. You can now log in.</Notice>}
+      {passwordReset && <Notice>Password reset successful. You can now log in.</Notice>}
+      {inviteCompleted && <Notice>Account setup completed. You can now log in.</Notice>}
+      {error && <Notice type="error">{error}</Notice>}
 
-      <div className="w-full max-w-md animate-fadein z-10 relative">
-        <Link
-          to="/"
-          className="mb-8 flex items-center justify-center gap-3 transition-opacity duration-300 hover:opacity-90"
-        >
-          <img
-            src={logoImage}
-            alt="Learnly AI logo"
-            className="h-10 w-10 rounded-xl border border-border bg-surface p-1 shadow-sm"
-          />
-          <p className="text-xl font-extrabold tracking-tight text-text">
-            Learnly AI
-          </p>
-        </Link>
-
-        <Card className="p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary animate-text-gradient bg-[length:200%_auto]" />
-
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-text">Welcome back</h1>
-            <p className="text-sm text-text-muted mt-2">
-              Log in to manage your school workspace.
-            </p>
-          </div>
-
-          {justVerified && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
-              Account verified! You can now log in.
-            </div>
-          )}
-
-          {passwordReset && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
-              Password reset successful. You can now log in.
-            </div>
-          )}
-
-          {inviteCompleted && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/50 text-green-500 rounded-md text-sm text-center">
-              Account setup completed successfully. You can now log in.
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="group">
-              <Input
-                label="Work email"
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="name@school.edu"
-                required
-                error={fieldErrors.email}
-                className="transition-all duration-300 group-hover:border-primary/50"
-              />
-            </div>
-
-            <div className="group">
-              <Input
-                label="Password"
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                required
-                error={fieldErrors.password}
-                className="transition-all duration-300 group-hover:border-primary/50"
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="remember"
-                  checked={formData.remember}
-                  onChange={handleChange}
-                  className="rounded border-border text-primary focus:ring-primary/20 accent-primary"
-                />
-                <span className="text-text-soft">Remember me</span>
-              </label>
-
-              <Link
-                to="/forgot-password"
-                className="font-semibold text-primary hover:text-primary-hover transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full mt-2 group relative overflow-hidden"
-              disabled={isLoading}
-            >
-              <span
-                className={`transition-all duration-300 ${
-                  isLoading ? "opacity-0" : "opacity-100"
-                }`}
-              >
-                Log in to workspace
-              </span>
-
-              {isLoading && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="h-5 w-5 rounded-full border-2 border-text-inverse border-t-transparent animate-spin" />
-                </span>
-              )}
-            </Button>
-          </form>
-
-          <p className="mt-8 text-center text-sm text-text-soft">
-            Don't have an account?{" "}
-            <Link
-              to="/register"
-              className="font-semibold text-primary hover:text-primary-hover transition-colors"
-            >
-              Get started
-            </Link>
-          </p>
-        </Card>
-      </div>
-    </div>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Input label="Work email" type="email" name="email" value={formData.email} onChange={handleChange} placeholder="name@school.edu" required error={fieldErrors.email} />
+        <Input label="Password" type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Enter your password" required error={fieldErrors.password} />
+        <div className="flex items-center justify-between gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="remember" checked={formData.remember} onChange={handleChange} className="h-4 w-4 rounded border-border accent-primary" />
+            <span className="text-text-soft">Remember me</span>
+          </label>
+          <Link to="/forgot-password" className="font-semibold text-primary hover:text-primary-hover">
+            Forgot password?
+          </Link>
+        </div>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Logging in..." : "Log in to workspace"}
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }
 

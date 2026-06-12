@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { RefreshCw, Send, Trash2, UserPlus } from "lucide-react";
+import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
+import Badge from "../../components/ui/Badge";
 import { userService } from "../../services/user.service";
 import { getErrorMessage, parseApiError } from "../../services/api";
 
@@ -13,6 +15,12 @@ const INITIAL_FORM = {
   phone_number: "",
   whatsapp_id: "",
   role: "teacher",
+};
+
+const statusVariant = (status) => {
+  if (status === "active") return "success";
+  if (status === "pending") return "warning";
+  return "default";
 };
 
 function UserManagementPage() {
@@ -39,18 +47,12 @@ function UserManagementPage() {
   }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      loadUsers();
-    }, 0);
-
+    const timeoutId = window.setTimeout(loadUsers, 0);
     return () => window.clearTimeout(timeoutId);
   }, [loadUsers]);
 
   const handleChange = (event) => {
-    setFormData((prev) => ({
-      ...prev,
-      [event.target.name]: event.target.value,
-    }));
+    setFormData((prev) => ({ ...prev, [event.target.name]: event.target.value }));
     setFieldErrors((prev) => ({ ...prev, [event.target.name]: undefined }));
     setError(null);
   };
@@ -101,9 +103,7 @@ function UserManagementPage() {
     const fullName = [user.firstname, user.lastname].filter(Boolean).join(" ");
     const label = fullName || user.email || "this user";
 
-    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) {
-      return;
-    }
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
 
     setDeletingUserId(user.id);
     setError(null);
@@ -121,212 +121,140 @@ function UserManagementPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-text p-6 md:p-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">User management</h1>
-            <p className="text-sm text-text-muted mt-1">
-              Invite normal users into your school workspace and resend setup links when needed.
-            </p>
-          </div>
-          <Link to="/admin/dashboard">
-            <Button variant="outline">Back to dashboard</Button>
-          </Link>
+    <DashboardLayout
+      role="admin"
+      title="User Management"
+      description="Invite staff, students, and parents into the tenant workspace and resend setup links when needed."
+      actions={
+        <Button variant="outline" onClick={loadUsers} disabled={isLoadingUsers}>
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
+      }
+    >
+      {error && (
+        <div className="rounded-2xl border border-error/20 bg-error-soft px-4 py-3 text-sm font-medium text-error">
+          {error}
         </div>
+      )}
+      {successMessage && (
+        <div className="rounded-2xl border border-success/20 bg-success-soft px-4 py-3 text-sm font-medium text-emerald-700">
+          {successMessage}
+        </div>
+      )}
 
-        {error && (
-          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-600">
-            {error}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="rounded-md border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700">
-            {successMessage}
-          </div>
-        )}
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold">Invite a user</h2>
-            <p className="mt-1 text-sm text-text-muted">
-              The user will receive an email link to confirm the same email address and set their password.
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="First name"
-                  name="firstname"
-                  value={formData.firstname}
-                  onChange={handleChange}
-                  error={fieldErrors.firstname}
-                  required
-                />
-                <Input
-                  label="Last name"
-                  name="lastname"
-                  value={formData.lastname}
-                  onChange={handleChange}
-                  error={fieldErrors.lastname}
-                  required
-                />
-              </div>
-
-              <Input
-                label="Email"
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                error={fieldErrors.email}
-                required
-              />
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="Phone number"
-                  name="phone_number"
-                  value={formData.phone_number}
-                  onChange={handleChange}
-                  placeholder="+2348012345678"
-                  error={fieldErrors.phone_number}
-                  required
-                />
-                <Input
-                  label="WhatsApp ID"
-                  name="whatsapp_id"
-                  value={formData.whatsapp_id}
-                  onChange={handleChange}
-                  placeholder="+2348012345678"
-                  error={fieldErrors.whatsapp_id}
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-text-soft">
-                  Role
-                </label>
-                <select
-                  name="role"
-                  value={formData.role}
-                  onChange={handleChange}
-                  className="input-base"
-                >
-                  <option value="teacher">Teacher</option>
-                  <option value="student">Student</option>
-                  <option value="parent">Parent</option>
-                </select>
-                {fieldErrors.role && (
-                  <p className="mt-1 text-sm text-error">{fieldErrors.role}</p>
-                )}
-              </div>
-
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Sending invite..." : "Create user and send invite"}
-              </Button>
-            </form>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold">Current users</h2>
-                <p className="mt-1 text-sm text-text-muted">
-                  Pending users can receive a fresh invite link.
-                </p>
-              </div>
-              <Button variant="outline" onClick={loadUsers} disabled={isLoadingUsers}>
-                Refresh
-              </Button>
+      <div className="grid gap-6 xl:grid-cols-[390px_minmax(0,1fr)]">
+        <Card className="p-5">
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+              <UserPlus className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold">Invite a user</h2>
+              <p className="mt-1 text-sm text-text-muted">
+                The user receives an email link to confirm their address and set a password.
+              </p>
             </div>
+          </div>
 
-            <div className="mt-6 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-border text-text-muted">
-                  <tr>
-                    <th className="py-3 pr-4 font-medium">Name</th>
-                    <th className="py-3 pr-4 font-medium">Role</th>
-                    <th className="py-3 pr-4 font-medium">Status</th>
-                    <th className="py-3 pr-4 font-medium">Email</th>
-                    <th className="py-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoadingUsers ? (
-                    <tr>
-                      <td colSpan="5" className="py-6 text-text-muted">
-                        Loading users...
-                      </td>
-                    </tr>
-                  ) : users.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="py-6 text-text-muted">
-                        No users found yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    users.map((user) => {
-                      const fullName = [user.firstname, user.lastname]
-                        .filter(Boolean)
-                        .join(" ");
-                      const canResend =
-                        user.account_status === "pending" &&
-                        user.role !== "admin" &&
-                        user.role !== "superadmin";
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input label="First name" name="firstname" value={formData.firstname} onChange={handleChange} error={fieldErrors.firstname} required />
+              <Input label="Last name" name="lastname" value={formData.lastname} onChange={handleChange} error={fieldErrors.lastname} required />
+            </div>
+            <Input label="Email" type="email" name="email" value={formData.email} onChange={handleChange} error={fieldErrors.email} required />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input label="Phone number" name="phone_number" value={formData.phone_number} onChange={handleChange} placeholder="+2348012345678" error={fieldErrors.phone_number} required />
+              <Input label="WhatsApp ID" name="whatsapp_id" value={formData.whatsapp_id} onChange={handleChange} placeholder="+2348012345678" error={fieldErrors.whatsapp_id} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-text-soft">Role</label>
+              <select name="role" value={formData.role} onChange={handleChange} className="input-base">
+                <option value="teacher">Teacher</option>
+                <option value="student">Student</option>
+                <option value="parent">Parent</option>
+              </select>
+              {fieldErrors.role && <p className="mt-1.5 text-xs font-medium text-error">{fieldErrors.role}</p>}
+            </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Send className="h-4 w-4" />
+              {isSubmitting ? "Sending invite..." : "Create user and send invite"}
+            </Button>
+          </form>
+        </Card>
 
-                      return (
-                        <tr key={user.id} className="border-b border-border/60">
-                          <td className="py-4 pr-4">
-                            {fullName || "No name"}
-                          </td>
-                          <td className="py-4 pr-4 capitalize">{user.role}</td>
-                          <td className="py-4 pr-4 capitalize">
-                            {user.account_status}
-                          </td>
-                          <td className="py-4 pr-4">{user.email}</td>
-                          <td className="py-4">
-                            <div className="flex flex-wrap items-center gap-2">
+        <Card className="p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Current users</h2>
+              <p className="text-sm text-text-muted">Pending users can receive a fresh invite link.</p>
+            </div>
+            <Badge variant="primary">{users.length} users</Badge>
+          </div>
+
+          <div className="mt-5 table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Email</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoadingUsers ? (
+                  <tr><td colSpan="5" className="text-text-muted">Loading users...</td></tr>
+                ) : users.length === 0 ? (
+                  <tr><td colSpan="5" className="text-text-muted">No users found yet.</td></tr>
+                ) : (
+                  users.map((user) => {
+                    const fullName = [user.firstname, user.lastname].filter(Boolean).join(" ");
+                    const canResend =
+                      user.account_status === "pending" &&
+                      user.role !== "admin" &&
+                      user.role !== "superadmin";
+
+                    return (
+                      <tr key={user.id}>
+                        <td className="font-semibold">{fullName || "No name"}</td>
+                        <td className="capitalize">{user.role}</td>
+                        <td>
+                          <Badge variant={statusVariant(user.account_status)}>
+                            {user.account_status || "unknown"}
+                          </Badge>
+                        </td>
+                        <td>{user.email}</td>
+                        <td>
+                          <div className="flex flex-wrap gap-2">
                             {canResend ? (
-                              <Button
-                                variant="outline"
-                                size="small"
-                                onClick={() => handleResendInvite(user.id)}
-                                disabled={resendingUserId === user.id}
-                              >
-                                {resendingUserId === user.id
-                                  ? "Sending..."
-                                  : "Resend invite"}
+                              <Button variant="outline" size="sm" onClick={() => handleResendInvite(user.id)} disabled={resendingUserId === user.id}>
+                                {resendingUserId === user.id ? "Sending..." : "Resend"}
                               </Button>
                             ) : (
-                              <span className="text-text-muted">
+                              <span className="text-xs font-medium text-text-muted">
                                 {user.account_status === "active" ? "Active" : "Not available"}
                               </span>
                             )}
                             {user.role !== "admin" && user.role !== "superadmin" && (
-                              <Button
-                                variant="danger"
-                                size="small"
-                                onClick={() => handleDeleteUser(user)}
-                                disabled={deletingUserId === user.id}
-                              >
+                              <Button variant="danger" size="sm" onClick={() => handleDeleteUser(user)} disabled={deletingUserId === user.id}>
+                                <Trash2 className="h-4 w-4" />
                                 {deletingUserId === user.id ? "Deleting..." : "Delete"}
                               </Button>
                             )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
 

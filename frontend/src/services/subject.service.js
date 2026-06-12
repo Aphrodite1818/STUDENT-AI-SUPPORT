@@ -1,4 +1,6 @@
 import { api } from "./api";
+import { mockSubjects, page } from "./mockData";
+import { filterItems, withMockFallback } from "./serviceFallback";
 
 const buildSubjectQuery = ({
   skip = 0,
@@ -24,17 +26,35 @@ const buildSubjectQuery = ({
 
 export const subjectService = {
   getSubjects: (options = {}) =>
-    api.get(`/subjects?${buildSubjectQuery(options)}`),
+    withMockFallback(
+      () => api.get(`/subjects?${buildSubjectQuery(options)}`),
+      () => {
+        let items = filterItems(mockSubjects, options.search, ["name", "code", "description"]);
+        if (typeof options.isActive === "boolean") {
+          items = items.filter((subject) => subject.is_active === options.isActive);
+        }
+        return page(items);
+      }
+    ),
 
-  getSubject: (subjectId) => api.get(`/subjects/${subjectId}`),
+  getSubject: (subjectId) =>
+    withMockFallback(
+      () => api.get(`/subjects/${subjectId}`),
+      () => mockSubjects.find((subject) => subject.id === subjectId) || null
+    ),
 
-  createSubject: (data) => api.post("/subjects", data),
+  createSubject: (data) =>
+    withMockFallback(() => api.post("/subjects", data), () => ({ id: `subject-${Date.now()}`, is_active: true, ...data })),
 
-  updateSubject: (subjectId, data) => api.patch(`/subjects/${subjectId}`, data),
+  updateSubject: (subjectId, data) =>
+    withMockFallback(() => api.patch(`/subjects/${subjectId}`, data), () => ({ id: subjectId, ...data })),
 
-  activateSubject: (subjectId) => api.patch(`/subjects/${subjectId}/activate`),
+  activateSubject: (subjectId) =>
+    withMockFallback(() => api.patch(`/subjects/${subjectId}/activate`), () => ({ id: subjectId, is_active: true })),
 
-  deactivateSubject: (subjectId) => api.patch(`/subjects/${subjectId}/deactivate`),
+  deactivateSubject: (subjectId) =>
+    withMockFallback(() => api.patch(`/subjects/${subjectId}/deactivate`), () => ({ id: subjectId, is_active: false })),
 
-  deleteSubject: (subjectId) => api.delete(`/subjects/${subjectId}`),
+  deleteSubject: (subjectId) =>
+    withMockFallback(() => api.delete(`/subjects/${subjectId}`), () => ({ detail: `Subject ${subjectId} deleted in demo mode.` })),
 };

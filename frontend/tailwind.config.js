@@ -4,32 +4,36 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#F4EBD0",
+        background: "#F8FAFC",
         surface: {
           DEFAULT: "#FFFFFF",
-          raised: "#F9FAFB",
+          raised: "#FFFFFF",
           muted: "#F1F5F9",
           subtle: "#E2E8F0",
-          lavender: "#F4EEFF",
-          peach: "#FFF1E6",
-          cyan: "#E0F7FA",
-          mint: "#F0FDF4",
-          yellow: "#FFF8E1",
+          tint: "#EEF2FF",
+          blue: "#EFF6FF",
+          emerald: "#ECFDF5",
+          amber: "#FFFBEB",
+          rose: "#FFF1F2",
         },
         border: {
           DEFAULT: "#E2E8F0",
           strong: "#CBD5E1",
+          subtle: "#F1F5F9",
         },
         text: {
           DEFAULT: "#0F172A",
           soft: "#334155",
           muted: "#64748B",
+          faint: "#94A3B8",
           inverse: "#FFFFFF",
         },
         primary: {
-          DEFAULT: "#F59E0B",
-          hover: "#D97706",
-          soft: "#FFF8E1",
+          DEFAULT: "#2563EB",
+          hover: "#1D4ED8",
+          soft: "#DBEAFE",
+          subtle: "#EFF6FF",
+          deep: "#1E3A8A",
         },
         secondary: {
           DEFAULT: "#1E293B",
@@ -37,29 +41,33 @@ export default {
           soft: "#F1F5F9",
         },
         accent: {
-          DEFAULT: "#14B8A6",
-          hover: "#0F766E",
-          soft: "#CCFBF1",
+          DEFAULT: "#4F46E5",
+          hover: "#4338CA",
+          soft: "#E0E7FF",
         },
         success: {
-          DEFAULT: "#15803D",
-          soft: "#F0FDF4",
+          DEFAULT: "#10B981",
+          hover: "#059669",
+          soft: "#D1FAE5",
         },
         warning: {
-          DEFAULT: "#B45309",
-          soft: "#FFF8E1",
+          DEFAULT: "#F59E0B",
+          hover: "#D97706",
+          soft: "#FEF3C7",
         },
         error: {
-          DEFAULT: "#B91C1C",
-          soft: "#F3E7E7",
+          DEFAULT: "#E11D48",
+          hover: "#BE123C",
+          soft: "#FFE4E6",
         },
       },
       boxShadow: {
         premium:
-          "0 1px 2px rgba(15, 23, 42, 0.04), 0 18px 45px rgba(15, 23, 42, 0.08)",
+          "0 1px 2px rgba(15, 23, 42, 0.04), 0 20px 50px rgba(15, 23, 42, 0.07)",
         "premium-hover":
-          "0 2px 5px rgba(15, 23, 42, 0.06), 0 22px 55px rgba(15, 23, 42, 0.11)",
+          "0 2px 6px rgba(15, 23, 42, 0.06), 0 24px 60px rgba(15, 23, 42, 0.1)",
         "inner-soft": "inset 0 1px 2px rgba(15, 23, 42, 0.04)",
+        "soft-card": "0 8px 30px rgba(15, 23, 42, 0.06)",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],

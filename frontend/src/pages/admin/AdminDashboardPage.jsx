@@ -1,174 +1,470 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import Card from "../../components/ui/Card";
+import { useEffect, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  BarChart3,
+  BookOpen,
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardCheck,
+  GraduationCap,
+  Megaphone,
+  Plus,
+  School,
+  Sparkles,
+  TriangleAlert,
+  Users,
+} from "lucide-react";
+import DashboardLayout from "../../components/layout/DashboardLayout";
 import Button from "../../components/ui/Button";
-import logoImage from "../../assets/images/favicon.png";
-import { authService } from "../../services/auth.service";
+import Card from "../../components/ui/Card";
+import Badge from "../../components/ui/Badge";
+import StatCard from "../../components/shared/StatCard";
+import LoadingState from "../../components/shared/LoadingState";
+import { dashboardService } from "../../services/dashboard.service";
+import { cn } from "../../utils/cn";
 
-function AdminDashboardPage() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const navigate = useNavigate();
+const statIcons = [GraduationCap, Users, School, ClipboardCheck];
+const toneIcons = {
+  success: CheckCircle2,
+  warning: TriangleAlert,
+  primary: BarChart3,
+  error: Megaphone,
+};
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate("/login", { replace: true });
-  };
+const subjectTone = {
+  Mathematics: "primary",
+  Science: "success",
+  English: "accent",
+  Physics: "primary",
+  Chemistry: "accent",
+  "Computer Science": "success",
+};
+
+function TimetableCard({ items = [] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
+            <CalendarDays className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold">Today's Timetable</h2>
+            <p className="text-sm text-text-muted">Live operational schedule for Grade 8 - A.</p>
+          </div>
+        </div>
+        <Button variant="ghost" size="sm">View full timetable</Button>
+      </div>
+
+      <div className="mt-5 overflow-x-auto pb-2">
+        <div className="grid min-w-[760px] grid-cols-6 gap-3">
+          {items.map((item) => (
+            <div
+              key={`${item.time}-${item.subject}`}
+              className={cn(
+                "rounded-2xl border p-4 text-center transition",
+                item.active
+                  ? "border-primary bg-primary-subtle shadow-sm"
+                  : "border-border bg-surface hover:border-primary/30"
+              )}
+            >
+              <p className="text-xs font-semibold text-primary">{item.time}</p>
+              <p className="mt-3 text-sm font-semibold">{item.className}</p>
+              <p className="mt-1 text-sm font-bold text-primary">{item.subject}</p>
+              <p className="mt-1 text-xs text-text-muted">{item.room}</p>
+              {item.students && (
+                <p className="mt-3 text-xs font-semibold text-text-muted">
+                  {item.students} students
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function AttendanceActions({ classes = [] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+            <ClipboardCheck className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold">Mark Attendance</h2>
+            <p className="text-sm text-text-muted">Quick shortcuts for today.</p>
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {classes.map((item) => (
+          <button
+            key={item.className}
+            type="button"
+            className={cn(
+              "rounded-2xl border p-4 text-left transition hover:-translate-y-0.5",
+              item.active
+                ? "border-primary bg-primary text-white shadow-sm shadow-primary/20"
+                : "border-border bg-surface hover:border-primary/30 hover:bg-primary-subtle"
+            )}
+          >
+            <span className={cn("flex h-10 w-10 items-center justify-center rounded-full", item.active ? "bg-white/15" : "bg-primary-soft text-primary")}>
+              <Users className="h-5 w-5" />
+            </span>
+            <p className="mt-3 text-sm font-semibold">{item.className}</p>
+            <p className={cn("text-sm", item.active ? "text-white/80" : "text-text-muted")}>{item.subject}</p>
+            <p className={cn("mt-2 text-xs font-semibold", item.active ? "text-white/80" : "text-text-muted")}>
+              {item.students} students
+            </p>
+          </button>
+        ))}
+        <button
+          type="button"
+          className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface text-sm font-semibold text-text-muted transition hover:border-primary/40 hover:bg-primary-subtle hover:text-primary"
+        >
+          <Plus className="mb-2 h-5 w-5" />
+          Other class
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function PerformanceCard({ data = [] }) {
+  const chartData = [{ name: "Average", value: data[0]?.value || 78 }];
 
   return (
-    <div className="min-h-screen bg-background flex overflow-hidden text-text">
-      {/* Sidebar */}
-      <aside 
-        className={`${isSidebarOpen ? 'w-64' : 'w-20'} transition-all duration-300 ease-in-out bg-surface border-r border-border flex flex-col justify-between`}
-      >
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-            <Link to="/" className="flex items-center gap-3">
-              <img src={logoImage} alt="Logo" className="h-8 w-8 rounded-lg" />
-              {isSidebarOpen && <span className="font-bold text-lg whitespace-nowrap">Learnly AI</span>}
-            </Link>
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="text-text-muted hover:text-text transition-colors p-1"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
-
-          <nav className="p-4 space-y-2">
-            {[
-              { name: 'Dashboard', to: '/admin/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-              { name: 'Users', to: '/admin/users', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
-            ].map((item, index) => (
-              <Link 
-                key={index}
-                to={item.to}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${index === 0 ? 'bg-primary/10 text-primary' : 'text-text-soft hover:bg-surface-muted hover:text-text'}`}
-                title={!isSidebarOpen ? item.name : undefined}
+          <h2 className="text-lg font-semibold">Student Performance Overview</h2>
+          <p className="text-sm text-text-muted">This term at a glance.</p>
+        </div>
+        <Button variant="outline" size="sm">This Term</Button>
+      </div>
+      <div className="mt-5 grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
+        <div className="relative h-44">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={[{ name: "Remaining", value: 100 }]}
+                dataKey="value"
+                innerRadius={58}
+                outerRadius={76}
+                startAngle={90}
+                endAngle={-270}
               >
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
-                </svg>
-                {isSidebarOpen && <span className="font-medium">{item.name}</span>}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold flex-shrink-0">
-              A
-            </div>
-            {isSidebarOpen && (
-              <div className="overflow-hidden">
-                <p className="text-sm font-medium truncate">Admin User</p>
-                <p className="text-xs text-text-muted truncate">admin@school.edu</p>
-              </div>
-            )}
+                <Cell fill="#E2E8F0" />
+              </Pie>
+              <Pie
+                data={chartData}
+                dataKey="value"
+                innerRadius={58}
+                outerRadius={76}
+                startAngle={90}
+                endAngle={-270}
+                cornerRadius={10}
+              >
+                <Cell fill="#10B981" />
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <p className="text-3xl font-semibold">{chartData[0].value}%</p>
+            <p className="text-xs text-text-muted">Average Score</p>
           </div>
         </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-background relative overflow-y-auto">
-        {/* Background Accents */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-        
-        {/* Header */}
-        <header className="h-16 flex items-center justify-between px-8 border-b border-border/50 sticky top-0 bg-background/80 backdrop-blur-md z-10">
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-text to-text-soft">
-            Overview
-          </h1>
-          <div className="flex items-center gap-4">
-            <button className="text-text-soft hover:text-primary transition-colors">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
-            <Link to="/admin/users">
-              <Button variant="outline" size="sm">Manage Users</Button>
-            </Link>
-            <Button variant="secondary" size="sm" onClick={handleLogout}>
-              Logout
-            </Button>
-          </div>
-        </header>
-
-        {/* Dashboard Content */}
-        <div className="p-8 max-w-6xl mx-auto w-full space-y-8 relative z-0">
-          
-          <div className="flex items-end justify-between">
-            <div>
-              <h2 className="text-3xl font-extrabold tracking-tight">Welcome back, Admin!</h2>
-              <p className="text-text-muted mt-1">Here's what's happening at your school today.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            ["Top Performers", "18%", "+4% vs last term", "success"],
+            ["At Risk Students", "7", "-2 vs last term", "error"],
+            ["Average Attendance", "92%", "+3% vs last term", "success"],
+            ["Assessments Done", "24", "This term", "primary"],
+          ].map(([label, value, detail, tone]) => (
+            <div key={label} className="rounded-2xl border border-border bg-surface-muted/40 p-4">
+              <p className="text-xs font-semibold text-text-muted">{label}</p>
+              <p className="mt-2 text-2xl font-semibold">{value}</p>
+              <p className={cn("mt-1 text-xs font-semibold", tone === "error" ? "text-error" : tone === "success" ? "text-success" : "text-primary")}>
+                {detail}
+              </p>
             </div>
-            <div className="text-sm text-text-soft bg-surface border border-border px-3 py-1.5 rounded-full shadow-sm">
-              Greenwood High School
-            </div>
-          </div>
+          ))}
+        </div>
+      </div>
+      <Button variant="outline" size="sm" className="mt-4">View detailed analytics</Button>
+    </Card>
+  );
+}
 
-          {/* Stats Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { label: "Total Students", value: "1,248", trend: "+12% this month", color: "from-blue-500/20 to-cyan-500/20", iconColor: "text-blue-500" },
-              { label: "Active Teachers", value: "42", trend: "+2 this week", color: "from-emerald-500/20 to-teal-500/20", iconColor: "text-emerald-500" },
-              { label: "WhatsApp Queries", value: "892", trend: "Today", color: "from-purple-500/20 to-pink-500/20", iconColor: "text-purple-500" },
-            ].map((stat, i) => (
-              <Card key={i} className="p-6 relative overflow-hidden group hover:shadow-lg transition-all duration-300 border-border/50 bg-surface/50 backdrop-blur-sm">
-                <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${stat.color} rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-500`}></div>
-                <div className="relative z-10">
-                  <p className="text-sm font-medium text-text-soft">{stat.label}</p>
-                  <p className="text-4xl font-bold mt-2 text-text">{stat.value}</p>
-                  <div className="mt-4 flex items-center gap-2 text-xs font-medium">
-                    <span className={`px-2 py-1 rounded-full bg-surface border border-border ${stat.iconColor}`}>
-                      {stat.trend}
-                    </span>
-                  </div>
+function AssignedClasses({ classes = [] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
+            <BookOpen className="h-5 w-5" />
+          </span>
+          <h2 className="text-lg font-semibold">Assigned Classes & Subjects</h2>
+        </div>
+        <Button variant="ghost" size="sm">View all</Button>
+      </div>
+      <div className="mt-5 space-y-3">
+        {classes.map((item) => (
+          <button key={item.className} type="button" className="w-full rounded-2xl border border-border bg-surface p-4 text-left transition hover:border-primary/30 hover:bg-primary-subtle">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+                <Users className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-semibold">{item.className}</p>
+                  <span className="text-xs text-text-muted">{item.students} students</span>
                 </div>
-              </Card>
-            ))}
-          </div>
-
-          {/* Quick Actions & Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="lg:col-span-2 p-6 border-border/50 bg-surface/50 backdrop-blur-sm">
-              <h3 className="text-lg font-bold mb-4">AI Usage Overview</h3>
-              <div className="h-64 flex items-center justify-center border border-dashed border-border rounded-lg bg-background/50">
-                <p className="text-text-muted flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                  </svg>
-                  Usage Chart Placeholder
-                </p>
+                <p className="text-sm text-text-muted">{item.role}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {item.subjects.map((subject) => (
+                    <Badge key={subject} variant={subjectTone[subject] || "default"}>
+                      {subject}
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </Card>
+            </div>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-            <Card className="p-6 border-border/50 bg-surface/50 backdrop-blur-sm">
-              <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
-              <div className="space-y-3">
-                {[
-                  { name: "Add New Student", icon: "M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" },
-                  { name: "Create Class", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
-                  { name: "Broadcast Message", icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" },
-                ].map((action, i) => (
-                  <button key={i} className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group">
-                    <div className="p-2 rounded-md bg-surface group-hover:bg-primary/10 transition-colors">
-                      <svg className="w-5 h-5 text-text-soft group-hover:text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={action.icon} />
-                      </svg>
-                    </div>
-                    <span className="font-medium text-sm text-text-soft group-hover:text-text transition-colors">{action.name}</span>
-                  </button>
+function ListCard({ title, items = [], action = "View all", icon: Icon = Megaphone }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <Button variant="ghost" size="sm">{action}</Button>
+      </div>
+      <div className="mt-4 divide-y divide-border">
+        {items.map((item) => {
+          const ToneIcon = toneIcons[item.tone] || Icon;
+          return (
+            <div key={item.title} className="flex gap-4 py-4">
+              <span className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
+                item.tone === "success" && "bg-success-soft text-success",
+                item.tone === "warning" && "bg-warning-soft text-warning",
+                item.tone === "error" && "bg-error-soft text-error",
+                item.tone === "primary" && "bg-primary-soft text-primary"
+              )}>
+                <ToneIcon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    {item.category && <Badge variant={item.tone}>{item.category}</Badge>}
+                    <p className="mt-2 font-semibold">{item.title}</p>
+                  </div>
+                  {item.date && <span className="text-xs text-text-muted">{item.date}</span>}
+                </div>
+                <p className="mt-1 text-sm leading-6 text-text-muted">{item.detail}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function AttendanceSnapshot({ weeklyAttendance = [] }) {
+  const totals = [
+    { name: "Present", value: 1184, color: "#10B981" },
+    { name: "Absent", value: 76, color: "#E11D48" },
+    { name: "Late", value: 24, color: "#F59E0B" },
+  ];
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Attendance Snapshot</h2>
+        <Button variant="outline" size="sm">This Week</Button>
+      </div>
+      <div className="mt-5 grid gap-5 md:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-1 2xl:grid-cols-[170px_minmax(0,1fr)]">
+        <div className="relative h-44">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={totals} dataKey="value" innerRadius={54} outerRadius={76} paddingAngle={3}>
+                {totals.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
                 ))}
-              </div>
-            </Card>
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <p className="text-3xl font-semibold">92%</p>
+            <p className="text-xs text-text-muted">Overall</p>
           </div>
-          
         </div>
-      </main>
-    </div>
+        <div className="space-y-3 self-center">
+          {totals.map((item) => (
+            <div key={item.name} className="flex items-center justify-between gap-4 text-sm">
+              <span className="flex items-center gap-2 text-text-soft">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                {item.name}
+              </span>
+              <span className="font-semibold">{item.value.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={weeklyAttendance}>
+            <CartesianGrid vertical={false} stroke="#E2E8F0" />
+            <XAxis dataKey="day" tickLine={false} axisLine={false} />
+            <YAxis hide />
+            <Tooltip />
+            <Bar dataKey="present" fill="#2563EB" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  );
+}
+
+function AiActivity({ items = [] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent">
+          <Bot className="h-5 w-5" />
+        </span>
+        <div>
+          <h2 className="text-lg font-semibold">Learnly AI Activity</h2>
+          <p className="text-sm text-text-muted">Automations and summaries from the last 24 hours.</p>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {items.map((item) => (
+          <div key={item.title} className="rounded-2xl border border-border bg-surface-muted/40 p-4">
+            <p className="text-sm font-semibold text-primary">{item.title}</p>
+            <p className="mt-1 text-sm text-text-soft">{item.detail}</p>
+            <p className="mt-3 text-xs text-text-muted">{item.time}</p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function AdminDashboardPage() {
+  const [overview, setOverview] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    dashboardService.getAdminOverview().then((data) => {
+      if (mounted) setOverview(data);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!overview) {
+    return (
+      <DashboardLayout role="admin" title="Dashboard">
+        <LoadingState label="Loading dashboard..." />
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout
+      role="admin"
+      title="Good morning, Anita"
+      description="Here's what's happening at Greenfield International School today."
+      actions={
+        <>
+          <Button variant="outline">
+            <Sparkles className="h-4 w-4" />
+            AI Assistant
+          </Button>
+          <Button>
+            <Plus className="h-4 w-4" />
+            Quick action
+          </Button>
+        </>
+      }
+    >
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {overview.stats.map((stat, index) => (
+          <StatCard
+            key={stat.label}
+            {...stat}
+            icon={statIcons[index]}
+            trend={stat.change?.startsWith("-") ? "down" : "up"}
+          />
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="space-y-6">
+          <TimetableCard items={overview.timetable} />
+          <AttendanceActions classes={overview.attendanceClasses} />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <PerformanceCard data={overview.performance} />
+            <AssignedClasses classes={overview.assignedClasses} />
+          </div>
+          <AiActivity items={overview.aiActivity} />
+        </div>
+
+        <div className="space-y-6">
+          <ListCard title="Recent Notices" items={overview.notices} />
+          <ListCard title="AI Insights" items={overview.insights} icon={Sparkles} />
+          <AttendanceSnapshot weeklyAttendance={overview.weeklyAttendance} />
+          <Card className="p-5">
+            <h2 className="text-lg font-semibold">Enrollment Trends</h2>
+            <p className="text-sm text-text-muted">New admissions across recent terms.</p>
+            <div className="mt-5 h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={[
+                    { month: "Jan", students: 980 },
+                    { month: "Feb", students: 1040 },
+                    { month: "Mar", students: 1110 },
+                    { month: "Apr", students: 1160 },
+                    { month: "May", students: 1248 },
+                  ]}
+                >
+                  <CartesianGrid vertical={false} stroke="#E2E8F0" />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                  <YAxis hide />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="students" stroke="#2563EB" fill="#DBEAFE" strokeWidth={3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+      </section>
+    </DashboardLayout>
   );
 }
 

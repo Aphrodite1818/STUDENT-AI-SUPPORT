@@ -196,6 +196,56 @@ export const subjectReadOnlyResourceConfig = {
   mapItemToForm: () => ({}),
 };
 
+export const subjectResourceConfig = {
+  singularLabel: "Subject",
+  pluralLabel: "Subjects",
+  formHelp: "Subjects define the academic catalog teachers and classes can be assigned to.",
+  canCreate: true,
+  canUpdate: true,
+  canDelete: true,
+  initialForm: {
+    name: "",
+    code: "",
+    description: "",
+    is_active: "true",
+  },
+  fields: [
+    { name: "name", label: "Subject name", required: true },
+    { name: "code", label: "Subject code" },
+    { name: "description", label: "Description", type: "textarea" },
+    {
+      name: "is_active",
+      label: "Status",
+      type: "select",
+      options: [
+        { value: "true", label: "Active" },
+        { value: "false", label: "Inactive" },
+      ],
+    },
+  ],
+  filters: subjectReadOnlyResourceConfig.filters,
+  columns: subjectReadOnlyResourceConfig.columns,
+  fetchItems: subjectReadOnlyResourceConfig.fetchItems,
+  createItem: (payload) =>
+    subjectService.createSubject({
+      ...payload,
+      is_active: payload.is_active === "true",
+    }),
+  updateItem: (id, payload) =>
+    subjectService.updateSubject(id, {
+      ...payload,
+      is_active: payload.is_active === "true",
+    }),
+  deleteItem: (id) => subjectService.deleteSubject(id),
+  mapItemToForm: (item) => ({
+    name: item.name || "",
+    code: item.code || "",
+    description: item.description || "",
+    is_active: item.is_active ? "true" : "false",
+  }),
+  getItemLabel: (item) => subjectName(item),
+};
+
 export const teacherResourceConfig = {
   singularLabel: "Teacher profile",
   pluralLabel: "Teacher profiles",

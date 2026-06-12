@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import Card from "../../components/ui/Card";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowRight, TriangleAlert } from "lucide-react";
+import AuthLayout from "../../components/layout/AuthLayout";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
 import { parseApiError, remapFieldErrors } from "../../services/api";
 
@@ -11,46 +11,11 @@ const RESET_PASSWORD_FIELD_MAP = {
   new_password: "password",
 };
 
-// ── shared layout ────────────────────────────────────────────────────
-// Defined outside the component so React never sees it as a new type
-function PageShell({ children }) {
+function Alert({ children }) {
   return (
-    <div className="min-h-screen relative flex items-center justify-center bg-background p-4 text-text overflow-hidden">
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 h-80 w-80 rounded-full bg-primary opacity-30 blur-3xl animate-blob"></div>
-        <div className="absolute top-1/3 right-1/4 h-72 w-72 rounded-full bg-accent opacity-30 blur-3xl animate-blob animation-delay-2000"></div>
-        <div className="absolute -bottom-8 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-primary opacity-20 blur-3xl animate-blob animation-delay-4000"></div>
-      </div>
-
-      <div className="w-full max-w-md animate-fadein z-10 relative">
-        <Link
-          to="/"
-          className="mb-8 flex items-center justify-center gap-3 transition-opacity duration-300 hover:opacity-90"
-        >
-          <img
-            src={logoImage}
-            alt="Learnly AI logo"
-            className="h-10 w-10 rounded-xl border border-border bg-surface p-1 shadow-sm"
-          />
-          <p className="text-xl font-extrabold tracking-tight text-text">
-            Learnly AI
-          </p>
-        </Link>
-
-        <Card className="p-8 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary animate-text-gradient bg-[length:200%_auto]"></div>
-          {children}
-          <p className="mt-8 text-center text-sm text-text-soft">
-            Remembered your password?{" "}
-            <Link
-              to="/login"
-              className="font-semibold text-primary hover:text-primary-hover transition-colors"
-            >
-              Back to login
-            </Link>
-          </p>
-        </Card>
-      </div>
+    <div className="mb-4 flex gap-3 rounded-2xl border border-error/20 bg-error-soft px-4 py-3 text-sm font-medium text-error">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      {children}
     </div>
   );
 }
@@ -58,101 +23,64 @@ function PageShell({ children }) {
 function ForgotPasswordPage() {
   const navigate = useNavigate();
   const { state } = useLocation();
-
-  // Reset token + email arrive via router state (never in URL)
   const resetToken = state?.reset_token;
   const resetEmail = state?.email;
-
-  // Derive step from state — no setter needed
   const step = resetToken ? "reset" : "request";
 
   const [inputEmail, setInputEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(0);
-
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
 
-  // ── password strength ──────────────────────────────────────────────
-  const getPasswordStrength = (pw) => {
+  const getPasswordStrength = (value) => {
     let score = 0;
-    if (pw.length >= 8) score++;
-    if (pw.length >= 12) score++;
-    if (/[A-Z]/.test(pw)) score++;
-    if (/[0-9]/.test(pw)) score++;
-    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    if (value.length >= 8) score++;
+    if (value.length >= 12) score++;
+    if (/[A-Z]/.test(value)) score++;
+    if (/[0-9]/.test(value)) score++;
+    if (/[^A-Za-z0-9]/.test(value)) score++;
     return score;
   };
 
-  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong", "Very strong"];
-  const strengthColor = [
-    "",
-    "bg-red-500",
-    "bg-orange-400",
-    "bg-yellow-400",
-    "bg-green-400",
-    "bg-green-500",
-  ];
-
-  const handlePasswordChange = (e) => {
-    setPassword(e.target.value);
-    setPasswordStrength(getPasswordStrength(e.target.value));
-    setFieldErrors((prev) => ({ ...prev, password: undefined }));
-    setError(null);
-  };
-
-  // ── step 1: request OTP ────────────────────────────────────────────
-  const handleRequestOtp = async (e) => {
-    e.preventDefault();
+  const handleRequestOtp = async (event) => {
+    event.preventDefault();
     setIsLoading(true);
     setError(null);
     setFieldErrors({});
 
     try {
       await authService.requestOtp(inputEmail, "password_reset");
-      navigate(
-        `/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`,
-        {
-          state: {
-            notice: "We sent a password reset code to your email.",
-          },
-        }
-      );
+      navigate(`/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`, {
+        state: { notice: "We sent a password reset code to your email." },
+      });
     } catch (err) {
       const apiError = parseApiError(err, "Something went wrong. Please try again.");
       if (apiError.status === 429) {
-        navigate(
-          `/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`,
-          {
-            state: {
-              notice: apiError.retryAfter
-                ? `A reset code was sent recently. Please wait ${apiError.retryAfter} seconds before requesting another one.`
-                : "A reset code was sent recently. Please use that code or wait a moment before requesting another one.",
-            },
-          }
-        );
+        navigate(`/verify-otp?email=${encodeURIComponent(inputEmail)}&purpose=password_reset`, {
+          state: {
+            notice: apiError.retryAfter
+              ? `A reset code was sent recently. Please wait ${apiError.retryAfter} seconds before requesting another one.`
+              : "A reset code was sent recently. Please use that code or wait a moment before requesting another one.",
+          },
+        });
         return;
       }
-      if (Object.keys(apiError.fieldErrors).length > 0) {
-        setFieldErrors(apiError.fieldErrors);
-      }
+      if (Object.keys(apiError.fieldErrors).length > 0) setFieldErrors(apiError.fieldErrors);
       setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── step 2: set new password ───────────────────────────────────────
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-
+  const handleResetPassword = async (event) => {
+    event.preventDefault();
     if (password !== confirmPassword) {
       setFieldErrors({ confirmPassword: "Passwords do not match." });
       return;
     }
-
     if (password.length < 8) {
       setFieldErrors({ password: "Password must be at least 8 characters." });
       return;
@@ -166,180 +94,112 @@ function ForgotPasswordPage() {
       await authService.resetPassword(resetEmail, resetToken, password);
       navigate("/login?reset=true", { replace: true });
     } catch (err) {
-      const apiError = parseApiError(
-        err,
-        "Failed to reset password. Please try again."
-      );
-      const mappedFieldErrors = remapFieldErrors(
-        apiError.fieldErrors,
-        RESET_PASSWORD_FIELD_MAP
-      );
-
-      if (Object.keys(mappedFieldErrors).length > 0) {
-        setFieldErrors(mappedFieldErrors);
-      }
-
+      const apiError = parseApiError(err, "Failed to reset password. Please try again.");
+      const mappedFieldErrors = remapFieldErrors(apiError.fieldErrors, RESET_PASSWORD_FIELD_MAP);
+      if (Object.keys(mappedFieldErrors).length > 0) setFieldErrors(mappedFieldErrors);
       setError(apiError.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── step: request ──────────────────────────────────────────────────
   if (step === "request") {
     return (
-      <PageShell>
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-text">Forgot password?</h1>
-          <p className="text-sm text-text-muted mt-2">
-            Enter your work email and we'll send you a reset code.
+      <AuthLayout
+        title="Reset your password"
+        description="Enter your work email and we will send a secure reset code."
+        footer={
+          <p className="mt-7 text-center text-sm text-text-soft">
+            Remembered it?{" "}
+            <Link to="/login" className="font-semibold text-primary hover:text-primary-hover">
+              Back to login
+            </Link>
           </p>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
-            {error}
-          </div>
-        )}
-
+        }
+      >
+        {error && <Alert>{error}</Alert>}
         <form onSubmit={handleRequestOtp} className="space-y-5">
-          <div className="group">
-            <Input
-              label="Work email"
-              type="email"
-              name="email"
-              value={inputEmail}
-              onChange={(e) => {
-                setInputEmail(e.target.value);
-                setFieldErrors((prev) => ({ ...prev, email: undefined }));
-                setError(null);
-              }}
-              placeholder="name@school.edu"
-              required
-              error={fieldErrors.email}
-              className="transition-all duration-300 group-hover:border-primary/50"
-            />
-          </div>
-
-          <div className="pt-2">
-            <Button
-              type="submit"
-              className="w-full group relative overflow-hidden"
-              disabled={isLoading}
-            >
-              <span
-                className={`transition-all duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
-              >
-                Send reset code
-              </span>
-              {isLoading && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="h-5 w-5 rounded-full border-2 border-text-inverse border-t-transparent animate-spin"></span>
-                </span>
-              )}
-            </Button>
-          </div>
+          <Input
+            label="Work email"
+            type="email"
+            name="email"
+            value={inputEmail}
+            onChange={(event) => {
+              setInputEmail(event.target.value);
+              setFieldErrors((prev) => ({ ...prev, email: undefined }));
+              setError(null);
+            }}
+            placeholder="name@school.edu"
+            required
+            error={fieldErrors.email}
+          />
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Sending code..." : "Send reset code"}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
         </form>
-      </PageShell>
+      </AuthLayout>
     );
   }
 
-  // ── step: reset ────────────────────────────────────────────────────
   return (
-    <PageShell>
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-text">Set new password</h1>
-        <p className="text-sm text-text-muted mt-2">
-          Enter a new password for{" "}
-          <span className="font-semibold text-text">{resetEmail}</span>.
+    <AuthLayout
+      title="Set new password"
+      description={`Enter a new password for ${resetEmail}.`}
+      footer={
+        <p className="mt-7 text-center text-sm text-text-soft">
+          Remembered it?{" "}
+          <Link to="/login" className="font-semibold text-primary hover:text-primary-hover">
+            Back to login
+          </Link>
         </p>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-500 rounded-md text-sm text-center">
-          {error}
-        </div>
-      )}
-
+      }
+    >
+      {error && <Alert>{error}</Alert>}
       <form onSubmit={handleResetPassword} className="space-y-5">
-        <div className="group">
-          <Input
-            label="New password"
-            type="password"
-            name="password"
-            value={password}
-            onChange={handlePasswordChange}
-            placeholder="••••••••"
-            required
-            minLength={8}
-            error={fieldErrors.password}
-            className="transition-all duration-300 group-hover:border-primary/50"
-          />
-          {password.length > 0 && (
-            <div className="mt-2 space-y-1">
-              <div className="flex gap-1">
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <div
-                    key={level}
-                    className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                      passwordStrength >= level
-                        ? strengthColor[passwordStrength]
-                        : "bg-border"
-                    }`}
-                  />
-                ))}
-              </div>
-              <p className="text-xs text-text-muted">
-                Strength:{" "}
-                <span className="font-medium text-text">
-                  {strengthLabel[passwordStrength] || "Too short"}
-                </span>
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="group">
-          <Input
-            label="Confirm new password"
-            type="password"
-            name="confirmPassword"
-            value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value);
-              setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
-              setError(null);
-            }}
-            placeholder="••••••••"
-            required
-            error={fieldErrors.confirmPassword}
-            className="transition-all duration-300 group-hover:border-primary/50"
-          />
-          {confirmPassword.length > 0 && password !== confirmPassword && (
-            <p className="mt-1 text-xs text-red-500">Passwords do not match.</p>
-          )}
-        </div>
-
-        <div className="pt-2">
-          <Button
-            type="submit"
-            className="w-full group relative overflow-hidden"
-            disabled={isLoading}
-          >
-            <span
-              className={`transition-all duration-300 ${isLoading ? "opacity-0" : "opacity-100"}`}
-            >
-              Reset password
-            </span>
-            {isLoading && (
-              <span className="absolute inset-0 flex items-center justify-center">
-                <span className="h-5 w-5 rounded-full border-2 border-text-inverse border-t-transparent animate-spin"></span>
-              </span>
-            )}
-          </Button>
-        </div>
+        <Input
+          label="New password"
+          type="password"
+          name="password"
+          value={password}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            setPasswordStrength(getPasswordStrength(event.target.value));
+            setFieldErrors((prev) => ({ ...prev, password: undefined }));
+            setError(null);
+          }}
+          placeholder="At least 8 characters"
+          required
+          minLength={8}
+          error={fieldErrors.password}
+        />
+        {password && (
+          <div className="grid grid-cols-5 gap-1">
+            {[1, 2, 3, 4, 5].map((level) => (
+              <span key={level} className={`h-1.5 rounded-full ${passwordStrength >= level ? "bg-primary" : "bg-surface-muted"}`} />
+            ))}
+          </div>
+        )}
+        <Input
+          label="Confirm new password"
+          type="password"
+          name="confirmPassword"
+          value={confirmPassword}
+          onChange={(event) => {
+            setConfirmPassword(event.target.value);
+            setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+            setError(null);
+          }}
+          placeholder="Re-enter password"
+          required
+          error={fieldErrors.confirmPassword}
+        />
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Resetting..." : "Reset password"}
+          <ArrowRight className="h-4 w-4" />
+        </Button>
       </form>
-    </PageShell>
+    </AuthLayout>
   );
 }
 

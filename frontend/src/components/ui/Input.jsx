@@ -1,4 +1,6 @@
-function Input({ label, error, className = "", ...props }) {
+import { cn } from "../../utils/cn";
+
+function Input({ label, error, className = "", hint, ...props }) {
   const errorMessage =
     typeof error === "string"
       ? error
@@ -11,8 +13,13 @@ function Input({ label, error, className = "", ...props }) {
           {label}
         </label>
       )}
-      <input className={`input-base ${className}`} {...props} />
-      {errorMessage && <p className="mt-1 text-sm text-error">{errorMessage}</p>}
+      <input className={cn("input-base", className)} {...props} />
+      {hint && !errorMessage && (
+        <p className="mt-1.5 text-xs text-text-muted">{hint}</p>
+      )}
+      {errorMessage && (
+        <p className="mt-1.5 text-xs font-medium text-error">{errorMessage}</p>
+      )}
     </div>
   );
 }
