@@ -5,7 +5,7 @@ from app.modules.subjects.models import Subject
 import pytest
 
 
-
+#testing creating subjects 
 """this test is actually creating an object and passing it to repository"""
 @pytest.mark.asyncio #tells pytest this function is async run in an async event loop
 async def test_create_subject(
