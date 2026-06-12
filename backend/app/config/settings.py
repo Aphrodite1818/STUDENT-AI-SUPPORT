@@ -86,4 +86,4 @@ class Settings(BaseSettings):
         return self.ENV == EnvironmentType.DEVELOPMENT #returns True if the env is a development environment
 
 
-settings = Settings()
+settings = Settings()  # pyright: ignore[reportCallIssue]
