@@ -29,6 +29,7 @@ async def get_current_actor(
     token: TokenDependency,
     db: DbDependency,
 ) -> User | SuperAdmin:
+    """Return current actor."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         actor_id_str: str | None = payload.get("sub")
@@ -58,6 +59,7 @@ async def get_current_tenant_user(
     actor: Annotated[User | SuperAdmin, Depends(get_current_actor)],
     db: DbDependency,
 ) -> User:
+    """Return current tenant user."""
     if isinstance(actor, SuperAdmin):
         raise ForbiddenException("Tenant user credentials are required for this operation")
 
@@ -78,6 +80,7 @@ async def get_current_tenant_user(
 async def get_current_superadmin(
     actor: Annotated[User | SuperAdmin, Depends(get_current_actor)],
 ) -> SuperAdmin:
+    """Return current superadmin."""
     if isinstance(actor, User):
         raise ForbiddenException("Superadmin credentials are required for this operation")
     if not actor.is_active:
@@ -88,15 +91,18 @@ async def get_current_superadmin(
 async def require_superadmin(
     current_superadmin: Annotated[SuperAdmin, Depends(get_current_superadmin)],
 ) -> SuperAdmin:
+    """Return a dependency that requires superadmin."""
     return current_superadmin
 
 
 def require_tenant_role(
     allowed_roles: list[UserRole],
 ) -> Callable[..., Coroutine[Any, Any, User]]:
+    """Return a dependency that requires tenant role."""
     async def role_checker(
         current_user: Annotated[User, Depends(get_current_tenant_user)],
     ) -> User:
+        """Check whether the current user has one of the allowed roles."""
         if current_user.role not in allowed_roles:
             roles_str = ", ".join(role.value for role in allowed_roles)
             raise ForbiddenException(
@@ -111,6 +117,7 @@ async def require_tenant_ownership(
     tenant_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_tenant_user)],
 ) -> User:
+    """Return a dependency that requires tenant ownership."""
     if current_user.tenant_id != tenant_id:
         raise ForbiddenException("You do not have access to this tenant's resources")
     return current_user

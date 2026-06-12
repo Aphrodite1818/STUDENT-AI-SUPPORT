@@ -28,12 +28,16 @@ logger = get_logger(__name__)
 
 
 def _normalize_email(email: str) -> str:
+    """Normalize the email address."""
     return email.strip().lower()
 
 
 class SuperadminService:
+    """Business logic for the superadmin domain."""
+
     @staticmethod
     def _build_invite_link(raw_token: str, frontend_app_url: str | None = None) -> str:
+        """Build invite link."""
         base_url = (frontend_app_url or settings.FRONTEND_APP_URL).strip().rstrip("/")
         return f"{base_url}/invite?token={quote(raw_token, safe='')}"
 
@@ -42,6 +46,7 @@ class SuperadminService:
         db: AsyncSession,
         email: str,
     ) -> tuple[User | None, Tenant | None, SuperAdmin | None]:
+        """Return email conflicts."""
         normalized_email = _normalize_email(email)
         existing_user = await UserRepository.get_user_by_email(db, normalized_email)
         existing_tenant = await TenantRepository.get_by_email_including_deleted(db, normalized_email)
@@ -55,6 +60,7 @@ class SuperadminService:
         email: str,
         password: str,
     ) -> SuperAdmin | None:
+        """Perform authenticate superadmin."""
         superadmin = await SuperAdminRepository.get_by_email(db, email)
         if superadmin is None:
             return None
@@ -78,6 +84,7 @@ class SuperadminService:
         skip: int = 0,
         limit: int = 100,
     ) -> list[SuperAdmin]:
+        """List superadmins."""
         return await SuperAdminRepository.list(db, skip=skip, limit=limit)
 
     @staticmethod
@@ -87,6 +94,7 @@ class SuperadminService:
         background_tasks: BackgroundTasks | None = None,
         frontend_app_url: str | None = None,
     ) -> Tenant:
+        """Create tenant."""
         normalized_email = _normalize_email(payload.email)
         existing_user, existing_tenant, existing_superadmin = await SuperadminService.get_email_conflicts(
             db,
@@ -184,6 +192,7 @@ class SuperadminService:
         limit: int = 50,
         include_deleted: bool = True,
     ) -> list[Tenant]:
+        """List tenants."""
         return await TenantRepository.get_all(
             db,
             skip=skip,
@@ -198,6 +207,7 @@ class SuperadminService:
         *,
         include_deleted: bool = True,
     ) -> Tenant:
+        """Return tenant."""
         tenant = (
             await TenantRepository.get_by_id_including_deleted(db, tenant_id)
             if include_deleted
@@ -213,6 +223,7 @@ class SuperadminService:
         tenant_id: uuid.UUID,
         payload: TenantStatusUpdate,
     ) -> Tenant:
+        """Update tenant status."""
         tenant = await TenantRepository.get_by_id_including_deleted(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
@@ -229,6 +240,7 @@ class SuperadminService:
 
     @staticmethod
     async def restore_tenant(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
+        """Perform restore tenant."""
         tenant = await TenantRepository.get_by_id_including_deleted(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
@@ -245,6 +257,7 @@ class SuperadminService:
 
     @staticmethod
     async def delete_tenant(db: AsyncSession, tenant_id: uuid.UUID) -> dict[str, str]:
+        """Delete tenant."""
         tenant = await TenantRepository.get_by_id(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
@@ -261,6 +274,7 @@ class SuperadminService:
         background_tasks: BackgroundTasks | None = None,
         frontend_app_url: str | None = None,
     ) -> dict[str, str]:
+        """Perform invite superadmin."""
         normalized_email = _normalize_email(payload.email)
         existing_user, existing_tenant, existing_superadmin = await SuperadminService.get_email_conflicts(
             db,

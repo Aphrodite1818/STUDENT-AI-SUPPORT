@@ -21,9 +21,11 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 class ProviderFactory:
+    """Factory for selecting AI providers."""
 
     @staticmethod
     def get_provider(provider_name: str) -> BaseLLMProvider:
+        """Return the configured AI provider."""
         provider_name = provider_name.lower()
 
         providers = {

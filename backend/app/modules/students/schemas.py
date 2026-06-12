@@ -12,6 +12,7 @@ from app.modules.students.models import AcademicStatus, Gender
 
 
 class StudentBase(BaseModel):
+    """Pydantic schema for the students domain."""
     firstname: str = Field(min_length=3, max_length=100)
     lastname: str = Field(min_length=3, max_length=100)
     gender: Gender
@@ -27,18 +28,21 @@ class StudentBase(BaseModel):
     @field_validator("date_of_birth")
     @classmethod
     def validate_date_of_birth(cls, value: date) -> date:
+        """Validate date of birth."""
         if value >= date.today():
             raise ValueError("date_of_birth must be in the past")
         return value
 
 
 class StudentCreate(StudentBase):
+    """Pydantic schema for the students domain."""
     admission_number: str = Field(min_length=1, max_length=50)
     admission_date: date
     status: AcademicStatus = AcademicStatus.ACTIVE
 
     @model_validator(mode="after")
     def validate_student_create(self) -> Self:
+        """Validate student create."""
         if self.admission_date < self.date_of_birth:
             raise ValueError("admission_date cannot be before date_of_birth")
 
@@ -55,6 +59,7 @@ class StudentCreate(StudentBase):
 
 
 class StudentUpdate(BaseModel):
+    """Pydantic schema for the students domain."""
     firstname: str | None = Field(default=None, min_length=3, max_length=100)
     lastname: str | None = Field(default=None, min_length=3, max_length=100)
     gender: Gender | None = None
@@ -70,17 +75,20 @@ class StudentUpdate(BaseModel):
     @field_validator("date_of_birth")
     @classmethod
     def validate_date_of_birth(cls, value: date | None) -> date | None:
+        """Validate date of birth."""
         if value is not None and value >= date.today():
             raise ValueError("date_of_birth must be in the past")
         return value
 
 
 class StudentAcademicStatusUpdate(BaseModel):
+    """Pydantic schema for the students domain."""
     status: AcademicStatus
     graduation_date: date | None = None
 
     @model_validator(mode="after")
     def validate_status_update(self) -> Self:
+        """Validate status update."""
         if self.status == AcademicStatus.GRADUATED and self.graduation_date is None:
             raise ValueError("graduation_date is required when status is graduated")
 
@@ -91,6 +99,7 @@ class StudentAcademicStatusUpdate(BaseModel):
 
 
 class StudentResponse(StudentBase):
+    """Pydantic schema for the students domain."""
     id: uuid.UUID
     tenant_id: uuid.UUID
     created_at: datetime
@@ -103,6 +112,7 @@ class StudentResponse(StudentBase):
 
 
 class StudentPublicResponse(BaseModel):
+    """Pydantic schema for the students domain."""
     id: uuid.UUID
     firstname: str
     lastname: str

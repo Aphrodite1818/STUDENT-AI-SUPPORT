@@ -25,6 +25,7 @@ async def create_tenant(
     request: Request,
     current_superadmin: SuperadminActor,
 ) -> Tenant:
+    """Create tenant."""
     return await SuperadminService.create_tenant(
         db,
         payload,
@@ -41,6 +42,7 @@ async def list_tenants(
     limit: int = Query(default=50, ge=1, le=200),
     include_deleted: bool = Query(default=True),
 ) -> list[Tenant]:
+    """List tenants."""
     return await SuperadminService.list_tenants(
         db,
         skip=skip,
@@ -56,6 +58,7 @@ async def get_tenant(
     current_superadmin: SuperadminActor,
     include_deleted: bool = Query(default=True),
 ) -> Tenant:
+    """Return tenant."""
     return await SuperadminService.get_tenant(db, tenant_id, include_deleted=include_deleted)
 
 
@@ -66,6 +69,7 @@ async def update_tenant_status(
     db: DbSession,
     current_superadmin: SuperadminActor,
 ) -> Tenant:
+    """Update tenant status."""
     return await SuperadminService.update_tenant_status(db, tenant_id, payload)
 
 
@@ -75,6 +79,7 @@ async def restore_tenant(
     db: DbSession,
     current_superadmin: SuperadminActor,
 ) -> Tenant:
+    """Perform restore tenant."""
     return await SuperadminService.restore_tenant(db, tenant_id)
 
 
@@ -84,6 +89,7 @@ async def delete_tenant(
     db: DbSession,
     current_superadmin: SuperadminActor,
 ) -> dict[str, str]:
+    """Delete tenant."""
     return await SuperadminService.delete_tenant(db, tenant_id)
 
 
@@ -94,6 +100,7 @@ async def list_superadmins(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[SuperAdmin]:
+    """List superadmins."""
     return await SuperadminService.list_superadmins(db, skip=skip, limit=limit)
 
 
@@ -105,6 +112,7 @@ async def invite_superadmin(
     request: Request,
     current_superadmin: SuperadminActor,
 ) -> dict[str, str]:
+    """Perform invite superadmin."""
     return await SuperadminService.invite_superadmin(
         db,
         invited_by=current_superadmin,

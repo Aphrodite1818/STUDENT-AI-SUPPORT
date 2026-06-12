@@ -14,10 +14,12 @@ PUBLIC_SCHEMA = "public"
 
 
 class Base(DeclarativeBase):
+    """Base declarative class for SQLAlchemy models."""
     metadata = MetaData(schema=PUBLIC_SCHEMA)
 
 
 class BaseModel(UUIDMixin, TimestampMixin, Base):
+    """Abstract base class for tenant-scoped SQLAlchemy models."""
     __abstract__ = True #this line prevents creation of another table
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(

@@ -14,16 +14,19 @@ except Exception:
     BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
     class EnvironmentType:
+        """Supported application environments."""
         DEVELOPMENT = "dev"
         PRODUCTION = "prod"
         STAGING = "stg"
 
     class _FallbackSettings:
+        """Represent the _FallbackSettings type."""
         ENV = EnvironmentType.DEVELOPMENT
         LOG_LEVEL = None
 
         @property
         def is_development(self) -> bool:
+            """Return whether the application is running in development mode."""
             return self.ENV == EnvironmentType.DEVELOPMENT
 
     settings = _FallbackSettings()
@@ -40,10 +43,12 @@ _STANDARD_RECORD_ATTRS = frozenset(
 
 
 def is_development() -> bool:
+    """Return whether the application is running in development mode."""
     return getattr(settings, "is_development", False)
 
 
 def _level_from_name(name: str) -> int:
+    """Internal helper for level from name."""
     level = getattr(logging, name.upper(), None)
 
     if not isinstance(level, int):
@@ -53,6 +58,7 @@ def _level_from_name(name: str) -> int:
 
 
 def resolve_log_level() -> int:
+    """Resolve the active log level."""
     if settings.LOG_LEVEL:
         return _level_from_name(settings.LOG_LEVEL)
 
@@ -63,6 +69,7 @@ class ContextFormatter(logging.Formatter):
     """Adds custom extra={...} fields to log lines."""
 
     def format(self, record: logging.LogRecord) -> str:
+        """Format a log record."""
         record.source = self._source_path(record)
         message = super().format(record)
 
@@ -84,6 +91,7 @@ class ContextFormatter(logging.Formatter):
 
     @staticmethod
     def _source_path(record: logging.LogRecord) -> str:
+        """Return the source file path for the current log record."""
         try:
             path = Path(record.pathname).resolve().relative_to(BASE_DIR)
         except ValueError:
@@ -93,6 +101,7 @@ class ContextFormatter(logging.Formatter):
 
 
 def _build_console_handler(console_level: int) -> logging.Handler:
+    """Build the console log handler."""
     console_format = (
         "%(asctime)s | %(levelname)-8s | source=%(source)s | "
         "%(name)s | %(message)s"
@@ -108,6 +117,7 @@ def _build_console_handler(console_level: int) -> logging.Handler:
 
 
 def _build_file_handler() -> logging.Handler:
+    """Build the file log handler."""
     LOG_DIR.mkdir(exist_ok=True)
 
     file_format = (
@@ -130,6 +140,7 @@ def _build_file_handler() -> logging.Handler:
 
 
 def _build_handlers(console_level: int) -> list[logging.Handler]:
+    """Build the configured log handlers."""
     handlers: list[logging.Handler] = [
         _build_console_handler(console_level)
     ]
@@ -141,6 +152,7 @@ def _build_handlers(console_level: int) -> list[logging.Handler]:
 
 
 def _attach_handlers(logger: logging.Logger, handlers: list[logging.Handler]) -> None:
+    """Attach handlers to the given logger."""
     logger.handlers.clear()
 
     for handler in handlers:
@@ -150,6 +162,7 @@ def _attach_handlers(logger: logging.Logger, handlers: list[logging.Handler]) ->
 
 
 def configure_logging() -> None:
+    """Configure application logging."""
     app_logger = logging.getLogger("backend")
 
     if getattr(app_logger, _CONFIGURED_ATTR, False):
@@ -190,6 +203,7 @@ def configure_logging() -> None:
 configure_logging()
 
 def get_logger(name: str) -> logging.Logger:
+    """Return a configured application logger."""
     if not name.startswith("backend."):
         name = f"backend.{name.lstrip('.')}"
 

@@ -148,14 +148,17 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
         default=TenantVerificationStatus.PENDING_VERIFICATION,
     )
     def __repr__(self) -> str:
+        """Return a string representation of the Tenant instance."""
         return f"<Tenant id={self.id} slug={self.slug!r} status={self.status}>"
 
     @property
     def is_active(self) -> bool:
+        """Return whether active."""
         return self.status == TenantStatus.ACTIVE and not self.is_deleted
 
     @property
     def whatsapp_enabled(self) -> bool:
+        """Return the whatsapp_enabled value for the tenant."""
         if not self.feature_flags:
             return False
         return bool(self.feature_flags.get("whatsapp_bot", False))

@@ -36,6 +36,7 @@ logger = get_logger(__name__)
 
 
 class EmailRegistrationState(StrEnum):
+    """Container for tenant management state."""
     AVAILABLE = "AVAILABLE"
     PENDING = "PENDING"
     ACTIVE = "ACTIVE"
@@ -44,14 +45,18 @@ class EmailRegistrationState(StrEnum):
 
 
 def _normalize_email(email: str) -> str:
+    """Normalize the email address."""
     return email.strip().lower()
 
 
 def _normalize_school_name(school_name: str) -> str:
+    """Normalize the school name."""
     return school_name.strip()
 
 
 class TenantService:
+    """Business logic for the tenant management domain."""
+
     @staticmethod
     def get_email_registration_state(
         user: User | None,
@@ -99,6 +104,7 @@ class TenantService:
 
     @staticmethod
     async def _unique_slug(db: AsyncSession, school_name: str) -> str:
+        """Internal helper for unique slug."""
         base_slug = generate_slug(school_name)
         slug = base_slug
         counter = 1
@@ -136,6 +142,7 @@ class TenantService:
         payload: TenantRegisterRequest,
         background_tasks: BackgroundTasks | None = None,
     ) -> dict:
+        """Perform register tenant."""
         school_name = _normalize_school_name(payload.school_name)
         normalized_email = _normalize_email(payload.email)
 
@@ -318,6 +325,7 @@ class TenantService:
         db: AsyncSession,
         tenant_id: uuid.UUID,
     ) -> Tenant:
+        """Return tenant by id."""
         tenant = await TenantRepository.get_by_id(db, tenant_id)
 
         if not tenant:
@@ -331,6 +339,7 @@ class TenantService:
         tenant_id: uuid.UUID,
         payload: TenantUpdate,
     ) -> Tenant:
+        """Update tenant profile."""
         tenant = await TenantRepository.get_by_id(db, tenant_id)
 
         if not tenant:

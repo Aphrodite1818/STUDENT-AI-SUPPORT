@@ -16,11 +16,13 @@ if TYPE_CHECKING:
 
 
 class Gender(str, Enum):
+    """Enumeration of supported students values."""
     MALE = "male"
     FEMALE = "female"
 
 
 class AcademicStatus(str, Enum):
+    """Enumeration of supported students values."""
     ACTIVE = "active"
     WITHDRAWN = "withdrawn"
     SUSPENDED = "suspended"
@@ -30,6 +32,7 @@ class AcademicStatus(str, Enum):
 
 
 class Students(BaseModel):
+    """Represent the Students type."""
     __tablename__ = "students"
 
     firstname : Mapped[str] = mapped_column(String(100) , nullable = False)

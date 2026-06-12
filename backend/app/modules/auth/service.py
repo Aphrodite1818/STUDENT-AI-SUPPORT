@@ -54,6 +54,7 @@ from app.core.utils.otp_rate_limiter import OTPRateLimiter
 
 """AUTH SERVICE LARGLEY DEPENDS ON USER AND TENANT REPOSITORIES AND MODELS"""
 def _normalize_email(email: str) -> str:
+    """Normalize the email address."""
     return email.strip().lower()
 
 
@@ -61,6 +62,7 @@ async def _get_platform_email_conflicts(
     db: AsyncSession,
     email: str,
 ) -> tuple[User | None, Tenant | None, SuperAdmin | None]:
+    """Internal helper for get platform email conflicts."""
     normalized_email = _normalize_email(email)
     existing_user = await UserRepository.get_user_by_email(db, normalized_email)
     existing_tenant = await TenantRepository.get_by_email_including_deleted(db, normalized_email)
@@ -74,6 +76,7 @@ async def _authenticate_superadmin(
     email: str,
     password: str,
 ) -> SuperAdmin | None:
+    """Internal helper for authenticate superadmin."""
     superadmin = await SuperAdminRepository.get_by_email(db, email)
     if superadmin is None:
         return None
@@ -92,6 +95,7 @@ async def _authenticate_superadmin(
 
 
 def _tenant_allows_login(tenant: Tenant | None) -> bool:
+    """Internal helper for tenant allows login."""
     return (
         tenant is not None
         and not tenant.is_deleted
@@ -101,10 +105,12 @@ def _tenant_allows_login(tenant: Tenant | None) -> bool:
 
 
 def _tenant_allows_user_invite_completion(tenant: Tenant | None) -> bool:
+    """Internal helper for tenant allows user invite completion."""
     return _tenant_allows_login(tenant)
 
 
 def _tenant_allows_activation_completion(tenant: Tenant | None) -> bool:
+    """Internal helper for tenant allows activation completion."""
     return (
         tenant is not None
         and not tenant.is_deleted
@@ -114,6 +120,7 @@ def _tenant_allows_activation_completion(tenant: Tenant | None) -> bool:
 
 
 def _tenant_allows_otp_verification(tenant: Tenant | None) -> bool:
+    """Internal helper for tenant allows otp verification."""
     return (
         tenant is not None
         and not tenant.is_deleted
@@ -123,6 +130,7 @@ def _tenant_allows_otp_verification(tenant: Tenant | None) -> bool:
 
 
 def _user_can_reset_password(user: User | None, tenant: Tenant | None) -> bool:
+    """Internal helper for user can reset password."""
     return (
         user is not None
         and user.account_status == AccountStatus.ACTIVE
@@ -133,6 +141,7 @@ def _user_can_reset_password(user: User | None, tenant: Tenant | None) -> bool:
 
 @dataclass
 class AuthenticatedActor:
+    """Represent the AuthenticatedActor type."""
     account_type: str
     actor_id: uuid.UUID
     email: str
@@ -141,6 +150,8 @@ class AuthenticatedActor:
 
 
 class AuthService:
+    """Business logic for the auth domain."""
+
     @staticmethod
     def _build_verification_required_payload(
         email: str,
@@ -148,6 +159,7 @@ class AuthService:
         *,
         resend_otp_available: bool,
     ) -> dict[str, str | bool]:
+        """Build verification required payload."""
         normalized_email = _normalize_email(email)
         return {
             "message": detail,
@@ -164,6 +176,7 @@ class AuthService:
         *,
         resend_otp_available: bool,
     ) -> dict[str, str]:
+        """Internal helper for otp verification headers."""
         normalized_email = _normalize_email(email)
         return {
             "X-Verification-Required": "true",
@@ -180,6 +193,7 @@ class AuthService:
         email: str,
         background_tasks: BackgroundTasks | None = None,
     ) -> None:
+        """Internal helper for raise verification required."""
         normalized_email = _normalize_email(email)
         detail = "Your account needs verification. We sent a new verification code."
         resend_otp_available = True
@@ -226,6 +240,7 @@ class AuthService:
         payload: LoginRequest,
         background_tasks: BackgroundTasks | None = None,
     ) -> AuthenticatedActor:
+        """Perform authenticate actor."""
         superadmin = await _authenticate_superadmin(
             db,
             email=payload.email,
@@ -294,6 +309,7 @@ class AuthService:
 
     @staticmethod
     async def reset_password(db: AsyncSession, payload: UpdatePassword) -> None:
+        """Perform reset password."""
         normalized_email = _normalize_email(payload.email)
         hashed_token = hash_auth_secret(payload.reset_token)
         now = datetime.now(timezone.utc)
@@ -336,11 +352,14 @@ class AuthService:
 
 
 class TenantActivationService:
+    """Business logic for the auth domain."""
+
     @staticmethod
     def _build_invite_link(
         raw_token: str,
         frontend_app_url: str | None = None,
     ) -> str:
+        """Build invite link."""
         base_url = (frontend_app_url or settings.FRONTEND_APP_URL).strip().rstrip("/")
         return f"{base_url}/invite?token={quote(raw_token, safe='')}"
 
@@ -352,6 +371,7 @@ class TenantActivationService:
         admin_user: User,
         frontend_app_url: str | None = None,
     ) -> str:
+        """Create activation record."""
         raw_token = secrets.token_urlsafe(32)
         expires_at = datetime.now(timezone.utc) + timedelta(
             hours=settings.TENANT_ACTIVATION_EXPIRATION_HOURS
@@ -388,6 +408,7 @@ class TenantActivationService:
         invite_link: str,
         background_tasks: BackgroundTasks | None = None,
     ) -> None:
+        """Perform send activation email."""
         subject = f"Activate your {school_name} administrator account"
         html_body = get_tenant_invite_email_html(school_name, invite_link)
 
@@ -417,6 +438,7 @@ class TenantActivationService:
         db: AsyncSession,
         payload: TenantActivationRequest,
     ) -> dict[str, str]:
+        """Perform activate tenant."""
         hashed_token = hash_auth_secret(payload.token)
         now = datetime.now(timezone.utc)
 
@@ -485,11 +507,14 @@ class TenantActivationService:
 
 
 class UserInviteService:
+    """Business logic for the auth domain."""
+
     @staticmethod
     def _build_invite_link(
         raw_token: str,
         frontend_app_url: str | None = None,
     ) -> str:
+        """Build invite link."""
         base_url = (frontend_app_url or settings.FRONTEND_APP_URL).strip().rstrip("/")
         return f"{base_url}/invite?token={quote(raw_token, safe='')}"
 
@@ -500,6 +525,7 @@ class UserInviteService:
         user: User,
         frontend_app_url: str | None = None,
     ) -> str:
+        """Create invite record."""
         raw_token = secrets.token_urlsafe(32)
         expires_at = datetime.now(timezone.utc) + timedelta(
             hours=settings.TENANT_ACTIVATION_EXPIRATION_HOURS
@@ -538,6 +564,7 @@ class UserInviteService:
         invite_link: str,
         background_tasks: BackgroundTasks | None = None,
     ) -> None:
+        """Perform send invite email."""
         subject = f"Set up your {school_name} account"
         html_body = get_user_invite_email_html(user_name, school_name, invite_link)
 
@@ -567,6 +594,7 @@ class UserInviteService:
         db: AsyncSession,
         token: str,
     ) -> dict[str, str | None]:
+        """Return invite status."""
         hashed_token = hash_auth_secret(token)
         now = datetime.now(timezone.utc)
 
@@ -631,6 +659,7 @@ class UserInviteService:
         db: AsyncSession,
         payload: UserInviteAcceptanceRequest,
     ) -> dict[str, str]:
+        """Perform accept invite."""
         hashed_token = hash_auth_secret(payload.token)
         now = datetime.now(timezone.utc)
 
@@ -715,6 +744,7 @@ class UserInviteService:
         db: AsyncSession,
         payload: UserInviteAcceptanceRequest,
     ) -> dict[str, str]:
+        """Perform accept superadmin invite."""
         hashed_token = hash_auth_secret(payload.token)
         now = datetime.now(timezone.utc)
 
@@ -775,6 +805,8 @@ class UserInviteService:
 
 
 class OTPService:
+    """Business logic for the auth domain."""
+
     @staticmethod
     async def _replace_otp_record(
         db: AsyncSession,
@@ -782,6 +814,7 @@ class OTPService:
         otp_code: str,
         expires_at: datetime,
     ) -> User:
+        """Internal helper for replace otp record."""
         normalized_email = _normalize_email(payload.email)
         result = await db.execute(
             select(User).where(func.lower(User.email) == normalized_email).with_for_update()
@@ -818,6 +851,7 @@ class OTPService:
         *,
         commit: bool = True,
     ) -> None:
+        """Perform generate otp."""
         existing_user = await UserRepository.get_user_by_email(db, payload.email)
         if not existing_user:
             raise NotFoundException("User with this email not found.")
@@ -903,6 +937,7 @@ class OTPService:
 
     @staticmethod
     async def verify_otp(db: AsyncSession, payload: VerifyOTP) -> dict[str, str]:
+        """Perform verify otp."""
         now = datetime.now(timezone.utc)
         normalized_email = _normalize_email(payload.email)
 

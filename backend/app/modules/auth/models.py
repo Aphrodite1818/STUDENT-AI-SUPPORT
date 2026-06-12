@@ -12,6 +12,7 @@ from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 
 class AuthPurpose(str, Enum):
+    """Enumeration of supported auth values."""
     VERIFICATION = "verification"
     PASSWORD_RESET = "password_reset"
     TENANT_ACTIVATION = "tenant_activation"
@@ -19,6 +20,7 @@ class AuthPurpose(str, Enum):
 
 
 class AuthRecord(BaseModel):
+    """Represent the AuthRecord type."""
     __tablename__ = "auth"
 
     email: Mapped[str] = mapped_column(String(100), nullable=False, index=True)

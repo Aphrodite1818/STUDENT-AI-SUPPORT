@@ -11,6 +11,7 @@ from pydantic import BaseModel, field_validator
 
 
 class Role(str, Enum):
+    """Enumeration of supported AI values."""
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -18,6 +19,7 @@ class Role(str, Enum):
 
 
 class ConversationMessage(BaseModel):
+    """Represent the ConversationMessage type."""
     role: Role
     content: str
     tool_name: str | None = None
@@ -25,6 +27,7 @@ class ConversationMessage(BaseModel):
 
 
 class AIChatRequest(BaseModel):
+    """Pydantic schema for the AI domain."""
     message: str
     phone_number: str
     tenant_id: str | None = None
@@ -33,6 +36,7 @@ class AIChatRequest(BaseModel):
     @field_validator("phone_number")
     @classmethod
     def validate_phone_number(cls, value: str) -> str:
+        """Validate phone number."""
         pattern = r"^\+?[1-9]\d{6,14}$"
         cleaned = re.sub(r"[\s\-().]+", "", value.strip())
 
@@ -42,6 +46,7 @@ class AIChatRequest(BaseModel):
 
 
 def validate_phone_number(phone_number: str) -> str:
+    """Validate phone number."""
     pattern = r"^\+?[1-9]\d{6,14}$"
     cleaned = re.sub(r"[\s\-().]+", "", phone_number.strip())
 

@@ -13,6 +13,7 @@ from app.shared.base_model import BaseModel
 
 
 class Subject(BaseModel):
+    """Represent the Subject type."""
     __tablename__ = "subjects"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -28,6 +29,7 @@ class Subject(BaseModel):
 
     @property
     def teachers(self) -> list[Any]:
+        """Perform teachers."""
         return [link.teacher for link in self.teacher_links if link.teacher is not None]
 
     __table_args__ = (

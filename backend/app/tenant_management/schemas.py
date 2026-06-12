@@ -56,6 +56,7 @@ class OutputBase(BaseModel):
 # ──────────────────────────────────────────────
 
 def _clean_optional_string(value: str | None) -> str | None:
+    """Internal helper for clean optional string."""
     if value is None:
         return None
 
@@ -68,6 +69,7 @@ def _clean_optional_string(value: str | None) -> str | None:
 # ──────────────────────────────────────────────
 
 class TenantBase(InputBase):
+    """Pydantic schema for the tenant management domain."""
     school_name: str = Field(
         ...,
         min_length=3,
@@ -91,6 +93,7 @@ class TenantBase(InputBase):
     @field_validator("school_name")
     @classmethod
     def validate_school_name(cls, value: str) -> str:
+        """Validate school name."""
         if not value.strip():
             raise ValueError("school_name cannot be empty")
         return value.strip()
@@ -107,10 +110,12 @@ class TenantBase(InputBase):
     )
     @classmethod
     def clean_text_fields(cls, value: str | None) -> str | None:
+        """Normalize text fields."""
         return _clean_optional_string(value)
 
 
 class TenantRegisterRequest(InputBase):
+    """Pydantic schema for the tenant management domain."""
     school_name: str = Field(
         ...,
         min_length=3,
@@ -124,6 +129,7 @@ class TenantRegisterRequest(InputBase):
     @field_validator("school_name")
     @classmethod
     def validate_school_name(cls, value: str) -> str:
+        """Validate school name."""
         if not value.strip():
             raise ValueError("school_name cannot be empty")
         return value.strip()
@@ -131,10 +137,12 @@ class TenantRegisterRequest(InputBase):
     @field_validator("slug", mode="before")
     @classmethod
     def clean_slug(cls, value: str | None) -> str | None:
+        """Normalize slug."""
         return _clean_optional_string(value)
 
 
 class TenantCreate(TenantBase):
+    """Pydantic schema for the tenant management domain."""
     school_bot_whatssap_number: str | None = Field(
         default=None,
         pattern=PHONE_PATTERN,
@@ -148,6 +156,7 @@ class TenantCreate(TenantBase):
     @field_validator("school_bot_whatssap_number", mode="before")
     @classmethod
     def clean_school_bot_whatssap_number(cls, value: str | None) -> str | None:
+        """Normalize school bot whatssap number."""
         return _clean_optional_string(value)
 
     @computed_field
@@ -158,6 +167,7 @@ class TenantCreate(TenantBase):
 
 
 class TenantUpdate(InputBase):
+    """Pydantic schema for the tenant management domain."""
     school_name: str | None = Field(default=None, min_length=2, max_length=255)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
@@ -191,10 +201,12 @@ class TenantUpdate(InputBase):
     )
     @classmethod
     def clean_text_fields(cls, value: str | None) -> str | None:
+        """Normalize text fields."""
         return _clean_optional_string(value)
 
 
 class TenantStatusUpdate(InputBase):
+    """Pydantic schema for the tenant management domain."""
     status: TenantStatus
     reason: str | None = Field(
         default=None,
@@ -205,10 +217,12 @@ class TenantStatusUpdate(InputBase):
     @field_validator("reason", mode="before")
     @classmethod
     def clean_reason(cls, value: str | None) -> str | None:
+        """Normalize reason."""
         return _clean_optional_string(value)
 
 
 class TenantPublicResponse(OutputBase):
+    """Pydantic schema for the tenant management domain."""
     model_config = ConfigDict(
         from_attributes=True,
         use_enum_values=True,
@@ -238,6 +252,7 @@ class TenantPublicResponse(OutputBase):
 
 
 class TenantAdminResponse(TenantPublicResponse):
+    """Pydantic schema for the tenant management domain."""
     max_students: int
     max_teachers: int
     feature_flags: dict[str, Any] | None
@@ -248,6 +263,7 @@ class TenantAdminResponse(TenantPublicResponse):
 
 
 class TenantContext(OutputBase):
+    """Represent the TenantContext type."""
     id: uuid.UUID
     slug: str
     school_name: str
@@ -262,8 +278,10 @@ class TenantContext(OutputBase):
 
     @property
     def is_active(self) -> bool:
+        """Return whether active."""
         return self.status == TenantStatus.ACTIVE
 
     @property
     def whatsapp_enabled(self) -> bool:
+        """Return the whatsapp_enabled value for the tenantcontext."""
         return bool(self.feature_flags and self.feature_flags.get("whatsapp_bot"))

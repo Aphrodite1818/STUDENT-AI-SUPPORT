@@ -47,6 +47,7 @@ async def register_tenant(
     db: DbSession,
     background_tasks: BackgroundTasks,
 ) -> dict | JSONResponse:
+    """Perform register tenant."""
     result = await TenantService.register_tenant(
         db,
         payload,
@@ -74,6 +75,7 @@ async def get_tenant(
     current_user: TenantAdminOrTeacherUser,
     owned_user: TenantOwnedUser,
 ) -> Tenant:
+    """Return tenant."""
     return await TenantService.get_tenant_by_id(db, tenant_id)
 
 
@@ -90,6 +92,7 @@ async def update_tenant(
     current_user: TenantAdminUser,
     owned_user: TenantOwnedUser,
 ) -> Tenant:
+    """Update tenant."""
     return await TenantService.update_tenant_profile(
         db,
         tenant_id,

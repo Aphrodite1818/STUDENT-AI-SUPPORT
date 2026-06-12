@@ -20,6 +20,7 @@ class TeacherRepository:
         db: AsyncSession,
         teacher: Teacher,
     ) -> Teacher:
+        """Create teacher."""
         db.add(teacher)
         await db.flush()
         await db.refresh(teacher)
@@ -141,6 +142,7 @@ class TeacherRepository:
         teacher: Teacher,
         update_data: dict[str, Any],
     ) -> Teacher:
+        """Update teacher."""
         for field, value in update_data.items():
             setattr(teacher, field, value)
 
@@ -154,6 +156,7 @@ class TeacherRepository:
         teacher: Teacher,
         status: TeacherStatus,
     ) -> Teacher:
+        """Update teacher status."""
         teacher.status = status
         await db.flush()
         await db.refresh(teacher)
@@ -166,6 +169,7 @@ class TeacherRepository:
         teacher_id: UUID,
         subject_ids: list[UUID],
     ) -> list[TeacherSubject]:
+        """Create teacher subject links."""
         teacher_subject_links = [
             TeacherSubject(
                 tenant_id=tenant_id,
@@ -186,6 +190,7 @@ class TeacherRepository:
         teacher_id: UUID,
         subject_ids: list[UUID],
     ) -> None:
+        """Delete teacher subject links."""
         await db.execute(
             delete(TeacherSubject).where(
                 TeacherSubject.tenant_id == tenant_id,
@@ -201,6 +206,7 @@ class TeacherRepository:
         tenant_id: UUID,
         teacher_id: UUID,
     ) -> None:
+        """Delete all teacher subject links."""
         await db.execute(
             delete(TeacherSubject).where(
                 TeacherSubject.tenant_id == tenant_id,
@@ -215,6 +221,7 @@ class TeacherRepository:
         tenant_id: UUID,
         teacher_id: UUID,
     ) -> list[UUID]:
+        """Return teacher subject ids."""
         result = await db.execute(
             select(TeacherSubject.subject_id).where(
                 TeacherSubject.tenant_id == tenant_id,
@@ -229,6 +236,7 @@ class TeacherRepository:
         db: AsyncSession,
         teacher: Teacher,
     ) -> None:
+        """Delete teacher."""
         teacher.status = TeacherStatus.ARCHIVED
         await db.execute(
             delete(TeacherSubject).where(

@@ -14,7 +14,9 @@ from app.modules.AI.providers.utils import require_api_key
 
 class OpenAIProvider(BaseLLMProvider):
 
+    """Represent the OpenAIProvider type."""
     def __init__(self, api_key: str | None, model: str, max_tokens: int):
+        """Initialize the OpenAIProvider instance."""
         self.api_key = require_api_key(api_key, "OpenAI")
         self.model = model
         self.max_tokens = max_tokens
@@ -24,6 +26,7 @@ class OpenAIProvider(BaseLLMProvider):
         messages: list[dict[str, str]],
         tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        """Perform chat."""
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
