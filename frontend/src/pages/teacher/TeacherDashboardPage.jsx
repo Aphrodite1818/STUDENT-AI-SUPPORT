@@ -22,35 +22,35 @@ function TeacherDashboardPage() {
     <DashboardLayout
       role="teacher"
       title={`${firstName}'s Workspace`}
-      description="Live teaching tools are available through the module links below."
+      description="Access your classes, attendance, and teaching tools."
     >
-      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-xl font-semibold">Teaching Overview</h2>
+      <section className="dashboard-grid lg:grid-cols-[minmax(0,1fr)_min(100%,380px)]">
+        <Card className="p-4 sm:p-5 md:p-6">
+          <h2 className="section-title">Teaching Overview</h2>
           <EmptyState
             title="No teacher dashboard metrics yet"
-            description="Class load, attendance, assignment, and timetable summaries will appear after backend summary endpoints are available."
+            description="Class load, attendance, and timetable summaries will appear when backend endpoints are available."
           />
         </Card>
 
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-xl font-semibold">Quick Actions</h2>
-          <div className="mt-5 grid gap-3">
+        <Card className="p-4 sm:p-5 md:p-6">
+          <h2 className="section-title">Quick Actions</h2>
+          <div className="mt-4 grid gap-2 sm:mt-5 sm:gap-3">
             {shortcuts.map((shortcut) => {
               const Icon = shortcut.icon;
               return (
                 <Link
                   key={shortcut.to}
                   to={shortcut.to}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 font-semibold text-text-soft transition hover:border-primary/30 hover:bg-primary-subtle hover:text-primary"
+                  className="flex min-h-11 items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-semibold text-text-soft transition hover:border-primary/30 hover:bg-primary-subtle hover:text-primary sm:text-base"
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5 shrink-0" />
                   {shortcut.label}
                 </Link>
               );
             })}
           </div>
-          <Link to="/teacher/attendance" className="mt-5 block">
+          <Link to="/teacher/attendance" className="mt-4 block sm:mt-5">
             <Button className="w-full">
               <CheckSquare className="h-4 w-4" />
               Open attendance

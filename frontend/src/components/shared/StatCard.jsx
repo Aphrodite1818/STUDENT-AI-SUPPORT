@@ -20,31 +20,56 @@ function StatCard({
   tone = "primary",
   description,
   className = "",
+  compact = false,
 }) {
   const TrendIcon = trend === "down" ? ArrowDownRight : ArrowUpRight;
 
   return (
-    <Card className={cn("min-h-[148px] p-4 sm:p-5 md:p-6 bg-surface shadow-sm border-border/40", className)}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium tracking-wide text-text-muted uppercase">{label}</p>
-          <p className="mt-2 truncate text-2xl font-semibold tracking-tight text-text sm:text-3xl md:text-4xl">{value}</p>
+    <Card
+      className={cn(
+        "flex h-full flex-col bg-surface shadow-sm border-border/40",
+        compact
+          ? "min-h-0 p-3 sm:p-4 md:p-5"
+          : "min-h-0 p-3 sm:min-h-[132px] sm:p-4 md:p-5 lg:min-h-[148px] lg:p-6",
+        className
+      )}
+    >
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-text-muted sm:text-[11px] md:text-xs">
+            {label}
+          </p>
+          <p className="mt-1 truncate text-lg font-semibold leading-none tracking-tight text-text sm:mt-1.5 sm:text-2xl md:text-3xl lg:text-4xl">
+            {value}
+          </p>
         </div>
         {Icon && (
-          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] sm:h-12 sm:w-12", toneClasses[tone] || toneClasses.primary)}>
-            <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+          <span
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-xl sm:rounded-[14px]",
+              compact ? "h-8 w-8" : "h-8 w-8 sm:h-10 sm:w-10 md:h-11 md:w-11 lg:h-12 lg:w-12",
+              toneClasses[tone] || toneClasses.primary
+            )}
+          >
+            <Icon className={cn(compact ? "h-4 w-4" : "h-4 w-4 sm:h-5 sm:w-5 md:h-5 md:w-5 lg:h-6 lg:w-6")} />
           </span>
         )}
       </div>
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        {change && (
-          <Badge variant={trend === "down" ? "error" : "success"}>
-            <TrendIcon className="h-3.5 w-3.5" />
-            {change}
-          </Badge>
-        )}
-        {description && <span className="text-xs font-medium text-text-muted">{description}</span>}
-      </div>
+      {(change || description) && (
+        <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-2 sm:gap-2 sm:pt-3 md:pt-4">
+          {change && (
+            <Badge variant={trend === "down" ? "error" : "success"}>
+              <TrendIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              {change}
+            </Badge>
+          )}
+          {description && (
+            <span className="truncate text-[10px] font-medium text-text-muted sm:text-xs">
+              {description}
+            </span>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

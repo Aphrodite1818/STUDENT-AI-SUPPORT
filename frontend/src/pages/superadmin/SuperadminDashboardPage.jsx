@@ -217,7 +217,7 @@ function SuperadminDashboardPage() {
     <DashboardLayout
       role="superadmin"
       title="Platform Dashboard"
-      description="Manage school tenants, verification activity, and platform-level administrator access."
+      description="Manage school tenants, verification, and platform administrator access."
       actions={
         <Button variant="outline" onClick={loadDashboardData} disabled={isLoading}>
           <RefreshCw className="h-4 w-4" />
@@ -236,22 +236,22 @@ function SuperadminDashboardPage() {
         </div>
       )}
 
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total Schools" value={tenants.length} icon={Building2} tone="primary" description="registered tenants" />
-        <StatCard label="Active Schools" value={activeTenants} icon={CheckCircle2} tone="success" description="currently active" />
-        <StatCard label="Pending Schools" value={pendingTenants} icon={Clock3} tone="warning" description="awaiting verification" />
-        <StatCard label="Suspended Schools" value={suspendedTenants} icon={Shield} tone="error" description="restricted tenants" />
+      <section className="stat-grid">
+        <StatCard label="Total Schools" value={tenants.length} icon={Building2} tone="primary" description="registered tenants" compact />
+        <StatCard label="Active Schools" value={activeTenants} icon={CheckCircle2} tone="success" description="currently active" compact />
+        <StatCard label="Pending Schools" value={pendingTenants} icon={Clock3} tone="warning" description="awaiting verification" compact />
+        <StatCard label="Suspended Schools" value={suspendedTenants} icon={Shield} tone="error" description="restricted tenants" compact />
       </section>
 
-      <section className="grid gap-8 2xl:grid-cols-[minmax(0,1fr)_440px]">
-        <div className="space-y-8">
+      <section className="dashboard-grid xl:grid-cols-[minmax(0,1fr)_min(100%,440px)]">
+        <div className="section-gap">
           <Card className="overflow-hidden p-0">
-            <div className="border-b border-border bg-surface-muted/40 p-5 sm:p-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="border-b border-border bg-surface-muted/40 p-4 sm:p-5 md:p-6">
+              <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold">Platform command center</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
-                    Monitor tenant health, verification pressure, and account access from one operations view.
+                  <h2 className="section-title">Platform command center</h2>
+                  <p className="dashboard-subtitle !mt-1">
+                    Monitor tenant health, verification, and account access.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -261,34 +261,34 @@ function SuperadminDashboardPage() {
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-3">
-              <div className="rounded-2xl border border-border bg-surface p-5">
-                <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Verification queue</p>
-                <p className="mt-3 text-3xl font-semibold">{pendingTenants}</p>
-                <p className="mt-2 text-sm text-text-muted">Schools waiting for platform review.</p>
+            <div className="grid grid-cols-2 gap-3 p-4 sm:gap-4 sm:p-5 md:grid-cols-3 md:p-6">
+              <div className="rounded-2xl border border-border bg-surface p-3 sm:p-4 md:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Verification queue</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{pendingTenants}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Schools waiting for review.</p>
               </div>
-              <div className="rounded-2xl border border-border bg-surface p-5">
-                <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Platform admins</p>
-                <p className="mt-3 text-3xl font-semibold">{superadmins.length}</p>
-                <p className="mt-2 text-sm text-text-muted">Accounts with platform-level access.</p>
+              <div className="rounded-2xl border border-border bg-surface p-3 sm:p-4 md:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Platform admins</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{superadmins.length}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Platform-level accounts.</p>
               </div>
-              <div className="rounded-2xl border border-border bg-surface p-5">
-                <p className="text-xs font-bold uppercase tracking-wide text-text-muted">Restricted tenants</p>
-                <p className="mt-3 text-3xl font-semibold">{suspendedTenants}</p>
-                <p className="mt-2 text-sm text-text-muted">Suspended schools requiring follow-up.</p>
+              <div className="col-span-2 rounded-2xl border border-border bg-surface p-3 sm:col-span-1 sm:p-4 md:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Restricted tenants</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{suspendedTenants}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Suspended schools.</p>
               </div>
             </div>
           </Card>
 
-          <Card className="p-5 sm:p-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Card className="p-4 sm:p-5 md:p-6">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Tenant management</h2>
-                <p className="text-sm text-text-muted">Status, plan, verification, and deletion controls.</p>
+                <h2 className="section-title">Tenant management</h2>
+                <p className="hidden text-sm text-text-muted sm:block">Status, plan, verification, and deletion controls.</p>
               </div>
               <Badge variant="primary">{tenants.length} schools</Badge>
             </div>
-            <div className="mt-6 table-wrap">
+            <div className="mt-4 table-wrap sm:mt-6">
               <table className="data-table">
                 <thead>
                   <tr>
@@ -321,7 +321,7 @@ function SuperadminDashboardPage() {
                               value={tenant.status}
                               onChange={(event) => handleStatusChange(tenant.id, event.target.value)}
                               disabled={isDeleted || activeTenantAction === `${tenant.id}:status`}
-                              className="input-base min-w-32 py-1.5 text-xs capitalize"
+                              className="input-base w-full max-w-full py-1.5 text-xs capitalize sm:min-w-32"
                             >
                               {STATUS_OPTIONS.map((status) => (
                                 <option key={status} value={status}>{status}</option>
@@ -360,18 +360,18 @@ function SuperadminDashboardPage() {
           </Card>
         </div>
 
-        <aside className="space-y-8">
-          <Card className="p-5 sm:p-6">
+        <aside className="section-gap">
+          <Card className="p-4 sm:p-5 md:p-6">
             <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary sm:h-11 sm:w-11">
                 <Building2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold">Create tenant</h2>
-                <p className="mt-1 text-sm text-text-muted">Create a school tenant and queue its activation email.</p>
+                <h2 className="section-title">Create tenant</h2>
+                <p className="mt-1 hidden text-sm text-text-muted sm:block">Create a school tenant and queue its activation email.</p>
               </div>
             </div>
-            <form onSubmit={handleCreateTenant} className="mt-6 space-y-4">
+            <form onSubmit={handleCreateTenant} className="mt-5 space-y-4 sm:mt-6">
               <Input label="School name" name="school_name" value={tenantFormData.school_name} onChange={handleTenantFormChange} required />
               <Input label="Admin email" type="email" name="email" value={tenantFormData.email} onChange={handleTenantFormChange} required />
               <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
@@ -396,10 +396,10 @@ function SuperadminDashboardPage() {
             </form>
           </Card>
 
-          <div className="grid gap-8 lg:grid-cols-2 2xl:grid-cols-1">
-            <Card className="p-5 sm:p-6">
-              <h2 className="text-lg font-semibold">Invite superadmin</h2>
-              <form onSubmit={handleInviteSuperadmin} className="mt-5 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <Card className="p-4 sm:p-5 md:p-6">
+              <h2 className="section-title">Invite superadmin</h2>
+              <form onSubmit={handleInviteSuperadmin} className="mt-4 space-y-4 sm:mt-5">
                 <Input label="Superadmin email" type="email" name="email" value={superadminFormData.email} onChange={handleSuperadminFormChange} error={superadminFieldErrors.email} required />
                 <Button type="submit" className="w-full" disabled={isInvitingSuperadmin}>
                   <UserPlus className="h-4 w-4" />
@@ -408,9 +408,9 @@ function SuperadminDashboardPage() {
               </form>
             </Card>
 
-            <Card className="p-5 sm:p-6">
-              <h2 className="text-lg font-semibold">Restore tenant</h2>
-              <form onSubmit={handleRestoreTenantById} className="mt-5 space-y-4">
+            <Card className="p-4 sm:p-5 md:p-6">
+              <h2 className="section-title">Restore tenant</h2>
+              <form onSubmit={handleRestoreTenantById} className="mt-4 space-y-4 sm:mt-5">
                 <Input label="Tenant ID" name="restoreTenantId" value={restoreTenantId} onChange={(event) => setRestoreTenantId(event.target.value)} placeholder="00000000-0000-0000-0000-000000000000" required />
                 <Button type="submit" variant="outline" className="w-full" disabled={isRestoringById || !restoreTenantId.trim()}>
                   {isRestoringById ? "Restoring..." : "Restore tenant"}
@@ -421,15 +421,15 @@ function SuperadminDashboardPage() {
         </aside>
       </section>
 
-      <Card className="p-5 sm:p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="p-4 sm:p-5 md:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Platform administrators</h2>
-            <p className="text-sm text-text-muted">Access status and login activity for platform-level accounts.</p>
+            <h2 className="section-title">Platform administrators</h2>
+            <p className="hidden text-sm text-text-muted sm:block">Access status and login activity for platform accounts.</p>
           </div>
           <Badge variant="primary">{superadmins.length} admins</Badge>
         </div>
-        <div className="mt-6 table-wrap">
+        <div className="mt-4 table-wrap sm:mt-6">
           <table className="data-table">
             <thead>
               <tr>

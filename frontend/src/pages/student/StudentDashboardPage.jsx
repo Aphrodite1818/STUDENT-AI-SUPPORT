@@ -20,29 +20,29 @@ function StudentDashboardPage() {
     <DashboardLayout
       role="student"
       title={`${firstName}'s Portal`}
-      description="Your student dashboard will show live academic data when student APIs are connected."
+      description="Your academic overview, timetable, and assignments."
     >
-      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-xl font-semibold">Learning Overview</h2>
+      <section className="dashboard-grid lg:grid-cols-[minmax(0,1fr)_min(100%,360px)]">
+        <Card className="p-4 sm:p-5 md:p-6">
+          <h2 className="section-title">Learning Overview</h2>
           <EmptyState
             title="No student metrics available"
-            description="Attendance, scores, assignments, and timetable data are hidden until real backend endpoints are available."
+            description="Attendance, scores, and timetable data will appear when backend endpoints are available."
           />
         </Card>
 
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-xl font-semibold">Student Modules</h2>
-          <div className="mt-5 grid gap-3">
+        <Card className="p-4 sm:p-5 md:p-6">
+          <h2 className="section-title">Student Modules</h2>
+          <div className="mt-4 grid gap-2 sm:mt-5 sm:gap-3">
             {links.map((item) => {
               const Icon = item.icon;
               return (
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 font-semibold text-text-soft transition hover:border-primary/30 hover:bg-primary-subtle hover:text-primary"
+                  className="flex min-h-11 items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-sm font-semibold text-text-soft transition hover:border-primary/30 hover:bg-primary-subtle hover:text-primary sm:text-base"
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5 shrink-0" />
                   {item.label}
                 </Link>
               );

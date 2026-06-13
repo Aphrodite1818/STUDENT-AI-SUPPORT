@@ -133,7 +133,7 @@ function PhoneNumberInput({
           value={localNumber}
           onChange={handleLocalNumberChange}
           placeholder={placeholder}
-          className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-text outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-40"
+          className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-base text-text outline-none placeholder:text-text-muted disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
         />
       </div>
       {errorMessage && <p className="mt-1 text-sm text-error">{errorMessage}</p>}

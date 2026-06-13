@@ -39,6 +39,7 @@ import { authService } from "../../services/auth.service";
 import { authSession, parseApiError } from "../../services/api";
 import { userService } from "../../services/user.service";
 import { cn } from "../../utils/cn";
+import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
 import BottomNav from "./BottomNav";
 
 const roleLabels = {
@@ -143,7 +144,7 @@ const navGroups = {
 };
 
 function getUserLabel(user) {
-  return [user?.firstname, user?.lastname].filter(Boolean).join(" ") || user?.email || "Anita Sharma";
+  return getUserDisplayName(user);
 }
 
 function getRole(user, fallback) {
@@ -171,7 +172,7 @@ function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile
             type="button"
             variant="ghost"
             size="icon"
-            className="ml-auto hidden lg:inline-flex"
+            className="ml-auto hidden md:inline-flex"
             onClick={onToggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -254,10 +255,11 @@ function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile
   );
 }
 
-function Topbar({ title, role, onOpenMobileNav }) {
+function Topbar({ role, onOpenMobileNav }) {
   const navigate = useNavigate();
   const user = authSession.getUser();
   const userName = getUserLabel(user);
+  const avatarSrc = getUserAvatarSrc(user);
   const [themeHint, setThemeHint] = useState(() => {
     if (typeof window === "undefined") return "light";
     return (
@@ -291,19 +293,19 @@ function Topbar({ title, role, onOpenMobileNav }) {
           type="button"
           variant="ghost"
           size="icon"
-          className="lg:hidden"
+          className="md:hidden"
           onClick={onOpenMobileNav}
           aria-label="Open navigation"
         >
           <Menu className="h-5 w-5" />
         </Button>
 
-        <div className="min-w-0 lg:hidden">
-          <p className="truncate text-sm font-semibold">{title}</p>
-          <p className="truncate text-xs text-text-muted">Greenfield International School</p>
+        <div className="min-w-0 md:hidden">
+          <p className="truncate text-xs font-semibold uppercase tracking-wide text-text-muted">Learnly AI</p>
+          <p className="truncate text-sm font-semibold text-text">Greenfield International School</p>
         </div>
 
-        <div className="hidden w-full max-w-lg items-center gap-3 rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-sm lg:flex">
+        <div className="hidden w-full max-w-lg items-center gap-3 rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-sm md:flex">
           <Search className="h-4 w-4 text-text-faint" />
           <input
             type="search"
@@ -363,8 +365,8 @@ function Topbar({ title, role, onOpenMobileNav }) {
 
           <Dropdown
             trigger={
-              <button type="button" className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-1.5 pr-3 shadow-sm transition hover:bg-surface-muted" aria-label="Open account menu">
-                <Avatar name={userName} />
+              <button type="button" className="flex min-h-10 items-center gap-2 rounded-2xl border border-border bg-surface p-1.5 pr-2 shadow-sm transition hover:bg-surface-muted sm:gap-3 sm:pr-3" aria-label="Open account menu">
+                <Avatar name={userName} src={avatarSrc} user={user} />
                 <span className="hidden min-w-0 text-left xl:block">
                   <span className="block max-w-32 truncate text-sm font-semibold">{userName}</span>
                   <span className="block text-xs text-text-muted">{roleLabels[role] || "User"}</span>
@@ -374,7 +376,7 @@ function Topbar({ title, role, onOpenMobileNav }) {
             }
           >
             <div className="flex items-center gap-3 px-3 py-2">
-              <Avatar name={userName} />
+              <Avatar name={userName} src={avatarSrc} user={user} size="lg" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{userName}</p>
                 <p className="truncate text-xs text-text-muted">{roleLabels[role] || "User"}</p>
@@ -469,7 +471,7 @@ function DashboardLayout({
       </a>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-surface lg:block",
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-surface md:block",
           collapsed ? "w-[88px]" : "w-[272px]"
         )}
       >
@@ -481,7 +483,7 @@ function DashboardLayout({
       </aside>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-[86vw] max-w-80 border-r border-border bg-surface shadow-premium">
             <div className="absolute right-3 top-3">
@@ -494,23 +496,27 @@ function DashboardLayout({
         </div>
       )}
 
-      <div className={cn("min-h-screen transition-all duration-300", collapsed ? "lg:pl-[88px]" : "lg:pl-[272px]")}>
-        <Topbar title={pageTitle} role={role} onOpenMobileNav={() => setMobileOpen(true)} />
+      <div className={cn("min-h-screen transition-all duration-300", collapsed ? "md:pl-[88px]" : "md:pl-[272px]")}>
+        <Topbar role={role} onOpenMobileNav={() => setMobileOpen(true)} />
 
-        <main id="dashboard-content" className="px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-6 lg:pb-6">
-          <div className="mx-auto max-w-[1400px] w-full space-y-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <main id="dashboard-content" className="px-4 py-4 pb-24 sm:px-6 sm:py-5 md:px-6 md:py-5 lg:px-8 lg:py-6 md:pb-6">
+          <div className="mx-auto w-full max-w-[1400px] section-gap">
+            <div className="flex flex-col gap-3 sm:gap-4 md:flex-row md:items-start md:justify-between lg:items-center">
               <div className="min-w-0">
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                <h1 className="dashboard-title">
                   {pageTitle}
                 </h1>
                 {description && (
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
+                  <p className="dashboard-subtitle">
                     {description}
                   </p>
                 )}
               </div>
-              {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+              {actions && (
+                <div className="flex flex-wrap gap-2 [&_.btn-base]:min-h-10 md:[&_.btn-base]:min-h-10">
+                  {actions}
+                </div>
+              )}
             </div>
             {children}
           </div>

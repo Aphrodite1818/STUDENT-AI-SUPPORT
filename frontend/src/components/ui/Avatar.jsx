@@ -1,4 +1,5 @@
 import { cn } from "../../utils/cn";
+import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
 
 const getInitial = (name = "") =>
   String(name).trim().charAt(0).toUpperCase() || "U";
@@ -7,9 +8,13 @@ const sizes = {
   sm: "h-8 w-8 text-xs",
   md: "h-10 w-10 text-sm",
   lg: "h-12 w-12 text-base",
+  xl: "h-16 w-16 text-lg",
 };
 
-function Avatar({ name = "Learnly AI", src, size = "md", className = "" }) {
+function Avatar({ name, src, size = "md", className = "", user }) {
+  const displayName = name || (user ? getUserDisplayName(user) : "User");
+  const imageSrc = src || (user ? getUserAvatarSrc(user) : undefined);
+
   return (
     <span
       className={cn(
@@ -17,12 +22,13 @@ function Avatar({ name = "Learnly AI", src, size = "md", className = "" }) {
         sizes[size] || sizes.md,
         className
       )}
-      aria-label={name}
+      aria-label={displayName}
+      title={displayName}
     >
-      {src ? (
-        <img src={src} alt="" className="h-full w-full object-cover" />
+      {imageSrc ? (
+        <img src={imageSrc} alt="" className="h-full w-full object-cover" />
       ) : (
-        getInitial(name)
+        getInitial(displayName)
       )}
     </span>
   );

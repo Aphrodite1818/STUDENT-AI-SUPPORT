@@ -7,11 +7,11 @@ function PageHeader({ eyebrow, title, description, actions }) {
             {eyebrow}
           </p>
         )}
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="dashboard-title">
           {title}
         </h1>
         {description && (
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-text-muted">
+          <p className="dashboard-subtitle">
             {description}
           </p>
         )}

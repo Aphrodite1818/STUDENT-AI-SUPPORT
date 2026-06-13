@@ -7,6 +7,7 @@ import Button from "../../components/ui/Button";
 import Avatar from "../../components/ui/Avatar";
 import { authSession, parseApiError } from "../../services/api";
 import { userService } from "../../services/user.service";
+import { getUserDisplayName } from "../../utils/user";
 
 function ProfileSettingsPage() {
   const user = authSession.getUser();
@@ -23,7 +24,7 @@ function ProfileSettingsPage() {
   const [successMessage, setSuccessMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const displayName = [formData.firstname, formData.lastname].filter(Boolean).join(" ") || formData.email;
+  const displayName = getUserDisplayName({ ...user, ...formData });
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -70,7 +71,7 @@ function ProfileSettingsPage() {
     >
       <Card className="mx-auto max-w-3xl p-5 sm:p-6">
         <div className="flex items-center gap-4">
-          <Avatar name={displayName} size="lg" />
+          <Avatar name={displayName} user={user} size="lg" />
           <div>
             <h2 className="text-xl font-semibold">{displayName || "User profile"}</h2>
             <p className="text-sm text-text-muted">Profile image upload will be available when the backend exposes file storage.</p>

@@ -36,7 +36,7 @@ function BottomNav({ role, onOpenMenu }) {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 flex min-h-16 items-center justify-around border-t border-border bg-surface/95 px-2 pb-safe backdrop-blur-xl shadow-[0_-10px_30px_rgba(15,23,42,0.08)] lg:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 flex min-h-16 items-center justify-around border-t border-border bg-surface/95 px-2 pb-safe backdrop-blur-xl shadow-[0_-10px_30px_rgba(15,23,42,0.08)] md:hidden"
       aria-label="Primary mobile navigation"
     >
       {items.map((item) => {

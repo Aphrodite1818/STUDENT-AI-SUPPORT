@@ -37,12 +37,12 @@ function AdminDashboardPage() {
     <DashboardLayout
       role="admin"
       title={`${firstName}'s Dashboard`}
-      description="Live tenant overview from currently available backend endpoints."
+      description="Overview of users, teachers, and subjects in your school."
     >
       {overview.stats.length > 0 ? (
-        <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="stat-grid">
           {overview.stats.map((stat, index) => (
-            <StatCard key={stat.label} {...stat} icon={statIcons[index]} />
+            <StatCard key={stat.label} {...stat} icon={statIcons[index]} compact />
           ))}
         </section>
       ) : (
@@ -52,20 +52,19 @@ function AdminDashboardPage() {
         />
       )}
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-xl font-semibold">Operational Snapshot</h2>
+      <section className="dashboard-grid xl:grid-cols-2">
+        <Card className="p-4 sm:p-5 md:p-6">
+          <h2 className="section-title">Operational Snapshot</h2>
           <EmptyState
             title="No live operational feed"
-            description="Timetable, attendance, performance, and notices are hidden until real backend data is available."
+            description="Timetable, attendance, performance, and notices will appear when backend data is available."
           />
         </Card>
 
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-xl font-semibold">Next Backend Work</h2>
-          <div className="mt-4 space-y-3 text-base leading-7 text-text-soft">
-            <p>Connect dashboard summary endpoints for attendance, enrollment trends, announcements, and finance.</p>
-            <p>Once those APIs exist, the dashboard can safely show charts and activity widgets without fabricated values.</p>
+        <Card className="hidden p-4 sm:p-5 md:block md:p-6">
+          <h2 className="section-title">Activity Summary</h2>
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-text-soft md:text-base md:leading-7">
+            <p>Enrollment trends, attendance rates, and finance summaries require dedicated dashboard endpoints.</p>
           </div>
         </Card>
       </section>
