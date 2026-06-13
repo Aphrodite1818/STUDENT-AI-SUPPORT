@@ -4,13 +4,17 @@
 
 import uuid
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from sqlalchemy import Enum as SQLEnum, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
+
+if TYPE_CHECKING:
+    from app.modules.subjects.models import Subject
+    from app.modules.users.models import User
 
 
 class TeacherStatus(str, Enum):
@@ -45,13 +49,13 @@ class Teacher(BaseModel):
         nullable=False,
     )
 
-    user = relationship(
+    user: Mapped["User"] = relationship(
         "User",
         back_populates="teacher_profile",
         lazy="joined",
     )
 
-    subject_links = relationship(
+    subject_links: Mapped[list["TeacherSubject"]] = relationship(
         "TeacherSubject",
         back_populates="teacher",
         cascade="all, delete-orphan",
@@ -101,12 +105,12 @@ class TeacherSubject(BaseModel):
         nullable=False,
     )
 
-    teacher = relationship(
+    teacher: Mapped["Teacher"] = relationship(
         "Teacher",
         back_populates="subject_links",
     )
 
-    subject = relationship(
+    subject: Mapped["Subject"] = relationship(
         "Subject",
         back_populates="teacher_links",
     )

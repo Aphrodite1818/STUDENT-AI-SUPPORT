@@ -12,6 +12,7 @@ from app.config.logging import get_logger
 from app.config.database import engine
 from app.config.settings import settings
 from app.core.exception_handlers import register_exception_handlers
+# from app.modules import import_model_modules
 from app.modules.superadmin.router import router as superadmin_router
 from app.modules.users.router import router as users_router
 from app.modules.auth.router import router as auth_router
@@ -38,6 +39,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # fixed: was [N
 
 def create_app() -> FastAPI:
     """Create app."""
+    # import_model_modules()
+
     app = FastAPI(
         title="LearnlyAI Assistant",
         description="WhatsApp-powered school management assistant API",
