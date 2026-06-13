@@ -20,9 +20,11 @@ function Modal({ open, title, description, children, footer, onClose, className 
               <p className="mt-1 text-sm text-text-muted">{description}</p>
             )}
           </div>
-          <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close modal">
-            <X className="h-4 w-4" />
-          </Button>
+          {onClose && (
+            <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close modal">
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         <div className="max-h-[60vh] overflow-y-auto px-5 py-5">{children}</div>
         {footer && <div className="border-t border-border px-5 py-4">{footer}</div>}

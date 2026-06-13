@@ -14,7 +14,7 @@ export const mockTeachers = [
   {
     id: "teacher-1",
     user_id: "user-teacher-1",
-    employee_number: "TCH-1021",
+    staff_id: "TCH-1021",
     qualification: "B.Ed Mathematics",
     specialization: "Mathematics",
     status: "active",
@@ -23,7 +23,7 @@ export const mockTeachers = [
   {
     id: "teacher-2",
     user_id: "user-teacher-2",
-    employee_number: "TCH-1044",
+    staff_id: "TCH-1044",
     qualification: "M.Sc Computer Science",
     specialization: "Computer Science",
     status: "active",

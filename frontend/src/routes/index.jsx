@@ -28,6 +28,7 @@ import StudentDashboardPage from "../pages/student/StudentDashboardPage";
 import ParentDashboardPage from "../pages/parent/ParentDashboardPage";
 import SuperadminDashboardPage from "../pages/superadmin/SuperadminDashboardPage";
 import StaticModulePage from "../pages/shared/StaticModulePage";
+import ProfileSettingsPage from "../pages/shared/ProfileSettingsPage";
 import ProtectedRoute from "./ProtectedRoute";
 import RoleGuard from "./RoleGuard";
 
@@ -43,6 +44,8 @@ function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="/profile" element={<ProfileSettingsPage />} />
+
           <Route element={<RoleGuard allowedRoles={["ADMIN"]} />}>
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="/admin/users" element={<UserManagementPage />} />
@@ -58,8 +61,7 @@ function AppRoutes() {
             <Route path="/admin/timetable" element={<StaticModulePage role="admin" title="Timetable" description="Professional schedule grid and class timetable planning." type="timetable" />} />
             <Route path="/admin/announcements" element={<StaticModulePage role="admin" title="Notices & Announcements" description="Create and publish school-wide notices and events." type="notices" />} />
             <Route path="/admin/messages" element={<StaticModulePage role="admin" title="Messages" description="Parent and staff communication hub." type="notices" />} />
-            <Route path="/admin/ai-metrics" element={<StaticModulePage role="admin" title="AI Metrics" description="Monitor AI response quality, topics, and escalation trends." type="ai" />} />
-            <Route path="/admin/ai-config" element={<StaticModulePage role="admin" title="Reports & Analytics" description="Operational analytics and AI reporting configuration." type="ai" />} />
+            <Route path="/admin/reports" element={<StaticModulePage role="admin" title="Reports" description="Operational reports will appear here when backend reporting endpoints are available." type="settings" />} />
             <Route path="/admin/settings" element={<StaticModulePage role="admin" title="Settings" description="School profile, security, users, and account configuration." type="settings" />} />
           </Route>
 

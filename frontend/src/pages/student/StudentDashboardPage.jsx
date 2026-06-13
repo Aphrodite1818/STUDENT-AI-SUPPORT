@@ -1,92 +1,54 @@
-import { useEffect, useState } from "react";
-import { BookOpen, CalendarDays, CheckCircle2, ClipboardList } from "lucide-react";
+import { Link } from "react-router-dom";
+import { BarChart3, CalendarDays, ClipboardList, FileText } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
-import Badge from "../../components/ui/Badge";
-import StatCard from "../../components/shared/StatCard";
-import LoadingState from "../../components/shared/LoadingState";
-import { dashboardService } from "../../services/dashboard.service";
+import EmptyState from "../../components/shared/EmptyState";
+import { authSession } from "../../services/api";
+
+const links = [
+  { label: "Timetable", to: "/student/timetable", icon: CalendarDays },
+  { label: "Assignments", to: "/student/assignments", icon: ClipboardList },
+  { label: "Results", to: "/student/results", icon: BarChart3 },
+  { label: "Notices", to: "/student/notices", icon: FileText },
+];
 
 function StudentDashboardPage() {
-  const [overview, setOverview] = useState(null);
-
-  useEffect(() => {
-    let mounted = true;
-    dashboardService.getStudentOverview().then((data) => {
-      if (mounted) setOverview(data);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (!overview) {
-    return (
-      <DashboardLayout role="student" title="Student Dashboard">
-        <LoadingState label="Loading learning portal..." />
-      </DashboardLayout>
-    );
-  }
+  const user = authSession.getUser();
+  const firstName = user?.firstname || "Student";
 
   return (
     <DashboardLayout
       role="student"
-      title="Learning Portal"
-      description="A clean overview of your timetable, assignments, notices, and academic performance."
+      title={`${firstName}'s Portal`}
+      description="Your student dashboard will show live academic data when student APIs are connected."
     >
-      <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {overview.stats.map((stat, index) => {
-          const icons = [BookOpen, CheckCircle2, ClipboardList, CalendarDays];
-          const Icon = icons[index];
-          return <StatCard key={stat.label} {...stat} icon={Icon} />;
-        })}
-      </section>
-
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5 sm:p-6">
-          <h2 className="text-lg font-semibold">Today's Classes</h2>
-          <div className="mt-6 space-y-4">
-            {[
-              ["09:30", "Mathematics", "Room 204", "Active"],
-              ["10:20", "Science", "Room 204", "Next"],
-              ["12:45", "Social Studies", "Room 204", "Later"],
-            ].map(([time, subject, room, status]) => (
-              <div key={subject} className="flex flex-col gap-4 rounded-[16px] border border-border/40 bg-surface p-4 transition hover:shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-16 flex-col items-center justify-center rounded-[12px] bg-surface-muted/50 text-center">
-                    <span className="text-xs font-bold text-primary">{time}</span>
-                  </div>
-                  <div>
-                    <p className="font-semibold">{subject}</p>
-                    <p className="text-[13px] text-text-muted">{room}</p>
-                  </div>
-                </div>
-                <Badge variant={status === "Active" ? "success" : "default"}>{status}</Badge>
-              </div>
-            ))}
-          </div>
+          <h2 className="text-xl font-semibold">Learning Overview</h2>
+          <EmptyState
+            title="No student metrics available"
+            description="Attendance, scores, assignments, and timetable data are hidden until real backend endpoints are available."
+          />
         </Card>
 
-        <div className="space-y-8">
-          <Card className="p-5 sm:p-6">
-            <h2 className="text-lg font-semibold">Assignments</h2>
-            <div className="mt-5 space-y-4">
-              {["Mathematics exercises", "Science lab note", "English essay"].map((item) => (
-                <div key={item} className="rounded-2xl bg-surface-muted/50 p-4">
-                  <p className="font-semibold">{item}</p>
-                  <p className="mt-1 text-sm text-text-muted">Due this week</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-5 sm:p-6">
-            <h2 className="text-lg font-semibold">Recent Notices</h2>
-            <p className="mt-3 text-sm leading-6 text-text-muted">
-              Unit Test 1 schedule has been published. Annual Sports Day practice begins next week.
-            </p>
-          </Card>
-        </div>
+        <Card className="p-5 sm:p-6">
+          <h2 className="text-xl font-semibold">Student Modules</h2>
+          <div className="mt-5 grid gap-3">
+            {links.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3 font-semibold text-text-soft transition hover:border-primary/30 hover:bg-primary-subtle hover:text-primary"
+                >
+                  <Icon className="h-5 w-5" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
       </section>
     </DashboardLayout>
   );

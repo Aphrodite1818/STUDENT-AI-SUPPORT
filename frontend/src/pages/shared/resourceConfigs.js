@@ -41,6 +41,9 @@ const byId = (items) =>
     return map;
   }, {});
 
+const selectedIds = (items = []) =>
+  items.map((item) => item.id).filter(Boolean);
+
 const labelFromMap = (map, id, fallback = "N/A") =>
   id && map[id] ? fullName(map[id]) || className(map[id]) || subjectName(map[id]) : fallback;
 
@@ -76,6 +79,7 @@ const loadAcademicContext = async ({ includeUsers = false, includeFees = false }
     parents: userItems.filter((user) => user.role === "parent"),
     teacherUsers: userItems.filter((user) => user.role === "teacher"),
     fees: feeItems,
+    userById: byId(userItems),
     classById: byId(classItems),
     subjectById: byId(subjectItems),
     studentById: byId(studentItems),
@@ -228,14 +232,23 @@ export const subjectResourceConfig = {
   fetchItems: subjectReadOnlyResourceConfig.fetchItems,
   createItem: (payload) =>
     subjectService.createSubject({
-      ...payload,
-      is_active: payload.is_active === "true",
+      name: payload.name,
+      code: payload.code,
+      description: payload.description,
     }),
-  updateItem: (id, payload) =>
-    subjectService.updateSubject(id, {
-      ...payload,
-      is_active: payload.is_active === "true",
-    }),
+  updateItem: async (id, payload) => {
+    await subjectService.updateSubject(id, {
+      name: payload.name,
+      code: payload.code,
+      description: payload.description,
+    });
+
+    if (payload.is_active === "true") {
+      await subjectService.activateSubject(id);
+    } else if (payload.is_active === "false") {
+      await subjectService.deactivateSubject(id);
+    }
+  },
   deleteItem: (id) => subjectService.deleteSubject(id),
   mapItemToForm: (item) => ({
     name: item.name || "",
@@ -249,50 +262,55 @@ export const subjectResourceConfig = {
 export const teacherResourceConfig = {
   singularLabel: "Teacher profile",
   pluralLabel: "Teacher profiles",
-  formHelp: "Invite a teacher under Users first, then create the teacher profile linked to that user.",
-  canCreate: true,
+  formHelp: "Teacher profiles are created automatically when a teacher user is invited. Edit staff details and assigned subjects here.",
+  canCreate: false,
   canUpdate: true,
   canDelete: true,
   loadContext: () => loadAcademicContext({ includeUsers: true }),
   initialForm: {
-    user_id: "",
-    employee_number: "",
+    staff_id: "",
     qualification: "",
     specialization: "",
-    hire_date: "",
+    subject_ids: [],
   },
-  fields: (context, editingItem) => [
-    {
-      name: "user_id",
-      label: "Teacher user",
-      type: "select",
-      required: !editingItem,
-      showOnEdit: false,
-      options: optionsFrom(context.teacherUsers, fullName),
-    },
-    { name: "employee_number", label: "Employee number" },
+  fields: (context) => [
+    { name: "staff_id", label: "Staff ID" },
     { name: "qualification", label: "Qualification" },
     { name: "specialization", label: "Specialization" },
-    { name: "hire_date", label: "Hire date", type: "date" },
+    {
+      name: "subject_ids",
+      label: "Assigned subjects",
+      type: "multiselect",
+      options: optionsFrom(context.subjects, subjectName),
+    },
   ],
-  columns: [
-    { key: "user", label: "Teacher", render: (item) => fullName(item.user) },
-    { key: "employee_number", label: "Employee no.", render: (item) => item.employee_number || "N/A" },
+  columns: (context) => [
+    {
+      key: "user_id",
+      label: "Teacher",
+      render: (item) => fullName(context.userById?.[item.user_id]) || item.user_id,
+    },
+    { key: "staff_id", label: "Staff ID", render: (item) => item.staff_id || "N/A" },
     { key: "qualification", label: "Qualification", render: (item) => item.qualification || "N/A" },
     { key: "specialization", label: "Specialization", render: (item) => item.specialization || "N/A" },
   ],
   fetchItems: () => teacherService.getTeachers({ limit: 100 }),
-  createItem: (payload) => teacherService.createTeacherProfile(payload),
   updateItem: (id, payload) => teacherService.updateTeacher(id, payload),
   deleteItem: (id) => teacherService.deleteTeacher(id),
+  buildPayload: (formData) =>
+    compactPayload({
+      staff_id: formData.staff_id,
+      qualification: formData.qualification,
+      specialization: formData.specialization,
+      subject_ids: formData.subject_ids,
+    }),
   mapItemToForm: (item) => ({
-    user_id: item.user_id || "",
-    employee_number: item.employee_number || "",
+    staff_id: item.staff_id || "",
     qualification: item.qualification || "",
     specialization: item.specialization || "",
-    hire_date: item.hire_date || "",
+    subject_ids: selectedIds(item.subjects),
   }),
-  getItemLabel: (item) => fullName(item.user),
+  getItemLabel: (item, context) => fullName(context.userById?.[item.user_id]) || item.user_id,
 };
 
 export const getStudentResourceConfig = ({ writable }) => ({

@@ -1,12 +1,7 @@
 import { cn } from "../../utils/cn";
 
-const getInitials = (name = "") =>
-  name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "LA";
+const getInitial = (name = "") =>
+  String(name).trim().charAt(0).toUpperCase() || "U";
 
 const sizes = {
   sm: "h-8 w-8 text-xs",
@@ -27,7 +22,7 @@ function Avatar({ name = "Learnly AI", src, size = "md", className = "" }) {
       {src ? (
         <img src={src} alt="" className="h-full w-full object-cover" />
       ) : (
-        getInitials(name)
+        getInitial(name)
       )}
     </span>
   );

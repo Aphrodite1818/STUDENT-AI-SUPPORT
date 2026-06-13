@@ -58,6 +58,29 @@ function FormControl({ field, value, error, onChange }) {
     );
   }
 
+  if (field.type === "multiselect") {
+    return (
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-text-soft">
+          {field.label}
+        </label>
+        <select
+          className="input-base min-h-32"
+          multiple
+          {...commonProps}
+          value={Array.isArray(value) ? value : []}
+        >
+          {(field.options || []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {error && <p className="mt-1 text-sm text-error">{error}</p>}
+      </div>
+    );
+  }
+
   if (field.type === "textarea") {
     return (
       <div>
@@ -194,8 +217,12 @@ function ResourcePage({ config }) {
   }, [filters, loadContext, loadItems]);
 
   const handleFormChange = (event) => {
-    const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: value }));
+    const { multiple, name, selectedOptions, value } = event.target;
+    const nextValue = multiple
+      ? Array.from(selectedOptions, (option) => option.value)
+      : value;
+
+    setFormData((current) => ({ ...current, [name]: nextValue }));
     setFieldErrors((current) => ({ ...current, [name]: undefined }));
     setError(null);
   };

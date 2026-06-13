@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3,
   Bell,
   BookOpen,
-  Bot,
   CalendarDays,
   CheckSquare,
   ChevronDown,
@@ -26,18 +25,19 @@ import {
   Search,
   Settings,
   Shield,
-  Sparkles,
   Sun,
   Users,
   X,
 } from "lucide-react";
 import Button from "../ui/Button";
 import Avatar from "../ui/Avatar";
-import Badge from "../ui/Badge";
 import Dropdown from "../ui/Dropdown";
+import Input from "../ui/Input";
+import Modal from "../ui/Modal";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
-import { authSession } from "../../services/api";
+import { authSession, parseApiError } from "../../services/api";
+import { userService } from "../../services/user.service";
 import { cn } from "../../utils/cn";
 import BottomNav from "./BottomNav";
 
@@ -56,7 +56,6 @@ const navGroups = {
       items: [
         { label: "Dashboard", to: "/admin/dashboard", icon: Home },
         { label: "Calendar", to: "/admin/timetable", icon: CalendarDays },
-        { label: "AI Metrics", to: "/admin/ai-metrics", icon: Bot, badge: "Live" },
       ],
     },
     {
@@ -82,7 +81,7 @@ const navGroups = {
     {
       label: "Operations",
       items: [
-        { label: "Reports", to: "/admin/ai-config", icon: BarChart3 },
+        { label: "Reports", to: "/admin/reports", icon: BarChart3 },
         { label: "Fees", to: "/admin/fees", icon: Receipt },
         { label: "Payments", to: "/admin/payments", icon: CreditCard },
         { label: "Settings", to: "/admin/settings", icon: Settings },
@@ -259,7 +258,26 @@ function Topbar({ title, role, onOpenMobileNav }) {
   const navigate = useNavigate();
   const user = authSession.getUser();
   const userName = getUserLabel(user);
-  const [themeHint, setThemeHint] = useState("light");
+  const [themeHint, setThemeHint] = useState(() => {
+    if (typeof window === "undefined") return "light";
+    return (
+      localStorage.getItem("theme") ||
+      (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    );
+  });
+
+  const toggleTheme = () => {
+    setThemeHint((current) => {
+      const nextTheme = current === "light" ? "dark" : "light";
+      document.documentElement.dataset.theme = nextTheme;
+      localStorage.setItem("theme", nextTheme);
+      return nextTheme;
+    });
+  };
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeHint;
+  }, [themeHint]);
 
   const handleLogout = () => {
     authService.logout();
@@ -317,9 +335,9 @@ function Topbar({ title, role, onOpenMobileNav }) {
             type="button"
             variant="outline"
             size="icon"
-            onClick={() => setThemeHint((current) => (current === "light" ? "dark" : "light"))}
+            onClick={toggleTheme}
             aria-label="Toggle theme preview"
-            title="Theme toggle placeholder"
+            title="Toggle theme"
           >
             {themeHint === "light" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
@@ -336,13 +354,11 @@ function Topbar({ title, role, onOpenMobileNav }) {
           >
             <div className="px-2 py-1">
               <p className="text-sm font-semibold">Notifications</p>
-              <p className="text-xs text-text-muted">Latest school activity</p>
+              <p className="text-xs text-text-muted">No live notification feed is connected yet.</p>
             </div>
-            {["Parent-teacher meeting updated", "7 students need attention", "Attendance report is ready"].map((item) => (
-              <button key={item} type="button" className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm text-text-soft hover:bg-surface-muted">
-                {item}
-              </button>
-            ))}
+            <p className="mt-2 rounded-xl bg-surface-muted px-3 py-3 text-sm text-text-muted">
+              Notifications will appear here when the backend exposes them.
+            </p>
           </Dropdown>
 
           <Dropdown
@@ -365,10 +381,10 @@ function Topbar({ title, role, onOpenMobileNav }) {
               </div>
             </div>
             <div className="my-2 border-t border-border" />
-            <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-text-soft hover:bg-surface-muted">
+            <Link to="/profile" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-text-soft hover:bg-surface-muted">
               <Settings className="h-4 w-4" />
               Account settings
-            </button>
+            </Link>
             <button type="button" onClick={handleLogout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-error hover:bg-error-soft">
               <LogOut className="h-4 w-4" />
               Log out
@@ -377,36 +393,6 @@ function Topbar({ title, role, onOpenMobileNav }) {
         </div>
       </div>
     </header>
-  );
-}
-
-function RoleSwitch({ role }) {
-  const options = [
-    { key: "admin", label: "Admin", icon: Shield },
-    { key: "teacher", label: "Teacher", icon: Users },
-    { key: "student", label: "Student", icon: GraduationCap },
-  ];
-
-  return (
-    <div className="hidden items-center gap-1 rounded-2xl border border-border bg-surface p-1 shadow-sm lg:inline-flex">
-      {options.map((option) => {
-        const Icon = option.icon;
-        const active = option.key === role;
-
-        return (
-          <span
-            key={option.key}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold",
-              active ? "bg-primary text-white shadow-sm shadow-primary/20" : "text-text-muted"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {option.label}
-          </span>
-        );
-      })}
-    </div>
   );
 }
 
@@ -421,8 +407,57 @@ function DashboardLayout({
   const role = getRole(user, roleProp);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileUser, setProfileUser] = useState(user);
+  const [profileForm, setProfileForm] = useState(() => ({
+    firstname: user?.firstname || "",
+    lastname: user?.lastname || "",
+    phone_number: user?.phone_number || "",
+    whatsapp_id: user?.whatsapp_id || "",
+  }));
+  const [profileErrors, setProfileErrors] = useState({});
+  const [profileSubmitError, setProfileSubmitError] = useState(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const pageTitle = useMemo(() => title || `${roleLabels[role] || "Workspace"} Dashboard`, [role, title]);
+  const needsOnboarding = Boolean(
+    profileUser?.id &&
+      (!profileUser.firstname || !profileUser.lastname || !profileUser.phone_number)
+  );
+
+  const handleProfileChange = (event) => {
+    const { name, value } = event.target;
+    setProfileForm((current) => ({ ...current, [name]: value }));
+    setProfileErrors((current) => ({ ...current, [name]: undefined }));
+    setProfileSubmitError(null);
+  };
+
+  const handleProfileSubmit = async (event) => {
+    event.preventDefault();
+    if (!profileUser?.id) return;
+
+    setIsSavingProfile(true);
+    setProfileErrors({});
+    setProfileSubmitError(null);
+
+    try {
+      const updatedUser = await userService.updateProfile(profileUser.id, {
+        firstname: profileForm.firstname,
+        lastname: profileForm.lastname,
+        phone_number: profileForm.phone_number,
+        whatsapp_id: profileForm.whatsapp_id || null,
+      });
+
+      const nextUser = { ...profileUser, ...updatedUser };
+      authSession.setUser(nextUser);
+      setProfileUser(nextUser);
+    } catch (error) {
+      const parsed = parseApiError(error, "Failed to update your profile.");
+      setProfileErrors(parsed.fieldErrors || {});
+      setProfileSubmitError(parsed.message);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-text">
@@ -466,14 +501,7 @@ function DashboardLayout({
           <div className="mx-auto max-w-[1400px] w-full space-y-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-3">
-                  <RoleSwitch role={role} />
-                  <Badge variant="primary">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    AI-ready workspace
-                  </Badge>
-                </div>
-                <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   {pageTitle}
                 </h1>
                 {description && (
@@ -489,6 +517,30 @@ function DashboardLayout({
         </main>
       </div>
       <BottomNav role={role} onOpenMenu={() => setMobileOpen(true)} />
+      <Modal
+        open={needsOnboarding}
+        title="Complete your profile"
+        description="Add the required details before continuing to your workspace."
+        footer={
+          <Button form="profile-onboarding-form" type="submit" className="w-full" disabled={isSavingProfile}>
+            {isSavingProfile ? "Saving..." : "Save profile"}
+          </Button>
+        }
+      >
+        {profileSubmitError && (
+          <div className="mb-4 rounded-2xl border border-error/30 bg-error-soft px-4 py-3 text-sm font-medium text-error">
+            {profileSubmitError}
+          </div>
+        )}
+        <form id="profile-onboarding-form" onSubmit={handleProfileSubmit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="First name" name="firstname" value={profileForm.firstname} onChange={handleProfileChange} error={profileErrors.firstname} required />
+            <Input label="Last name" name="lastname" value={profileForm.lastname} onChange={handleProfileChange} error={profileErrors.lastname} required />
+          </div>
+          <Input label="Phone number" name="phone_number" value={profileForm.phone_number} onChange={handleProfileChange} placeholder="+2348012345678" error={profileErrors.phone_number} required />
+          <Input label="WhatsApp ID" name="whatsapp_id" value={profileForm.whatsapp_id} onChange={handleProfileChange} placeholder="+2348012345678" error={profileErrors.whatsapp_id} />
+        </form>
+      </Modal>
     </div>
   );
 }

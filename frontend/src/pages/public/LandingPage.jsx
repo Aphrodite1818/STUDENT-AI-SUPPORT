@@ -4,6 +4,7 @@ import {
   BookOpen,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   ClipboardCheck,
   GraduationCap,
   ShieldCheck,
@@ -45,6 +46,46 @@ const testimonials = [
     quote: "It feels calm and professional, which matters when parents and staff use the system every day.",
     name: "Ada Okafor",
     role: "Parent Liaison",
+  },
+];
+
+const pricingPlans = [
+  {
+    name: "Starter",
+    price: "Coming soon",
+    description: "For small schools moving daily records, staff tasks, and parent communication into one clean workspace.",
+    features: [
+      "Student, teacher, subject, and class records",
+      "Attendance and academic activity tracking",
+      "Parent and staff communication basics",
+      "Role-based admin, teacher, student, and parent access",
+    ],
+    action: "Get started",
+  },
+  {
+    name: "Growth",
+    price: "Coming soon",
+    description: "For growing schools that need stronger reporting, staff coordination, and visibility across departments.",
+    features: [
+      "Everything in Starter",
+      "Finance, results, exams, and announcements workflows",
+      "Operational dashboards for school leadership",
+      "Workspace tools for faster admin work",
+    ],
+    action: "Start growth plan",
+    highlighted: true,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    description: "For multi-campus schools and groups that need onboarding support, governance, and future integrations.",
+    features: [
+      "Everything in Growth",
+      "Multi-campus rollout planning",
+      "Custom setup and migration support",
+      "Priority support for leadership and operations teams",
+    ],
+    action: "Contact sales",
   },
 ];
 
@@ -90,9 +131,9 @@ function LandingPage() {
             <div className="absolute bottom-6 left-4 right-4 hidden rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-xl sm:left-6 sm:right-6 md:block lg:left-auto lg:w-[560px]">
               <div className="grid grid-cols-3 gap-3 text-sm">
                 {[
-                  ["92%", "Attendance rate"],
-                  ["1,248", "Students tracked"],
-                  ["24/7", "AI-ready operations"],
+                  ["Roles", "Admin, teacher, student, parent"],
+                  ["Modules", "Academics, finance, notices"],
+                  ["Access", "Tenant-aware workspace"],
                 ].map(([value, label]) => (
                   <div key={label} className="rounded-xl bg-white/10 px-4 py-3">
                     <p className="text-2xl font-semibold text-white">{value}</p>
@@ -182,19 +223,31 @@ function LandingPage() {
                 Pricing is prepared for staged rollout while the platform modules continue to mature.
               </p>
             </div>
-            <div className="mt-10 grid gap-4 lg:grid-cols-3">
-              {[
-                ["Starter", "Coming soon", "Core school management and communication workflows."],
-                ["Growth", "Coming soon", "Advanced analytics, staff workflows, and parent engagement."],
-                ["Enterprise", "Custom", "Multi-campus support, integrations, and dedicated onboarding."],
-              ].map(([name, price, description], index) => (
-                <article key={name} className={`rounded-2xl border bg-surface p-6 shadow-soft-card ${index === 1 ? "border-primary ring-4 ring-primary/10" : "border-border"}`}>
-                  {index === 1 && <Badge variant="primary">Most selected</Badge>}
-                  <h3 className="mt-4 text-2xl font-semibold">{name}</h3>
-                  <p className="mt-3 text-3xl font-semibold">{price}</p>
-                  <p className="mt-3 text-sm leading-6 text-text-muted">{description}</p>
-                  <Button variant={index === 1 ? "primary" : "outline"} className="mt-6 w-full">
-                    {name === "Enterprise" ? "Contact sales" : "Get started"}
+            <div className="mt-10 grid items-stretch gap-5 lg:grid-cols-3">
+              {pricingPlans.map((plan) => (
+                <article
+                  key={plan.name}
+                  className={`flex min-h-[460px] flex-col rounded-2xl border bg-background p-6 shadow-soft-card ${
+                    plan.highlighted ? "border-primary ring-4 ring-primary/10" : "border-border"
+                  }`}
+                >
+                  <div className="min-h-7">
+                    {plan.highlighted && <Badge variant="primary">Most selected</Badge>}
+                  </div>
+                  <h3 className="mt-4 text-2xl font-semibold">{plan.name}</h3>
+                  <p className="mt-3 text-3xl font-semibold">{plan.price}</p>
+                  <p className="mt-4 text-sm leading-6 text-text-muted">{plan.description}</p>
+                  <ul className="mt-6 flex-1 space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex gap-3 text-sm leading-6 text-text-soft">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button variant={plan.highlighted ? "primary" : "outline"} className="mt-8 w-full">
+                    {plan.action}
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </article>
               ))}
@@ -222,7 +275,7 @@ function LandingPage() {
         <div className="section-container flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-bold">Learnly AI</p>
-            <p className="mt-1 text-sm text-text-muted">Premium school management and AI-ready operations.</p>
+            <p className="mt-1 text-sm text-text-muted">Premium school management operations.</p>
           </div>
           <div className="flex flex-wrap gap-4 text-sm font-semibold text-text-muted">
             <a href="#features" className="hover:text-primary">Features</a>
