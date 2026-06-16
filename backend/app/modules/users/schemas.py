@@ -5,8 +5,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from app.modules.students.models import ParentRelationship
 from app.modules.users.models import UserRole, AccountStatus
+from app.tenant_management.schemas import TenantPublicResponse
 
 
 # ──────────────────────────────────────────────
@@ -91,6 +93,12 @@ class UserInviteCreate(UserBase):
     """Pydantic schema for the users domain."""
     role: UserRole
     whatsapp_id: str | None = Field(None, max_length=100)
+    parent_email: EmailStr | None = Field(default=None)
+    parent_firstname: str | None = Field(default=None, min_length=2, max_length=100)
+    parent_lastname: str | None = Field(default=None, min_length=2, max_length=100)
+    parent_phone_number: str | None = Field(default=None, min_length=7, max_length=20)
+    parent_whatsapp_id: str | None = Field(default=None, max_length=100)
+    parent_relationship_type: ParentRelationship = ParentRelationship.GUARDIAN
 
     @field_validator("role")
     @classmethod
@@ -100,18 +108,39 @@ class UserInviteCreate(UserBase):
             raise ValueError("tenant invite flow only supports normal tenant users")
         return value
 
-    @field_validator("whatsapp_id")
+    @field_validator("whatsapp_id", "parent_phone_number", "parent_whatsapp_id")
     @classmethod
     def validate_invite_whatsapp_id(cls, value: str | None) -> str | None:
-        """Validate invite whatsapp id."""
+        """Validate invite contact number."""
         if value is None:
             return value
         cleaned_value = value.replace(" ", "").replace("-", "")
         if not cleaned_value.startswith("+"):
-            raise ValueError("whatsapp_id must include country code")
+            raise ValueError("contact number must include country code")
         if not cleaned_value[1:].isdigit():
-            raise ValueError("whatsapp_id must contain only digits after country code")
+            raise ValueError("contact number must contain only digits after country code")
         return cleaned_value
+
+    @model_validator(mode="after")
+    def validate_student_parent_link_fields(self) -> "UserInviteCreate":
+        """Validate student invite parent-link fields."""
+        parent_fields = (
+            self.parent_email,
+            self.parent_firstname,
+            self.parent_lastname,
+            self.parent_phone_number,
+            self.parent_whatsapp_id,
+        )
+
+        if self.role == UserRole.STUDENT and not self.parent_email:
+            raise ValueError("parent_email is required when inviting a student")
+
+        if self.role != UserRole.STUDENT and any(parent_fields):
+            raise ValueError(
+                "parent link fields are only supported when inviting a student"
+            )
+
+        return self
 
 
 class UserUpdate(InputBase):
@@ -168,6 +197,12 @@ class UserResponse(OutputBase):
     role: UserRole
     account_status: AccountStatus
     whatsapp_id: str | None = None
+
+
+class AuthenticatedUserResponse(UserResponse):
+    """Authenticated user payload enriched with tenant context."""
+
+    tenant: TenantPublicResponse | None = None
 
 
 class UserPublicResponse(OutputBase):

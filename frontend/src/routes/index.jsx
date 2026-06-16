@@ -10,6 +10,7 @@ import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
 import UserManagementPage from "../pages/admin/UserManagementPage";
 import TeachersPage from "../pages/admin/TeachersPage";
 import StudentsPage from "../pages/admin/StudentsPage";
+import ParentsPage from "../pages/admin/ParentsPage";
 import ClassesPage from "../pages/admin/ClassesPage";
 import SubjectsPage from "../pages/admin/SubjectsPage";
 import AttendancePage from "../pages/admin/AttendancePage";
@@ -51,6 +52,7 @@ function AppRoutes() {
             <Route path="/admin/users" element={<UserManagementPage />} />
             <Route path="/admin/teachers" element={<TeachersPage />} />
             <Route path="/admin/students" element={<StudentsPage />} />
+            <Route path="/admin/parents" element={<ParentsPage />} />
             <Route path="/admin/classes" element={<ClassesPage />} />
             <Route path="/admin/subjects" element={<SubjectsPage />} />
             <Route path="/admin/attendance" element={<AttendancePage />} />

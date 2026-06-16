@@ -54,6 +54,14 @@ def _normalize_school_name(school_name: str) -> str:
     return school_name.strip()
 
 
+def _normalize_admission_number_prefix(prefix: str | None) -> str | None:
+    """Normalize the tenant admission number prefix."""
+    if prefix is None:
+        return None
+    cleaned_prefix = prefix.strip().upper()
+    return cleaned_prefix or None
+
+
 class TenantService:
     """Business logic for the tenant management domain."""
 
@@ -145,6 +153,9 @@ class TenantService:
         """Perform register tenant."""
         school_name = _normalize_school_name(payload.school_name)
         normalized_email = _normalize_email(payload.email)
+        admission_number_prefix = _normalize_admission_number_prefix(
+            payload.admission_number_prefix
+        )
 
         tenant: Tenant | None = None
         reused_pending_account = False
@@ -164,6 +175,20 @@ class TenantService:
                     normalized_email,
                 )
             )
+
+            if admission_number_prefix is not None:
+                existing_tenant_by_prefix = await TenantRepository.get_by_admission_number_prefix(
+                    db,
+                    admission_number_prefix,
+                )
+                if (
+                    existing_tenant_by_prefix is not None
+                    and (
+                        existing_tenant_by_email is None
+                        or existing_tenant_by_prefix.id != existing_tenant_by_email.id
+                    )
+                ):
+                    raise ConflictException("Prefix not available")
 
             if existing_tenant_by_name is not None:
                 if existing_tenant_by_email is None:
@@ -210,6 +235,7 @@ class TenantService:
                     school_name=school_name,
                     slug=slug,
                     email=normalized_email,
+                    admission_number_prefix=admission_number_prefix,
                     verification_status=TenantVerificationStatus.PENDING_VERIFICATION,
                 )
 
@@ -303,6 +329,7 @@ class TenantService:
             "id": tenant.id,
             "school_name": tenant.school_name,
             "slug": tenant.slug,
+            "admission_number_prefix": tenant.admission_number_prefix,
             "email": tenant.email,
             "status": tenant.status,
             "plan": tenant.plan,
@@ -403,13 +430,25 @@ class TenantService:
                     "This WhatsApp number is already in use by another school"
                 )
 
-        updated_tenant = await TenantRepository.update(
-            db,
-            tenant_id,
-            update_data,
-        )
-        if updated_tenant is None:
-            raise NotFoundException("Tenant not found")
+        admission_number_prefix = update_data.get("admission_number_prefix")
+
+        if admission_number_prefix is not None:
+            normalized_prefix = _normalize_admission_number_prefix(admission_number_prefix)
+            update_data["admission_number_prefix"] = normalized_prefix
+
+            if normalized_prefix is not None:
+                existing = await TenantRepository.get_by_admission_number_prefix(
+                    db,
+                    normalized_prefix,
+                )
+
+                if existing and existing.id != tenant_id:
+                    raise ConflictException("Prefix not available")
+
+        for field, value in update_data.items():
+            setattr(tenant, field, value)
+
+        updated_tenant = await TenantRepository.save(db, tenant)
 
         await db.commit()
         await db.refresh(updated_tenant)

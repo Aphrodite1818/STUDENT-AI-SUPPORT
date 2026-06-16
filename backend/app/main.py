@@ -12,12 +12,14 @@ from app.config.logging import get_logger
 from app.config.database import engine
 from app.config.settings import settings
 from app.core.exception_handlers import register_exception_handlers
-# from app.modules import import_model_modules
+from app.modules import import_model_modules
 from app.modules.superadmin.router import router as superadmin_router
 from app.modules.users.router import router as users_router
 from app.modules.auth.router import router as auth_router
 from app.tenant_management.router import router as tenant_router
 from app.modules.subjects.router import router as subject_router
+from app.modules.students.router import router as student_router
+from app.modules.parents.router import router as parent_router
 from app.modules.teachers.router import router as teacher_router
 
 
@@ -39,7 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # fixed: was [N
 
 def create_app() -> FastAPI:
     """Create app."""
-    # import_model_modules()
+    import_model_modules()
 
     app = FastAPI(
         title="LearnlyAI Assistant",
@@ -73,6 +75,8 @@ def create_app() -> FastAPI:
     app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
     app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Tenants"])
     app.include_router(teacher_router, prefix="/api/v1/teachers", tags=["Teachers"])
+    app.include_router(student_router, prefix="/api/v1/students", tags=["Students"])
+    app.include_router(parent_router, prefix="/api/v1")
     app.include_router(subject_router, prefix="/api/v1/subjects", tags=["Subjects"])
 
     # ── Health check ──────────────────────────────────────────────────────────

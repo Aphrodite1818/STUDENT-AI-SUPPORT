@@ -1,3 +1,615 @@
-#======================================#
-#              service.py              #
-#======================================#
+from datetime import date, datetime, timedelta, timezone
+from uuid import UUID
+import secrets
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from app.modules.parents.repository import ParentRepository
+from app.modules.students.models import (
+    AcademicStatus,
+    Student,
+    StudentLinkCode,
+    StudentParentLink,
+    StudentProfileStatus,
+)
+from app.modules.students.repository import (
+    StudentLinkCodeRepository,
+    StudentParentLinkRepository,
+    StudentRepository,
+)
+from app.modules.students.schemas import (
+    StudentCreate,
+    StudentLinkCodeCreate,
+    StudentLinkCodeRedeem,
+    StudentLinkCodeResponse,
+    StudentParentLinkCreate,
+    StudentParentLinkResponse,
+    StudentParentLinkUpdate,
+    StudentProfileComplete,
+    StudentResponse,
+    StudentSelfUpdate,
+    StudentUpdate,
+)
+from app.modules.users.models import User, UserRole
+from app.modules.users.repository import UserRepository
+from app.tenant_management.repository import TenantRepository
+
+
+class StudentService:
+    """Business logic for tenant student profiles."""
+
+    @staticmethod
+    def _ensure_tenant_user(actor: User) -> None:
+        """Ensure the actor belongs to a tenant."""
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="User is not attached to a tenant")
+
+    @staticmethod
+    def _ensure_admin(actor: User) -> None:
+        """Ensure the actor is a tenant admin."""
+        if actor.role != UserRole.ADMIN:
+            raise ForbiddenException(detail="Only tenant admins can perform this action")
+
+        StudentService._ensure_tenant_user(actor)
+
+    @staticmethod
+    def _get_default_admission_date() -> date:
+        """Return the default admission date for new students."""
+        return datetime.now(timezone.utc).date()
+
+    @staticmethod
+    def _resolve_profile_status(student: Student) -> StudentProfileStatus:
+        """Resolve whether a student profile is complete."""
+        required_fields = (
+            student.admission_number,
+            student.date_of_birth,
+            student.gender,
+            student.admission_date,
+            student.class_id,
+        )
+        return (
+            StudentProfileStatus.COMPLETE
+            if all(value is not None for value in required_fields)
+            else StudentProfileStatus.INCOMPLETE
+        )
+
+    @staticmethod
+    async def create_student_profile(
+        db: AsyncSession,
+        actor: User,
+        payload: StudentCreate,
+    ) -> StudentResponse:
+        """Create a student profile for an existing student user."""
+        StudentService._ensure_admin(actor)
+
+        user = await UserRepository.get_user_by_id(
+            db=db,
+            user_id=payload.user_id,
+        )
+        if user is None:
+            raise NotFoundException(detail="User not found")
+
+        if user.tenant_id != actor.tenant_id:
+            raise ForbiddenException(detail="You do not have access to this user")
+
+        if user.role != UserRole.STUDENT:
+            raise BadRequestException(detail="User must have a student role")
+
+        existing_student = await StudentRepository.get_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=payload.user_id,
+        )
+        if existing_student is not None:
+            raise BadRequestException(detail="Student profile already exists for this user")
+
+        admission_number = payload.admission_number
+        if admission_number is None:
+            admission_number = await StudentService.generate_admission_number(
+                db=db,
+                tenant_id=actor.tenant_id,
+            )
+
+        if admission_number is not None:
+            existing_admission = await StudentRepository.get_by_admission_number(
+                db=db,
+                tenant_id=actor.tenant_id,
+                admission_number=admission_number,
+            )
+            if existing_admission is not None:
+                raise BadRequestException(detail="Admission number already exists")
+
+        student = Student(
+            tenant_id=actor.tenant_id,
+            user_id=payload.user_id,
+            admission_number=admission_number,
+            date_of_birth=payload.date_of_birth,
+            gender=payload.gender,
+            passport_photo_url=payload.passport_photo_url,
+            admission_date=StudentService._get_default_admission_date(),
+            graduation_date=payload.graduation_date,
+            class_id=payload.class_id,
+            arm=payload.arm,
+            status=payload.status,
+            profile_status=StudentProfileStatus.INCOMPLETE,
+        )
+        student.profile_status = StudentService._resolve_profile_status(student)
+
+        created_student = await StudentRepository.create_student(
+            db=db,
+            student=student,
+        )
+        return StudentResponse.model_validate(created_student)
+
+    @staticmethod
+    async def get_student_profile(
+        db: AsyncSession,
+        actor: User,
+        student_id: UUID,
+    ) -> StudentResponse:
+        """Get a student profile by id."""
+        StudentService._ensure_tenant_user(actor)
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=student_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        if actor.role == UserRole.STUDENT and student.user_id != actor.id:
+            raise ForbiddenException(detail="You are not allowed to view this student profile")
+
+        return StudentResponse.model_validate(student)
+
+    @staticmethod
+    async def get_student_by_user_id(
+        db: AsyncSession,
+        actor: User,
+        user_id: UUID,
+    ) -> StudentResponse:
+        """Get a student profile by user id."""
+        StudentService._ensure_tenant_user(actor)
+
+        student = await StudentRepository.get_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=user_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        if actor.role == UserRole.STUDENT and user_id != actor.id:
+            raise ForbiddenException(detail="You are not allowed to view this student profile")
+
+        return StudentResponse.model_validate(student)
+
+    @staticmethod
+    async def update_my_student_profile(
+        db: AsyncSession,
+        actor: User,
+        payload: StudentSelfUpdate,
+    ) -> StudentResponse:
+        """Allow a student to update self-service profile fields."""
+        StudentService._ensure_tenant_user(actor)
+
+        if actor.role != UserRole.STUDENT:
+            raise ForbiddenException(detail="Only students can update this profile")
+
+        student = await StudentRepository.get_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=actor.id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        update_data = payload.model_dump(exclude_unset=True)
+        if not update_data:
+            raise BadRequestException(detail="No update data provided")
+
+        for field, value in update_data.items():
+            setattr(student, field, value)
+
+        student.profile_status = StudentService._resolve_profile_status(student)
+        updated_student = await StudentRepository.update_student(
+            db=db,
+            student=student,
+        )
+        return StudentResponse.model_validate(updated_student)
+
+    @staticmethod
+    async def list_students(
+        db: AsyncSession,
+        actor: User,
+        skip: int = 0,
+        limit: int = 50,
+        search: str | None = None,
+        class_id: UUID | None = None,
+        status: AcademicStatus | None = None,
+    ) -> tuple[list[StudentResponse], int]:
+        """List students for the current tenant."""
+        StudentService._ensure_tenant_user(actor)
+
+        if actor.role not in (UserRole.ADMIN, UserRole.TEACHER):
+            raise ForbiddenException(detail="You are not allowed to list students")
+
+        students, total = await StudentRepository.list_students(
+            db=db,
+            tenant_id=actor.tenant_id,
+            skip=skip,
+            limit=min(limit, 100),
+            search=search,
+            class_id=class_id,
+            status=status,
+        )
+        return [StudentResponse.model_validate(student) for student in students], total
+
+    @staticmethod
+    async def update_student_profile(
+        db: AsyncSession,
+        actor: User,
+        student_id: UUID,
+        payload: StudentUpdate,
+    ) -> StudentResponse:
+        """Update a student profile."""
+        StudentService._ensure_admin(actor)
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=student_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        update_data = payload.model_dump(exclude_unset=True)
+        if not update_data:
+            raise BadRequestException(detail="No update data provided")
+
+        admission_number = update_data.get("admission_number")
+        if admission_number is not None and admission_number != student.admission_number:
+            existing_student = await StudentRepository.get_by_admission_number(
+                db=db,
+                tenant_id=actor.tenant_id,
+                admission_number=admission_number,
+            )
+            if existing_student is not None:
+                raise BadRequestException(detail="Admission number already exists")
+
+        for field, value in update_data.items():
+            setattr(student, field, value)
+
+        student.profile_status = StudentService._resolve_profile_status(student)
+
+        updated_student = await StudentRepository.update_student(
+            db=db,
+            student=student,
+        )
+        return StudentResponse.model_validate(updated_student)
+
+    @staticmethod
+    async def complete_student_profile(
+        db: AsyncSession,
+        actor: User,
+        student_id: UUID,
+        payload: StudentProfileComplete,
+    ) -> StudentResponse:
+        """Complete an incomplete student profile."""
+        StudentService._ensure_admin(actor)
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=student_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        student.date_of_birth = payload.date_of_birth
+        student.gender = payload.gender
+        student.class_id = payload.class_id
+        student.arm = payload.arm
+        student.passport_photo_url = payload.passport_photo_url
+
+        if student.admission_number is None:
+            student.admission_number = await StudentService.generate_admission_number(
+                db=db,
+                tenant_id=actor.tenant_id,
+            )
+
+        student.profile_status = StudentService._resolve_profile_status(student)
+
+        updated_student = await StudentRepository.update_student(
+            db=db,
+            student=student,
+        )
+        return StudentResponse.model_validate(updated_student)
+
+    @staticmethod
+    async def generate_admission_number(
+        db: AsyncSession,
+        tenant_id: UUID,
+    ) -> str:
+        """Generate a tenant-scoped admission number."""
+        tenant = await TenantRepository.get_by_id(
+            db=db,
+            tenant_id=tenant_id,
+        )
+        if tenant is None:
+            raise NotFoundException(detail="Tenant not found")
+
+        prefix = tenant.admission_number_prefix
+        if prefix is None:
+            raise BadRequestException(
+                detail=(
+                    "School admission prefix has not been set. "
+                    "Please set it before creating a student profile."
+                )
+            )
+
+        current_year = datetime.now(timezone.utc).year
+
+        for _ in range(20):
+            random_digits = f"{secrets.randbelow(1000):03d}"
+            admission_number = f"{prefix}{current_year}{random_digits}"
+            existing_student = await StudentRepository.get_by_admission_number(
+                db=db,
+                tenant_id=tenant_id,
+                admission_number=admission_number,
+            )
+            if existing_student is None:
+                return admission_number
+
+        raise BadRequestException(
+            detail="Unable to generate a unique admission number right now. Please try again."
+        )
+
+    @staticmethod
+    async def delete_student_profile(
+        db: AsyncSession,
+        actor: User,
+        student_id: UUID,
+    ) -> None:
+        """Delete a student profile."""
+        StudentService._ensure_admin(actor)
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=student_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        await StudentRepository.delete_student(
+            db=db,
+            student=student,
+        )
+
+
+class StudentParentLinkService:
+    """Business logic for student-parent relationships."""
+
+    @staticmethod
+    async def create_student_parent_link(
+        db: AsyncSession,
+        actor: User,
+        payload: StudentParentLinkCreate,
+    ) -> StudentParentLinkResponse:
+        """Create a student-parent relationship."""
+        StudentService._ensure_admin(actor)
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=payload.student_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        parent = await ParentRepository.get_parent_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            parent_id=payload.parent_id,
+        )
+        if parent is None:
+            raise NotFoundException(detail="Parent profile not found")
+
+        existing_link = await StudentParentLinkRepository.get_by_student_and_parent(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=payload.student_id,
+            parent_id=payload.parent_id,
+        )
+        if existing_link is not None:
+            raise BadRequestException(detail="Parent is already linked to this student")
+
+        link = StudentParentLink(
+            tenant_id=actor.tenant_id,
+            student_id=payload.student_id,
+            parent_id=payload.parent_id,
+            relationship_type=payload.relationship_type,
+            is_primary_contact=payload.is_primary_contact,
+            receives_academic_updates=payload.receives_academic_updates,
+            receives_fee_updates=payload.receives_fee_updates,
+        )
+        created_link = await StudentParentLinkRepository.create_student_parent_link(
+            db=db,
+            link=link,
+        )
+        return StudentParentLinkResponse.model_validate(created_link)
+
+    @staticmethod
+    async def update_student_parent_link(
+        db: AsyncSession,
+        actor: User,
+        link_id: UUID,
+        payload: StudentParentLinkUpdate,
+    ) -> StudentParentLinkResponse:
+        """Update a student-parent relationship."""
+        StudentService._ensure_admin(actor)
+
+        link = await StudentParentLinkRepository.get_parent_student_link_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            link_id=link_id,
+        )
+        if link is None:
+            raise NotFoundException(detail="Student-parent link not found")
+
+        update_data = payload.model_dump(exclude_unset=True)
+        if not update_data:
+            raise BadRequestException(detail="No update data provided")
+
+        for field, value in update_data.items():
+            setattr(link, field, value)
+
+        updated_link = await StudentParentLinkRepository.update_student_parent_link(
+            db=db,
+            link=link,
+        )
+        return StudentParentLinkResponse.model_validate(updated_link)
+
+    @staticmethod
+    async def delete_student_parent_link(
+        db: AsyncSession,
+        actor: User,
+        link_id: UUID,
+    ) -> None:
+        """Delete a student-parent relationship."""
+        StudentService._ensure_admin(actor)
+
+        link = await StudentParentLinkRepository.get_parent_student_link_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            link_id=link_id,
+        )
+        if link is None:
+            raise NotFoundException(detail="Student-parent link not found")
+
+        await StudentParentLinkRepository.delete_student_parent_link(
+            db=db,
+            link=link,
+        )
+
+    @staticmethod
+    async def list_my_parent_links(
+        db: AsyncSession,
+        actor: User,
+    ) -> tuple[list[StudentParentLinkResponse], int]:
+        """List parent links for the logged-in student."""
+        StudentService._ensure_tenant_user(actor)
+
+        if actor.role != UserRole.STUDENT:
+            raise ForbiddenException(detail="Only students can view their parent links here")
+
+        student = await StudentRepository.get_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=actor.id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        links = await StudentParentLinkRepository.get_by_student_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=student.id,
+        )
+        items = [StudentParentLinkResponse.model_validate(link) for link in links]
+        return items, len(items)
+
+
+class StudentLinkCodeService:
+    """Business logic for student pairing codes."""
+
+    @staticmethod
+    async def create_student_link_code(
+        db: AsyncSession,
+        actor: User,
+        payload: StudentLinkCodeCreate,
+    ) -> StudentLinkCodeResponse:
+        """Generate a pairing code for a student."""
+        StudentService._ensure_admin(actor)
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=payload.student_id,
+        )
+        if student is None:
+            raise NotFoundException(detail="Student profile not found")
+
+        link_code = StudentLinkCode(
+            tenant_id=actor.tenant_id,
+            student_id=payload.student_id,
+            code=StudentLinkCode.generate_code(),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            max_use=payload.max_use,
+        )
+        created_code = await StudentLinkCodeRepository.create(
+            db=db,
+            link_code=link_code,
+        )
+        return StudentLinkCodeResponse.model_validate(created_code)
+
+    @staticmethod
+    async def redeem_student_link_code(
+        db: AsyncSession,
+        actor: User,
+        payload: StudentLinkCodeRedeem,
+    ) -> StudentParentLinkResponse:
+        """Link the logged-in parent to a student by redeeming a pairing code."""
+        StudentService._ensure_tenant_user(actor)
+
+        if actor.role != UserRole.PARENT:
+            raise ForbiddenException(detail="Only parents can redeem student link codes")
+
+        parent = await ParentRepository.get_parent_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=actor.id,
+        )
+        if parent is None:
+            raise NotFoundException(detail="Parent profile not found")
+
+        link_code = await StudentLinkCodeRepository.get_code(
+            db=db,
+            tenant_id=actor.tenant_id,
+            code=payload.code,
+        )
+        if link_code is None or not link_code.is_active:
+            raise BadRequestException(detail="Student link code is invalid or expired")
+
+        existing_link = await StudentParentLinkRepository.get_by_student_and_parent(
+            db=db,
+            tenant_id=actor.tenant_id,
+            student_id=link_code.student_id,
+            parent_id=parent.id,
+        )
+        if existing_link is not None:
+            raise BadRequestException(detail="You are already linked to this student")
+
+        link = StudentParentLink(
+            tenant_id=actor.tenant_id,
+            student_id=link_code.student_id,
+            parent_id=parent.id,
+            relationship_type=payload.relationship_type,
+            is_primary_contact=payload.is_primary_contact,
+            receives_academic_updates=payload.receives_academic_updates,
+            receives_fee_updates=payload.receives_fee_updates,
+        )
+        created_link = await StudentParentLinkRepository.create_student_parent_link(
+            db=db,
+            link=link,
+        )
+
+        link_code.use_count += 1
+        if link_code.is_exhausted:
+            link_code.used_at = datetime.now(timezone.utc)
+        await StudentLinkCodeRepository.update(db=db, link_code=link_code)
+
+        return StudentParentLinkResponse.model_validate(created_link)

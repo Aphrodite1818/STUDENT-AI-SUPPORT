@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
+import MultiSelect from "../../components/ui/MultiSelect";
 import { getErrorMessage, parseApiError } from "../../services/api";
 
 const emptyContext = {};
@@ -30,7 +31,7 @@ const cleanPayload = (payload) =>
     return nextPayload;
   }, {});
 
-function FormControl({ field, value, error, onChange }) {
+function FormControl({ field, value, error, onChange, onValueChange }) {
   const commonProps = {
     name: field.name,
     value: value ?? "",
@@ -60,24 +61,19 @@ function FormControl({ field, value, error, onChange }) {
 
   if (field.type === "multiselect") {
     return (
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-text-soft">
-          {field.label}
-        </label>
-        <select
-          className="input-base min-h-32"
-          multiple
-          {...commonProps}
-          value={Array.isArray(value) ? value : []}
-        >
-          {(field.options || []).map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {error && <p className="mt-1 text-sm text-error">{error}</p>}
-      </div>
+      <MultiSelect
+        label={field.label}
+        name={field.name}
+        value={Array.isArray(value) ? value : []}
+        options={field.options || []}
+        placeholder={field.placeholder}
+        searchPlaceholder={field.searchPlaceholder}
+        error={error}
+        disabled={field.disabled}
+        required={field.required}
+        onChange={onChange}
+        onValueChange={onValueChange}
+      />
     );
   }
 
@@ -216,15 +212,19 @@ function ResourcePage({ config }) {
     };
   }, [filters, loadContext, loadItems]);
 
+  const updateFormValue = (name, nextValue) => {
+    setFormData((current) => ({ ...current, [name]: nextValue }));
+    setFieldErrors((current) => ({ ...current, [name]: undefined }));
+    setError(null);
+  };
+
   const handleFormChange = (event) => {
     const { multiple, name, selectedOptions, value } = event.target;
     const nextValue = multiple
       ? Array.from(selectedOptions, (option) => option.value)
       : value;
 
-    setFormData((current) => ({ ...current, [name]: nextValue }));
-    setFieldErrors((current) => ({ ...current, [name]: undefined }));
-    setError(null);
+    updateFormValue(name, nextValue);
   };
 
   const handleFilterChange = (event) => {
@@ -344,6 +344,7 @@ function ResourcePage({ config }) {
                     value={formData[field.name]}
                     error={fieldErrors[field.name]}
                     onChange={handleFormChange}
+                    onValueChange={updateFormValue}
                   />
                 ))}
 
@@ -383,12 +384,13 @@ function ResourcePage({ config }) {
               className="mt-5 grid gap-3 rounded-2xl border border-border bg-surface-muted/40 p-4 md:grid-cols-3 xl:grid-cols-4"
             >
               {filterFields.map((field) => (
-                <FormControl
-                  key={field.name}
-                  field={field}
-                  value={filters[field.name]}
-                  onChange={handleFilterChange}
-                />
+                  <FormControl
+                    key={field.name}
+                    field={field}
+                    value={filters[field.name]}
+                    onChange={handleFilterChange}
+                    onValueChange={() => {}}
+                  />
               ))}
               <div className="grid gap-2 sm:flex sm:items-end">
                 <Button type="submit" size="small" className="w-full sm:w-auto">

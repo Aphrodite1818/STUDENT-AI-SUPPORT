@@ -9,25 +9,19 @@ from pathlib import Path
 
 
 try:
-    from app.config.settings import BASE_DIR, EnvironmentType, settings
+    from app.config.settings import BASE_DIR, settings
 except Exception:
     BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-    class EnvironmentType:
-        """Supported application environments."""
-        DEVELOPMENT = "dev"
-        PRODUCTION = "prod"
-        STAGING = "stg"
-
     class _FallbackSettings:
         """Represent the _FallbackSettings type."""
-        ENV = EnvironmentType.DEVELOPMENT
+        ENV = "dev"
         LOG_LEVEL = None
 
         @property
         def is_development(self) -> bool:
             """Return whether the application is running in development mode."""
-            return self.ENV == EnvironmentType.DEVELOPMENT
+            return self.ENV == "dev"
 
     settings = _FallbackSettings()
 

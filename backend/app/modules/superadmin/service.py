@@ -69,11 +69,8 @@ class SuperadminService:
         if not superadmin.is_active:
             raise UnauthorizedException("Superadmin account is not active")
 
-        await SuperAdminRepository.touch_last_login(
-            db,
-            superadmin,
-            at=datetime.now(timezone.utc),
-        )
+        superadmin.last_login_at = datetime.now(timezone.utc)
+        await SuperAdminRepository.save(db, superadmin)
         await db.commit()
         return superadmin
 
@@ -111,6 +108,14 @@ class SuperadminService:
             )
             if number_exists:
                 raise ConflictException("This WhatsApp number is already in use by another school")
+
+        if payload.admission_number_prefix:
+            existing_tenant_with_prefix = await TenantRepository.get_by_admission_number_prefix(
+                db,
+                payload.admission_number_prefix,
+            )
+            if existing_tenant_with_prefix is not None:
+                raise ConflictException("Prefix not available")
 
         slug = await TenantService._unique_slug(db, payload.school_name)
         tenant_data = payload.model_dump(mode="json", exclude={"log_slug_preview"})
@@ -230,9 +235,8 @@ class SuperadminService:
         if tenant.is_deleted:
             raise BadRequestException("Deleted tenants must be restored before status updates.")
 
-        updated_tenant = await TenantRepository.update(db, tenant_id, {"status": payload.status})
-        if updated_tenant is None:
-            raise NotFoundException("Tenant not found")
+        tenant.status = payload.status
+        updated_tenant = await TenantRepository.save(db, tenant)
 
         await db.commit()
         await db.refresh(updated_tenant)
@@ -247,9 +251,9 @@ class SuperadminService:
         if not tenant.is_deleted:
             raise BadRequestException("Tenant is not deleted")
 
-        restored_tenant = await TenantRepository.restore(db, tenant_id)
-        if not restored_tenant:
-            raise NotFoundException("Tenant not found")
+        tenant.is_deleted = False
+        tenant.deleted_at = None
+        restored_tenant = await TenantRepository.save(db, tenant)
 
         await db.commit()
         await db.refresh(restored_tenant)
@@ -261,7 +265,9 @@ class SuperadminService:
         tenant = await TenantRepository.get_by_id(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
-        await TenantRepository.soft_delete(db, tenant_id)
+        tenant.is_deleted = True
+        tenant.deleted_at = datetime.now(timezone.utc)
+        await TenantRepository.save(db, tenant)
         await db.commit()
         return {"detail": "Tenant successfully deleted"}
 

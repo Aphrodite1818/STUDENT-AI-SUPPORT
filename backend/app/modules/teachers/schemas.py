@@ -79,6 +79,39 @@ class TeacherUpdate(InputBase):
         return _clean_optional_string(value)
 
 
+class TeacherSelfUpdate(InputBase):
+    """Self-service teacher profile update schema."""
+
+    staff_id: str | None = Field(
+        default=None,
+        max_length=50,
+    )
+
+    qualification: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    specialization: str | None = Field(
+        default=None,
+        max_length=150,
+    )
+
+    @field_validator(
+        "staff_id",
+        "qualification",
+        "specialization",
+        mode="before",
+    )
+    @classmethod
+    def clean_optional_self_service_text_fields(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Normalize optional text fields."""
+        return _clean_optional_string(value)
+
+
 class SubjectSummaryResponse(OutputBase):
     """Pydantic schema for the teachers domain."""
     id: uuid.UUID

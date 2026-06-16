@@ -12,9 +12,8 @@ from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 if TYPE_CHECKING:
     from app.modules.teachers.models import Teacher
-    # Temporarily disabled until the student/parent modules are finished.
-    # from app.modules.parents.models import Parent
-    # from app.modules.students.models import Student
+    from app.modules.parents.models import Parent
+    from app.modules.students.models import Student
 
 
 class UserRole(str, Enum):
@@ -63,23 +62,19 @@ class User(BaseModel):
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+    student_profile: Mapped["Student | None"] = relationship(
+        "Student",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
-    # Temporarily disabled until the student/parent modules are finished.
-    # Keeping these relationships active forces SQLAlchemy to resolve the
-    # unfinished Student/Parent mappers during auth/login queries.
-    # student_profile: Mapped["Student | None"] = relationship(
-    #     "Student",
-    #     back_populates="user",
-    #     uselist=False,
-    #     cascade="all, delete-orphan",
-    # )
-
-    # parent_profile: Mapped["Parent | None"] = relationship(
-    #     "Parent",
-    #     back_populates="user",
-    #     uselist=False,
-    #     cascade="all, delete-orphan",
-    # )
+    parent_profile: Mapped["Parent | None"] = relationship(
+        "Parent",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     teacher_profile: Mapped["Teacher | None"] = relationship(
         "Teacher",

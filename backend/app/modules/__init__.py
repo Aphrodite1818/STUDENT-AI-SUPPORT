@@ -3,12 +3,14 @@
 #======================================#
 
 
-# def import_model_modules() -> None:
-#     """Import SQLAlchemy models so string relationships can resolve."""
-#     from app.modules.auth import models as _auth_models  # noqa: F401
-#     from app.modules.parents import models as _parent_models  # noqa: F401
-#     from app.modules.students import models as _student_models  # noqa: F401
-#     from app.modules.subjects import models as _subject_models  # noqa: F401
-#     from app.modules.superadmin import models as _superadmin_models  # noqa: F401
-#     from app.modules.teachers import models as _teacher_models  # noqa: F401
-#     from app.modules.users import models as _user_models  # noqa: F401
+def import_model_modules() -> None:
+    """Import SQLAlchemy models so string relationships and FKs can resolve."""
+    import app.modules.auth.models  # noqa: F401
+    import app.modules.classes.models  # noqa: F401
+    import app.modules.parents.models  # noqa: F401
+    import app.modules.students.models  # noqa: F401
+    import app.modules.subjects.models  # noqa: F401
+    import app.modules.superadmin.models  # noqa: F401
+    import app.modules.teachers.models  # noqa: F401
+    import app.modules.users.models  # noqa: F401
+    import app.tenant_management.models  # noqa: F401

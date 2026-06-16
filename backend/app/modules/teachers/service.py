@@ -8,10 +8,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
+from app.modules.subjects.models import Subject
 from app.modules.subjects.repository import SubjectRepository
 from app.modules.teachers.models import Teacher, TeacherStatus
 from app.modules.teachers.repository import TeacherRepository
-from app.modules.teachers.schemas import TeacherUpdate
+from app.modules.teachers.schemas import TeacherSelfUpdate, TeacherUpdate
 from app.modules.users.models import User, UserRole
 
 
@@ -57,6 +58,100 @@ class TeacherService:
             raise ForbiddenException(detail="You are not allowed to view this teacher")
 
         return teacher
+
+    @staticmethod
+    async def get_my_subjects(
+        db: AsyncSession,
+        actor: User,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        is_active: bool | None = None,
+        search: str | None = None,
+    ) -> tuple[list[Subject], int]:
+        """Return only the subjects assigned to the current teacher."""
+        TeacherService._ensure_tenant_user(actor)
+
+        if actor.role != UserRole.TEACHER:
+            raise ForbiddenException(detail="Only teachers can view assigned subjects.")
+
+        teacher = await TeacherRepository.get_teacher_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=actor.id,
+        )
+        if not teacher:
+            raise NotFoundException(detail="Teacher profile not found.")
+
+        return await SubjectRepository.list_subjects_for_teacher(
+            db=db,
+            tenant_id=actor.tenant_id,
+            teacher_id=teacher.id,
+            skip=skip,
+            limit=min(limit, 100),
+            is_active=is_active,
+            search=search,
+        )
+
+    @staticmethod
+    async def get_my_teacher_profile(
+        db: AsyncSession,
+        actor: User,
+    ) -> Teacher:
+        """Return the current teacher profile."""
+        TeacherService._ensure_tenant_user(actor)
+
+        if actor.role != UserRole.TEACHER:
+            raise ForbiddenException(detail="Only teachers can view this profile.")
+
+        teacher = await TeacherRepository.get_teacher_by_user_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            user_id=actor.id,
+        )
+        if not teacher:
+            raise NotFoundException(detail="Teacher profile not found.")
+
+        return teacher
+
+    @staticmethod
+    async def update_my_teacher_profile(
+        db: AsyncSession,
+        actor: User,
+        teacher_data: TeacherSelfUpdate,
+    ) -> Teacher:
+        """Allow a teacher to update their own profile fields."""
+        teacher = await TeacherService.get_my_teacher_profile(
+            db=db,
+            actor=actor,
+        )
+
+        update_data = teacher_data.model_dump(exclude_unset=True)
+        if not update_data:
+            raise BadRequestException(detail="No update data provided")
+
+        if (
+            "staff_id" in update_data
+            and update_data["staff_id"] is not None
+            and update_data["staff_id"] != teacher.staff_id
+        ):
+            existing_staff_id = await TeacherRepository.get_teacher_by_staff_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                staff_id=update_data["staff_id"],
+            )
+            if existing_staff_id and existing_staff_id.id != teacher.id:
+                raise BadRequestException(
+                    detail="A teacher with this staff ID already exists"
+                )
+
+        for field, value in update_data.items():
+            setattr(teacher, field, value)
+
+        return await TeacherRepository.update_teacher(
+            db=db,
+            teacher=teacher,
+        )
 
     @staticmethod
     async def list_teachers(
@@ -127,10 +222,12 @@ class TeacherService:
 
         try:
             if update_data:
+                for field, value in update_data.items():
+                    setattr(teacher, field, value)
+
                 teacher = await TeacherRepository.update_teacher(
                     db=db,
                     teacher=teacher,
-                    update_data=update_data,
                 )
 
             if subject_ids is not None:
@@ -217,11 +314,8 @@ class TeacherService:
         if not teacher:
             raise NotFoundException(detail="Teacher not found")
 
-        await TeacherRepository.update_teacher_status(
-            db=db,
-            teacher=teacher,
-            status=TeacherStatus.ARCHIVED,
-        )
+        teacher.status = TeacherStatus.ARCHIVED
+        await TeacherRepository.update_teacher(db=db, teacher=teacher)
         await TeacherRepository.delete_all_teacher_subject_links(
             db=db,
             tenant_id=actor.tenant_id,

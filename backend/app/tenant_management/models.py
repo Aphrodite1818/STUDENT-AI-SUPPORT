@@ -67,6 +67,13 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
                 "Used by tenant middleware to resolve the school.",
     )
 
+    admission_number_prefix: Mapped[str | None] = mapped_column(
+        String(20),
+        unique=True,
+        nullable=True,
+        index=True,
+        comment="Tenant-specific prefix used to generate student admission numbers.",
+    )
 
     # Whatsapp number the school's bot listens on
     school_bot_whatssap_number: Mapped[str | None] = mapped_column(

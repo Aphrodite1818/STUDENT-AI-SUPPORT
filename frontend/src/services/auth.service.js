@@ -18,7 +18,7 @@ export const authService = {
         let currentUser = response.user || null;
         let role = response.role || currentUser?.role || null;
 
-        if (!role && response.access_token) {
+        if (response.access_token) {
             try {
                 currentUser = await userService.getMe();
                 role = currentUser?.role || null;

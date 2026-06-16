@@ -89,6 +89,7 @@ class TenantBase(InputBase):
     logo_url: HttpUrl | None = None
     timezone: str = Field(default="Africa/Lagos", max_length=50)
     language: str = Field(default="en", max_length=10)
+    admission_number_prefix: str | None = Field(default=None, min_length=2, max_length=20)
 
     @field_validator("school_name")
     @classmethod
@@ -106,12 +107,21 @@ class TenantBase(InputBase):
         "country",
         "timezone",
         "language",
+        "admission_number_prefix",
         mode="before",
     )
     @classmethod
     def clean_text_fields(cls, value: str | None) -> str | None:
         """Normalize text fields."""
         return _clean_optional_string(value)
+
+    @field_validator("admission_number_prefix")
+    @classmethod
+    def normalize_admission_number_prefix(cls, value: str | None) -> str | None:
+        """Normalize the tenant admission number prefix."""
+        if value is None:
+            return None
+        return value.upper()
 
 
 class TenantRegisterRequest(InputBase):
@@ -125,6 +135,7 @@ class TenantRegisterRequest(InputBase):
     email: EmailStr
     password: str = Field(..., min_length=8, description="Admin user password")
     slug: str | None = None
+    admission_number_prefix: str | None = Field(default=None, min_length=2, max_length=20)
 
     @field_validator("school_name")
     @classmethod
@@ -139,6 +150,20 @@ class TenantRegisterRequest(InputBase):
     def clean_slug(cls, value: str | None) -> str | None:
         """Normalize slug."""
         return _clean_optional_string(value)
+
+    @field_validator("admission_number_prefix", mode="before")
+    @classmethod
+    def clean_admission_number_prefix(cls, value: str | None) -> str | None:
+        """Normalize admission number prefix."""
+        return _clean_optional_string(value)
+
+    @field_validator("admission_number_prefix")
+    @classmethod
+    def normalize_register_admission_number_prefix(cls, value: str | None) -> str | None:
+        """Uppercase the admission number prefix."""
+        if value is None:
+            return None
+        return value.upper()
 
 
 class TenantCreate(TenantBase):
@@ -178,6 +203,7 @@ class TenantUpdate(InputBase):
     logo_url: HttpUrl | None = None
     timezone: str = Field(default="Africa/Lagos", max_length=50)
     language: str = Field(default="en", max_length=10)
+    admission_number_prefix: str | None = Field(default=None, min_length=2, max_length=20)
 
     school_bot_whatssap_number: str | None = Field(
         default=None,
@@ -196,6 +222,7 @@ class TenantUpdate(InputBase):
         "country",
         "timezone",
         "language",
+        "admission_number_prefix",
         "school_bot_whatssap_number",
         mode="before",
     )
@@ -203,6 +230,14 @@ class TenantUpdate(InputBase):
     def clean_text_fields(cls, value: str | None) -> str | None:
         """Normalize text fields."""
         return _clean_optional_string(value)
+
+    @field_validator("admission_number_prefix")
+    @classmethod
+    def normalize_update_admission_number_prefix(cls, value: str | None) -> str | None:
+        """Uppercase the admission number prefix."""
+        if value is None:
+            return None
+        return value.upper()
 
 
 class TenantStatusUpdate(InputBase):
@@ -233,6 +268,7 @@ class TenantPublicResponse(OutputBase):
     id: uuid.UUID
     school_name: str
     slug: str
+    admission_number_prefix: str | None
     email: EmailStr | None
     phone: str | None
     address: str | None

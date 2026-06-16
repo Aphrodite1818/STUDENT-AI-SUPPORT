@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,13 +99,3 @@ class SuperAdminRepository:
         )
         return result.scalars().first()
 
-    @staticmethod
-    async def touch_last_login(
-        db: AsyncSession,
-        superadmin: SuperAdmin,
-        *,
-        at: datetime,
-    ) -> SuperAdmin:
-        """Perform touch last login."""
-        superadmin.last_login_at = at
-        return await SuperAdminRepository.save(db, superadmin)

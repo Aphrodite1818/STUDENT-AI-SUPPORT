@@ -5,10 +5,8 @@
 """Provide data-access helpers for tenant entities."""
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.tenant_management.models import Tenant, TenantVerificationStatus
@@ -51,6 +49,21 @@ class TenantRepository:
             select(Tenant).where(
                 Tenant.slug == slug,
                 Tenant.is_deleted == False
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_admission_number_prefix(
+        db: AsyncSession,
+        admission_number_prefix: str,
+    ) -> Tenant | None:
+        """Return a non-deleted tenant by admission number prefix."""
+        normalized_prefix = admission_number_prefix.strip().upper()
+        result = await db.execute(
+            select(Tenant).where(
+                func.upper(Tenant.admission_number_prefix) == normalized_prefix,
+                Tenant.is_deleted == False,
             )
         )
         return result.scalar_one_or_none()
@@ -127,37 +140,15 @@ class TenantRepository:
         return tenant
 
     @staticmethod
-    async def update(
+    async def save(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
-        update_data: dict[str, Any],
-    ) -> Tenant | None:
-        """Update a tenant and return the refreshed record."""
-        await db.execute(
-            update(Tenant).where(
-                Tenant.id == tenant_id
-            ).values(**update_data)
-        )
-        return await TenantRepository.get_by_id(db, tenant_id)
-
-    @staticmethod
-    async def soft_delete(db: AsyncSession, tenant_id: uuid.UUID) -> None:
-        """Mark a tenant as deleted without removing the row."""
-        await db.execute(
-            update(Tenant).where(
-                Tenant.id == tenant_id
-            ).values(is_deleted=True, deleted_at=datetime.now(timezone.utc))
-        )
-
-    @staticmethod
-    async def restore(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant | None:
-        """Reverse a soft delete and return the active tenant record."""
-        await db.execute(
-            update(Tenant).where(
-                Tenant.id == tenant_id
-            ).values(is_deleted=False, deleted_at=None)
-        )
-        return await TenantRepository.get_by_id(db, tenant_id)
+        tenant: Tenant,
+    ) -> Tenant:
+        """Persist tenant changes."""
+        db.add(tenant)
+        await db.flush()
+        await db.refresh(tenant)
+        return tenant
 
 
 

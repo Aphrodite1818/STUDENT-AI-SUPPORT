@@ -56,7 +56,7 @@ class SubjectService:
             if existing_code:
                 raise BadRequestException(detail="A subject with this code already exists.")
 
-        unique_teacher_ids = list(set(subject_data.teacher_ids))
+        unique_teacher_ids = list(dict.fromkeys(subject_data.teacher_ids))
 
         if unique_teacher_ids:
             teachers = await TeacherRepository.get_teachers_by_ids(
@@ -190,6 +190,26 @@ class SubjectService:
         if "name" in update_data and update_data["name"] is None:
             raise BadRequestException(detail="Subject name cannot be empty.")
 
+        teacher_ids = update_data.pop("teacher_ids", None)
+
+        if teacher_ids is not None:
+            unique_teacher_ids = list(dict.fromkeys(teacher_ids))
+
+            if unique_teacher_ids:
+                teachers = await TeacherRepository.get_teachers_by_ids(
+                    db=db,
+                    tenant_id=actor.tenant_id,
+                    teacher_ids=unique_teacher_ids,
+                    status=TeacherStatus.ACTIVE,
+                )
+
+                if len(teachers) != len(unique_teacher_ids):
+                    raise BadRequestException(
+                        detail="One or more selected teachers are not active in this school."
+                    )
+        else:
+            unique_teacher_ids = []
+
         if "name" in update_data and update_data["name"] != subject.name:
             existing_name = await SubjectRepository.get_subject_by_name(
                 db=db,
@@ -215,11 +235,46 @@ class SubjectService:
                 raise BadRequestException(detail="A subject with this code already exists.")
 
         try:
+            for field, value in update_data.items():
+                setattr(subject, field, value)
+
             updated_subject = await SubjectRepository.update_subject(
                 db=db,
                 subject=subject,
-                update_data=update_data,
             )
+
+            if teacher_ids is not None:
+                existing_teacher_ids = await SubjectRepository.get_subject_teacher_ids(
+                    db=db,
+                    tenant_id=actor.tenant_id,
+                    subject_id=subject.id,
+                )
+
+                existing_teacher_id_set = set(existing_teacher_ids)
+                incoming_teacher_id_set = set(unique_teacher_ids)
+
+                teacher_ids_to_add = list(
+                    incoming_teacher_id_set - existing_teacher_id_set
+                )
+                teacher_ids_to_remove = list(
+                    existing_teacher_id_set - incoming_teacher_id_set
+                )
+
+                if teacher_ids_to_add:
+                    await SubjectRepository.create_teacher_subject_links(
+                        db=db,
+                        tenant_id=actor.tenant_id,
+                        subject_id=subject.id,
+                        teacher_ids=teacher_ids_to_add,
+                    )
+
+                if teacher_ids_to_remove:
+                    await SubjectRepository.delete_teacher_subject_links(
+                        db=db,
+                        tenant_id=actor.tenant_id,
+                        subject_id=subject.id,
+                        teacher_ids=teacher_ids_to_remove,
+                    )
 
             await db.commit()
             await db.refresh(updated_subject)
@@ -262,11 +317,8 @@ class SubjectService:
         if subject.is_active:
             return subject
 
-        updated_subject = await SubjectRepository.update_subject(
-            db=db,
-            subject=subject,
-            update_data={"is_active": True},
-        )
+        subject.is_active = True
+        updated_subject = await SubjectRepository.update_subject(db=db, subject=subject)
 
         await db.commit()
         await db.refresh(updated_subject)
@@ -303,11 +355,8 @@ class SubjectService:
         if not subject.is_active:
             return subject
 
-        updated_subject = await SubjectRepository.update_subject(
-            db=db,
-            subject=subject,
-            update_data={"is_active": False},
-        )
+        subject.is_active = False
+        updated_subject = await SubjectRepository.update_subject(db=db, subject=subject)
 
         await db.commit()
         await db.refresh(updated_subject)

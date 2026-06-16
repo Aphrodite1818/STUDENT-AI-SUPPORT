@@ -14,6 +14,16 @@ export function getUserDisplayName(user) {
   );
 }
 
+export function getUserInitials(user) {
+  const firstInitial = String(user?.firstname || "").trim().charAt(0);
+  const lastInitial = String(user?.lastname || "").trim().charAt(0);
+  const initials = `${firstInitial}${lastInitial}`.trim().toUpperCase();
+
+  if (initials) return initials;
+
+  return String(user?.email || "U").trim().charAt(0).toUpperCase() || "U";
+}
+
 export function getUserAvatarSrc(user) {
   if (!user) return undefined;
 

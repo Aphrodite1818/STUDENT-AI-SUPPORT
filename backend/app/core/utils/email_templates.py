@@ -3,57 +3,103 @@
 #======================================#
 
 from datetime import datetime
+from html import escape
 
-def get_otp_email_html(code: str, purpose: str, expiration_minutes: int) -> str:
-    """Return otp email html."""
-    purpose_text = "account verification" if purpose == "verification" else "password reset"
+
+BRAND_NAME = "Learnly AI"
+BRAND_SUBTITLE = "School Management"
+
+
+def _html(value: object) -> str:
+    """Escape values before placing them into email HTML."""
+    return escape(str(value), quote=True)
+
+
+def _email_shell(title: str, eyebrow: str, body: str) -> str:
+    """Return the shared Learnly AI branded email shell."""
     year = datetime.now().year
-    
     return f"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{_html(title)}</title>
 </head>
-<body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F4EBD0; margin: 0; padding: 40px 20px; color: #0F172A;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -2px rgba(15, 23, 42, 0.05);">
-        
-        <!-- Header -->
-        <div style="background-color: #1E293B; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #FFFFFF; letter-spacing: 0.5px;">LearnlyAi</h1>
-        </div>
-        
-        <!-- Body Content -->
-        <div style="padding: 40px 30px;">
-            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello,</p>
-            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; color: #334155;">
-                You requested a one-time code for <strong>{purpose_text}</strong>. Please use the verification code below to complete your request:
-            </p>
-            
-            <!-- Verification Code -->
-            <div style="text-align: center; margin: 35px 0;">
-                <span style="display: inline-block; font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #F59E0B; background-color: #FFF8E1; padding: 20px 40px; border-radius: 8px; border: 2px dashed #F59E0B;">
-                    {code}
-                </span>
+<body style="font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F8FAFC; margin: 0; padding: 40px 20px; color: #0F172A;">
+    <div style="max-width: 600px; margin: 0 auto;">
+        <div style="padding: 0 0 18px 0;">
+            <div style="display: inline-block; vertical-align: middle; width: 42px; height: 42px; border-radius: 16px; background-color: #DBEAFE; border: 1px solid #E2E8F0; text-align: center; line-height: 42px; color: #2563EB; font-size: 20px; font-weight: 800;">L</div>
+            <div style="display: inline-block; vertical-align: middle; margin-left: 10px;">
+                <p style="margin: 0; font-size: 18px; line-height: 1.2; font-weight: 800; color: #0F172A;">{BRAND_NAME}</p>
+                <p style="margin: 2px 0 0 0; font-size: 12px; line-height: 1.4; color: #64748B;">{BRAND_SUBTITLE}</p>
             </div>
-            
-            <p style="font-size: 15px; line-height: 1.6; margin: 30px 0 0 0; color: #64748B;">
-                This code will expire in <strong>{expiration_minutes} minutes</strong>. If you did not request this, you can safely ignore and delete this email.
-            </p>
         </div>
-        
-        <!-- Footer -->
-        <div style="background-color: #F8FAFC; padding: 25px 30px; text-align: center; border-top: 1px solid #E2E8F0;">
-            <p style="margin: 0; font-size: 14px; color: #64748B;">
-                &copy; {year} Tenant Management System. All rights reserved.
-            </p>
+
+        <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 18px; overflow: hidden; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 20px 50px rgba(15, 23, 42, 0.07);">
+            <div style="background-color: #0F172A; padding: 30px;">
+                <p style="margin: 0 0 10px 0; font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #93C5FD;">{_html(eyebrow)}</p>
+                <h1 style="margin: 0; font-size: 26px; line-height: 1.25; font-weight: 700; color: #FFFFFF;">{_html(title)}</h1>
+            </div>
+
+            <div style="padding: 34px 30px;">
+                {body}
+            </div>
+
+            <div style="background-color: #F8FAFC; padding: 22px 30px; border-top: 1px solid #E2E8F0;">
+                <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #64748B;">
+                    &copy; {year} {BRAND_NAME}. Premium school management operations.
+                </p>
+            </div>
         </div>
-        
     </div>
 </body>
 </html>
 """
+
+
+def _action_button(label: str, href: str, variant: str = "primary") -> str:
+    """Return an email-safe action button."""
+    background = "#2563EB" if variant == "primary" else "#4F46E5"
+    border = "#1D4ED8" if variant == "primary" else "#4338CA"
+    return f"""
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{_html(href)}" style="display: inline-block; background-color: {background}; border: 1px solid {border}; color: #FFFFFF; padding: 13px 22px; border-radius: 12px; text-decoration: none; font-size: 14px; line-height: 1.4; font-weight: 700; box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);">{_html(label)}</a>
+            </div>
+"""
+
+
+def _fallback_link(link: str) -> str:
+    """Return a fallback link block for email clients that do not render buttons."""
+    safe_link = _html(link)
+    return f"""
+            <div style="margin-top: 28px; padding: 16px; border-radius: 14px; background-color: #F8FAFC; border: 1px solid #E2E8F0;">
+                <p style="margin: 0 0 8px 0; font-size: 13px; line-height: 1.6; color: #64748B;">If the button does not work, copy and paste this link into your browser:</p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #334155; word-break: break-all;">{safe_link}</p>
+            </div>
+"""
+
+
+def get_otp_email_html(code: str, purpose: str, expiration_minutes: int) -> str:
+    """Return otp email html."""
+    purpose_text = "account verification" if purpose == "verification" else "password reset"
+    body = f"""
+            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello,</p>
+            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; color: #334155;">
+                You requested a one-time code for <strong>{_html(purpose_text)}</strong>. Use the code below to complete your request.
+            </p>
+
+            <div style="text-align: center; margin: 35px 0;">
+                <span style="display: inline-block; font-size: 36px; line-height: 1; font-weight: 800; letter-spacing: 8px; color: #1E3A8A; background-color: #EFF6FF; padding: 22px 38px; border-radius: 14px; border: 1px solid #BFDBFE;">
+                    {_html(code)}
+                </span>
+            </div>
+
+            <p style="font-size: 15px; line-height: 1.6; margin: 30px 0 0 0; color: #64748B; background-color: #FFFBEB; border: 1px solid #FDE68A; border-radius: 14px; padding: 14px 16px;">
+                This code will expire in <strong>{_html(expiration_minutes)} minutes</strong>. If you did not request this, you can safely ignore and delete this email.
+            </p>
+"""
+    return _email_shell("Check your email", "Secure access", body)
 
 
 def get_teacher_onboarding_email_html(
@@ -62,37 +108,16 @@ def get_teacher_onboarding_email_html(
     setup_link: str,
 ) -> str:
     """Return teacher onboarding email html."""
-    year = datetime.now().year
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F4EBD0; margin: 0; padding: 40px 20px; color: #0F172A;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -2px rgba(15, 23, 42, 0.05);">
-        <div style="background-color: #1E293B; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #FFFFFF; letter-spacing: 0.5px;">Welcome to {school_name}</h1>
-        </div>
-        <div style="padding: 40px 30px;">
-            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello {teacher_name},</p>
+    safe_school_name = _html(school_name)
+    body = f"""
+            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello {_html(teacher_name)},</p>
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; color: #334155;">
-                Your teacher account has been created for {school_name}. Click the button below to complete your profile and start using the platform.
+                Your teacher account has been created for <strong>{safe_school_name}</strong>. Complete your profile to start using the school workspace.
             </p>
-            <div style="text-align:center; margin: 30px 0;">
-                <a href="{setup_link}" style="background-color:#14B8A6; color:#fff; padding: 12px 22px; border-radius:8px; text-decoration:none; font-weight:600;">Set up your account</a>
-            </div>
-            <p style="font-size: 14px; color:#64748B;">If the button doesn't work, copy and paste the following link into your browser:</p>
-            <p style="font-size: 13px; color:#334155; word-break:break-all;">{setup_link}</p>
-        </div>
-        <div style="background-color: #F8FAFC; padding: 25px 30px; text-align: center; border-top: 1px solid #E2E8F0;">
-            <p style="margin: 0; font-size: 14px; color: #64748B;">&copy; {year} Tenant Management System. All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>
+            {_action_button("Set up your account", setup_link)}
+            {_fallback_link(setup_link)}
 """
+    return _email_shell(f"Welcome to {school_name}", "Teacher onboarding", body)
 
 
 def get_user_invite_email_html(
@@ -101,69 +126,27 @@ def get_user_invite_email_html(
     setup_link: str,
 ) -> str:
     """Return user invite email html."""
-    year = datetime.now().year
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F4EBD0; margin: 0; padding: 40px 20px; color: #0F172A;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -2px rgba(15, 23, 42, 0.05);">
-        <div style="background-color: #1E293B; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #FFFFFF; letter-spacing: 0.5px;">Welcome to {school_name}</h1>
-        </div>
-        <div style="padding: 40px 30px;">
-            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello {user_name},</p>
+    safe_school_name = _html(school_name)
+    body = f"""
+            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello {_html(user_name)},</p>
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; color: #334155;">
-                Your school admin created your account for {school_name}. Click the button below to confirm your email address and set your password.
+                Your school admin created your account for <strong>{safe_school_name}</strong>. Confirm your email address and set your password to continue.
             </p>
-            <div style="text-align:center; margin: 30px 0;">
-                <a href="{setup_link}" style="background-color:#14B8A6; color:#fff; padding: 12px 22px; border-radius:8px; text-decoration:none; font-weight:600;">Set up your account</a>
-            </div>
-            <p style="font-size: 14px; color:#64748B;">If the button doesn't work, copy and paste the following link into your browser:</p>
-            <p style="font-size: 13px; color:#334155; word-break:break-all;">{setup_link}</p>
-        </div>
-        <div style="background-color: #F8FAFC; padding: 25px 30px; text-align: center; border-top: 1px solid #E2E8F0;">
-            <p style="margin: 0; font-size: 14px; color: #64748B;">&copy; {year} Tenant Management System. All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>
+            {_action_button("Set up your account", setup_link)}
+            {_fallback_link(setup_link)}
 """
+    return _email_shell(f"Welcome to {school_name}", "Account invite", body)
 
 
 def get_tenant_invite_email_html(school_name: str, invite_link: str) -> str:
     """Return tenant invite email html."""
-    year = datetime.now().year
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F4EBD0; margin: 0; padding: 40px 20px; color: #0F172A;">
-    <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -2px rgba(15, 23, 42, 0.05);">
-        <div style="background-color: #1E293B; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #FFFFFF; letter-spacing: 0.5px;">{school_name}</h1>
-        </div>
-        <div style="padding: 40px 30px;">
+    safe_school_name = _html(school_name)
+    body = f"""
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px 0; color: #334155;">Hello,</p>
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 30px 0; color: #334155;">
-                Your school has been registered. Click the button below to complete your administrator profile and activate your account.
+                <strong>{safe_school_name}</strong> has been registered. Complete your administrator profile to activate the school workspace.
             </p>
-            <div style="text-align:center; margin: 30px 0;">
-                <a href="{invite_link}" style="background-color:#1363DF; color:#fff; padding: 12px 22px; border-radius:8px; text-decoration:none; font-weight:600;">Complete your setup</a>
-            </div>
-            <p style="font-size: 14px; color:#64748B;">If the button doesn't work, copy and paste the following link into your browser:</p>
-            <p style="font-size: 13px; color:#334155; word-break:break-all;">{invite_link}</p>
-        </div>
-        <div style="background-color: #F8FAFC; padding: 25px 30px; text-align: center; border-top: 1px solid #E2E8F0;">
-            <p style="margin: 0; font-size: 14px; color: #64748B;">&copy; {year} Tenant Management System. All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>
+            {_action_button("Complete your setup", invite_link, variant="accent")}
+            {_fallback_link(invite_link)}
 """
+    return _email_shell(school_name, "Workspace activation", body)

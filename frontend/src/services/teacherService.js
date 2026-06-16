@@ -17,6 +17,25 @@ export const teacherService = {
       () => page(filterItems(mockTeachers, options.search, ["staff_id", "qualification", "specialization"]))
     ),
 
+  getMyTeacher: () =>
+    withMockFallback(
+      () => api.get("/teachers/me"),
+      () => mockTeachers[0] || null
+    ),
+
+  getMySubjects: (options = {}) =>
+    withMockFallback(
+      () => api.get(`/teachers/me/subjects?${new URLSearchParams({
+        skip: String(options.skip ?? 0),
+        limit: String(options.limit ?? 100),
+        ...(options.search ? { search: options.search } : {}),
+        ...(typeof options.isActive === "boolean"
+          ? { is_active: String(options.isActive) }
+          : {}),
+      }).toString()}`),
+      () => page(mockTeachers[0]?.subjects || [])
+    ),
+
   getTeacher: (teacherId) =>
     withMockFallback(
       () => api.get(`/teachers/${teacherId}`),
@@ -27,6 +46,12 @@ export const teacherService = {
     withMockFallback(
       () => api.patch(`/teachers/${teacherId}`, payload),
       () => ({ id: teacherId, ...payload })
+    ),
+
+  updateMyTeacherProfile: (payload) =>
+    withMockFallback(
+      () => api.patch("/teachers/me/profile", payload),
+      () => ({ ...mockTeachers[0], ...payload })
     ),
 
   deleteTeacher: (teacherId) =>

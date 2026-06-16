@@ -3,7 +3,6 @@
 #======================================#
 
 from uuid import UUID
-from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,24 +139,8 @@ class TeacherRepository:
     async def update_teacher(
         db: AsyncSession,
         teacher: Teacher,
-        update_data: dict[str, Any],
     ) -> Teacher:
-        """Update teacher."""
-        for field, value in update_data.items():
-            setattr(teacher, field, value)
-
-        await db.flush()
-        await db.refresh(teacher)
-        return teacher
-
-    @staticmethod
-    async def update_teacher_status(
-        db: AsyncSession,
-        teacher: Teacher,
-        status: TeacherStatus,
-    ) -> Teacher:
-        """Update teacher status."""
-        teacher.status = status
+        """Persist teacher changes."""
         await db.flush()
         await db.refresh(teacher)
         return teacher
@@ -230,18 +213,3 @@ class TeacherRepository:
         )
 
         return list(result.scalars().all())
-
-    @staticmethod
-    async def delete_teacher(
-        db: AsyncSession,
-        teacher: Teacher,
-    ) -> None:
-        """Delete teacher."""
-        teacher.status = TeacherStatus.ARCHIVED
-        await db.execute(
-            delete(TeacherSubject).where(
-                TeacherSubject.tenant_id == teacher.tenant_id,
-                TeacherSubject.teacher_id == teacher.id,
-            )
-        )
-        await db.flush()

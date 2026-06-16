@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped , mapped_column , relationship
-from sqlalchemy import Date, String , Integer , Boolean , Index
+from sqlalchemy import String , Index
 from app.shared.base_model import BaseModel
 
 if TYPE_CHECKING:

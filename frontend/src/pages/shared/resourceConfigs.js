@@ -1,5 +1,8 @@
+import React from "react";
+import Badge from "../../components/ui/Badge";
 import { classService, attendanceService, examService, resultService } from "../../services/academicsService";
 import { financeService } from "../../services/financeService";
+import { parentService } from "../../services/parentService";
 import { studentService } from "../../services/studentService";
 import { subjectService } from "../../services/subject.service";
 import { teacherService } from "../../services/teacherService";
@@ -35,6 +38,15 @@ const className = (item) =>
 const subjectName = (item) =>
   [item?.name, item?.code ? `(${item.code})` : ""].filter(Boolean).join(" ");
 
+const summarizeLabels = (items = [], formatter = fullName) => {
+  if (!items.length) return "Unassigned";
+
+  const labels = items.map((item) => formatter(item)).filter(Boolean);
+  if (labels.length <= 1) return labels[0] || "Unassigned";
+
+  return `${labels[0]} +${labels.length - 1} more`;
+};
+
 const byId = (items) =>
   (items || []).reduce((map, item) => {
     map[item.id] = item;
@@ -46,6 +58,23 @@ const selectedIds = (items = []) =>
 
 const labelFromMap = (map, id, fallback = "N/A") =>
   id && map[id] ? fullName(map[id]) || className(map[id]) || subjectName(map[id]) : fallback;
+
+const optionalValue = (value, fallback = "Not provided") => value || fallback;
+
+const formatDateValue = (value) => {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const statusBadge = (value, variant = "default") => (
+  React.createElement(Badge, { variant }, titleCase(value || "unknown"))
+);
 
 const compactPayload = (payload) =>
   Object.entries(payload).reduce((nextPayload, [key, value]) => {
@@ -77,6 +106,7 @@ const loadAcademicContext = async ({ includeUsers = false, includeFees = false }
     exams: examItems,
     users: userItems,
     parents: userItems.filter((user) => user.role === "parent"),
+    studentUsers: userItems.filter((user) => user.role === "student"),
     teacherUsers: userItems.filter((user) => user.role === "teacher"),
     fees: feeItems,
     userById: byId(userItems),
@@ -94,6 +124,25 @@ const loadClassContext = async () => {
 
   return {
     teachers: teacherItems,
+    teacherById: byId(teacherItems),
+  };
+};
+
+const loadSubjectContext = async () => {
+  const [teachers, users] = await Promise.all([
+    teacherService.getTeachers({ limit: 100 }),
+    userService.getUsers(0, 500),
+  ]);
+
+  const userItems = Array.isArray(users) ? users : [];
+  const userByIdMap = byId(userItems);
+  const teacherItems = (teachers?.items || []).filter(
+    (teacher) => teacher.status === "active"
+  );
+
+  return {
+    teachers: teacherItems,
+    userById: userByIdMap,
     teacherById: byId(teacherItems),
   };
 };
@@ -200,6 +249,20 @@ export const subjectReadOnlyResourceConfig = {
   mapItemToForm: () => ({}),
 };
 
+export const teacherSubjectResourceConfig = {
+  ...subjectReadOnlyResourceConfig,
+  fetchItems: (filters) =>
+    teacherService.getMySubjects({
+      search: filters.search,
+      isActive:
+        filters.isActive === "true"
+          ? true
+          : filters.isActive === "false"
+            ? false
+            : undefined,
+    }),
+};
+
 export const subjectResourceConfig = {
   singularLabel: "Subject",
   pluralLabel: "Subjects",
@@ -207,16 +270,35 @@ export const subjectResourceConfig = {
   canCreate: true,
   canUpdate: true,
   canDelete: true,
+  loadContext: loadSubjectContext,
   initialForm: {
     name: "",
     code: "",
     description: "",
     is_active: "true",
+    teacher_ids: [],
   },
-  fields: [
+  fields: (context) => [
     { name: "name", label: "Subject name", required: true },
     { name: "code", label: "Subject code" },
     { name: "description", label: "Description", type: "textarea" },
+    {
+      name: "teacher_ids",
+      label: "Assigned teachers",
+      type: "multiselect",
+      placeholder: "Search teachers by name, email, or staff ID",
+      searchPlaceholder: "Search by name, email, or staff ID",
+      options: optionsFrom(context.teachers, (teacher) => {
+        const user = context.userById?.[teacher.user_id] || teacher.user;
+        const primaryLabel = fullName(user) || teacher.staff_id || teacher.id;
+        const secondaryLabel = [teacher.staff_id, user?.email]
+          .filter(Boolean)
+          .join(" | ");
+        return secondaryLabel
+          ? `${primaryLabel} - ${secondaryLabel}`
+          : primaryLabel;
+      }),
+    },
     {
       name: "is_active",
       label: "Status",
@@ -228,19 +310,36 @@ export const subjectResourceConfig = {
     },
   ],
   filters: subjectReadOnlyResourceConfig.filters,
-  columns: subjectReadOnlyResourceConfig.columns,
+  columns: [
+    ...subjectReadOnlyResourceConfig.columns,
+    {
+      key: "teachers",
+      label: "Teachers",
+      render: (item) => summarizeLabels(item.teachers, fullName),
+    },
+  ],
   fetchItems: subjectReadOnlyResourceConfig.fetchItems,
+  buildPayload: (formData) =>
+    compactPayload({
+      name: formData.name,
+      code: formData.code,
+      description: formData.description,
+      is_active: formData.is_active,
+      teacher_ids: formData.teacher_ids,
+    }),
   createItem: (payload) =>
     subjectService.createSubject({
       name: payload.name,
       code: payload.code,
       description: payload.description,
+      teacher_ids: payload.teacher_ids || [],
     }),
   updateItem: async (id, payload) => {
     await subjectService.updateSubject(id, {
       name: payload.name,
       code: payload.code,
       description: payload.description,
+      teacher_ids: payload.teacher_ids || [],
     });
 
     if (payload.is_active === "true") {
@@ -255,6 +354,7 @@ export const subjectResourceConfig = {
     code: item.code || "",
     description: item.description || "",
     is_active: item.is_active ? "true" : "false",
+    teacher_ids: selectedIds(item.teachers),
   }),
   getItemLabel: (item) => subjectName(item),
 };
@@ -281,6 +381,7 @@ export const teacherResourceConfig = {
       name: "subject_ids",
       label: "Assigned subjects",
       type: "multiselect",
+      placeholder: "Search subjects",
       options: optionsFrom(context.subjects, subjectName),
     },
   ],
@@ -316,34 +417,25 @@ export const teacherResourceConfig = {
 export const getStudentResourceConfig = ({ writable }) => ({
   singularLabel: "Student",
   pluralLabel: "Students",
-  formHelp: "Student creation needs a parent user and class because the backend enforces those relationships.",
-  canCreate: writable,
+  formHelp:
+    "Student profiles are created automatically from user invites. Complete academic details here when they become available.",
+  canCreate: false,
   canUpdate: writable,
   canDelete: writable,
   loadContext: () => loadAcademicContext({ includeUsers: writable }),
   initialForm: {
-    firstname: "",
-    lastname: "",
     gender: "",
     date_of_birth: "",
-    parent_id: "",
     class_id: "",
     arm: "",
-    admission_number: "",
-    admission_date: "",
     status: "active",
     graduation_date: "",
   },
   fields: (context) => [
-    { name: "firstname", label: "First name", required: true },
-    { name: "lastname", label: "Last name", required: true },
-    { name: "gender", label: "Gender", type: "select", required: true, options: enumOptions(["male", "female"]) },
-    { name: "date_of_birth", label: "Date of birth", type: "date", required: true },
-    { name: "parent_id", label: "Parent", type: "select", required: true, options: optionsFrom(context.parents, fullName) },
-    { name: "class_id", label: "Class", type: "select", required: true, options: optionsFrom(context.classes, className) },
+    { name: "gender", label: "Gender", type: "select", options: enumOptions(["male", "female"]) },
+    { name: "date_of_birth", label: "Date of birth", type: "date" },
+    { name: "class_id", label: "Class", type: "select", options: optionsFrom(context.classes, className) },
     { name: "arm", label: "Arm" },
-    { name: "admission_number", label: "Admission number", required: true, showOnEdit: false },
-    { name: "admission_date", label: "Admission date", type: "date", required: true, showOnEdit: false },
     { name: "status", label: "Academic status", type: "select", required: true, options: enumOptions(studentStatuses) },
     { name: "graduation_date", label: "Graduation date", type: "date" },
   ],
@@ -352,11 +444,25 @@ export const getStudentResourceConfig = ({ writable }) => ({
     { name: "classId", label: "Class", type: "select", options: optionsFrom(context.classes, className) },
     { name: "status", label: "Status", type: "select", options: enumOptions(studentStatuses) },
   ],
-  columns: (context) => [
-    { key: "name", label: "Student", render: (item) => fullName(item) },
-    { key: "admission_number", label: "Admission no." },
-    { key: "class_id", label: "Class", render: (item) => className(context.classById[item.class_id]) },
-    { key: "status", label: "Status", render: (item) => titleCase(item.status) },
+  columns: () => [
+    { key: "name", label: "Full Name", render: (item) => fullName(item) },
+    { key: "email", label: "Email", render: (item) => optionalValue(item.email) },
+    { key: "admission_number", label: "Admission Number", render: (item) => optionalValue(item.admission_number, "Pending") },
+    { key: "admission_date", label: "Admission Date", render: (item) => formatDateValue(item.admission_date) },
+    {
+      key: "profile_status",
+      label: "Profile Status",
+      render: (item) =>
+        statusBadge(
+          item.profile_status,
+          item.profile_status === "incomplete" ? "warning" : "success"
+        ),
+    },
+    {
+      key: "status",
+      label: "Academic Status",
+      render: (item) => statusBadge(item.status, item.status === "active" ? "success" : "default"),
+    },
   ],
   fetchItems: (filters) =>
     studentService.getStudents({
@@ -364,51 +470,58 @@ export const getStudentResourceConfig = ({ writable }) => ({
       classId: filters.classId,
       status: filters.status,
     }),
-  createItem: (payload) => studentService.createStudent(payload),
-  updateItem: async (id, payload) => {
-    if (payload.profile) {
-      await studentService.updateStudent(id, payload.profile);
-    }
-    if (payload.academicStatus) {
-      await studentService.updateAcademicStatus(id, payload.academicStatus);
-    }
-  },
+  createItem: undefined,
+  updateItem: (id, payload) => studentService.updateStudent(id, payload),
   deleteItem: (id) => studentService.deleteStudent(id),
-  buildPayload: (formData, editingItem) => {
-    if (!editingItem) return compactPayload(formData);
-
-    return {
-      profile: compactPayload({
-        firstname: formData.firstname,
-        lastname: formData.lastname,
-        gender: formData.gender,
-        date_of_birth: formData.date_of_birth,
-        parent_id: formData.parent_id,
-        class_id: formData.class_id,
-        arm: formData.arm,
-        graduation_date: formData.graduation_date,
-      }),
-      academicStatus: compactPayload({
-        status: formData.status,
-        graduation_date: formData.graduation_date,
-      }),
-    };
-  },
+  buildPayload: (formData) => compactPayload(formData),
   mapItemToForm: (item) => ({
-    firstname: item.firstname || "",
-    lastname: item.lastname || "",
     gender: item.gender || "",
     date_of_birth: item.date_of_birth || "",
-    parent_id: item.parent_id || "",
     class_id: item.class_id || "",
     arm: item.arm || "",
-    admission_number: item.admission_number || "",
-    admission_date: item.admission_date || "",
     status: item.status || "active",
     graduation_date: item.graduation_date || "",
   }),
   getItemLabel: (item) => fullName(item),
 });
+
+export const parentResourceConfig = {
+  singularLabel: "Parent profile",
+  pluralLabel: "Parent profiles",
+  formHelp:
+    "Parent profiles are created automatically from user invites. Optional contact details can be completed here later.",
+  canCreate: false,
+  canUpdate: true,
+  canDelete: true,
+  initialForm: {
+    occupation: "",
+    address: "",
+    emergency_phone: "",
+  },
+  fields: [
+    { name: "occupation", label: "Occupation" },
+    { name: "address", label: "Address", type: "textarea" },
+    { name: "emergency_phone", label: "Emergency phone", placeholder: "+2348012345678" },
+  ],
+  columns: [
+    { key: "name", label: "Full Name", render: (item) => fullName(item) },
+    { key: "email", label: "Email", render: (item) => optionalValue(item.email) },
+    { key: "phone_number", label: "Phone Number", render: (item) => optionalValue(item.phone_number) },
+    { key: "whatsapp_id", label: "WhatsApp", render: (item) => optionalValue(item.whatsapp_id) },
+    { key: "occupation", label: "Occupation", render: (item) => optionalValue(item.occupation) },
+    { key: "emergency_phone", label: "Emergency Phone", render: (item) => optionalValue(item.emergency_phone) },
+  ],
+  fetchItems: () => parentService.getParents({ limit: 100 }),
+  updateItem: (id, payload) => parentService.updateParent(id, payload),
+  deleteItem: (id) => parentService.deleteParent(id),
+  buildPayload: (formData) => compactPayload(formData),
+  mapItemToForm: (item) => ({
+    occupation: item.occupation || "",
+    address: item.address || "",
+    emergency_phone: item.emergency_phone || "",
+  }),
+  getItemLabel: (item) => fullName(item),
+};
 
 export const getAttendanceResourceConfig = ({ writable, canDelete }) => ({
   singularLabel: "Attendance record",

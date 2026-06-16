@@ -85,11 +85,8 @@ async def _authenticate_superadmin(
     if not superadmin.is_active:
         raise UnauthorizedException("Superadmin account is not active")
 
-    await SuperAdminRepository.touch_last_login(
-        db,
-        superadmin,
-        at=datetime.now(timezone.utc),
-    )
+    superadmin.last_login_at = datetime.now(timezone.utc)
+    await SuperAdminRepository.save(db, superadmin)
     await db.commit()
     return superadmin
 

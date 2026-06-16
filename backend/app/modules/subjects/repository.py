@@ -1,7 +1,6 @@
 from uuid import UUID
-from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -40,6 +39,38 @@ class SubjectRepository:
         db.add_all(teacher_subject_links)
         await db.flush()
         return teacher_subject_links
+
+    @staticmethod
+    async def delete_teacher_subject_links(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_id: UUID,
+        teacher_ids: list[UUID],
+    ) -> None:
+        """Delete selected teacher subject links for a subject."""
+        await db.execute(
+            delete(TeacherSubject).where(
+                TeacherSubject.tenant_id == tenant_id,
+                TeacherSubject.subject_id == subject_id,
+                TeacherSubject.teacher_id.in_(teacher_ids),
+            )
+        )
+        await db.flush()
+
+    @staticmethod
+    async def get_subject_teacher_ids(
+        db: AsyncSession,
+        tenant_id: UUID,
+        subject_id: UUID,
+    ) -> list[UUID]:
+        """Return teacher ids assigned to a subject."""
+        result = await db.execute(
+            select(TeacherSubject.teacher_id).where(
+                TeacherSubject.tenant_id == tenant_id,
+                TeacherSubject.subject_id == subject_id,
+            )
+        )
+        return list(result.scalars().all())
 
     @staticmethod
     async def get_subject_by_id(
@@ -151,15 +182,59 @@ class SubjectRepository:
         return list(result.scalars().all()), total
 
     @staticmethod
+    async def list_subjects_for_teacher(
+        db: AsyncSession,
+        tenant_id: UUID,
+        teacher_id: UUID,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        is_active: bool | None = None,
+        search: str | None = None,
+    ) -> tuple[list[Subject], int]:
+        """List only subjects explicitly assigned to a teacher."""
+        filters = [
+            Subject.tenant_id == tenant_id,
+            TeacherSubject.tenant_id == tenant_id,
+            TeacherSubject.teacher_id == teacher_id,
+        ]
+
+        if is_active is not None:
+            filters.append(Subject.is_active == is_active)
+
+        if search:
+            filters.append(Subject.name.ilike(f"%{search}%"))
+
+        total_result = await db.execute(
+            select(func.count(func.distinct(Subject.id)))
+            .select_from(Subject)
+            .join(TeacherSubject, TeacherSubject.subject_id == Subject.id)
+            .where(*filters)
+        )
+        total = total_result.scalar_one()
+
+        result = await db.execute(
+            select(Subject)
+            .join(TeacherSubject, TeacherSubject.subject_id == Subject.id)
+            .options(
+                selectinload(Subject.teacher_links)
+                .selectinload(TeacherSubject.teacher)
+                .selectinload(Teacher.user)
+            )
+            .where(*filters)
+            .order_by(Subject.name.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        return list(result.scalars().unique().all()), total
+
+    @staticmethod
     async def update_subject(
         db: AsyncSession,
         subject: Subject,
-        update_data: dict[str, Any],
     ) -> Subject:
-        """Update subject."""
-        for field, value in update_data.items():
-            setattr(subject, field, value)
-
+        """Persist subject changes."""
         await db.flush()
         await db.refresh(subject)
         return subject

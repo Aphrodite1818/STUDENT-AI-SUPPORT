@@ -84,6 +84,10 @@ class SubjectUpdate(InputBase):
     name: str | None = Field(default=None, min_length=2, max_length=100)
     code: str | None = Field(default=None, min_length=2, max_length=30)
     description: str | None = Field(default=None, max_length=500)
+    teacher_ids: list[uuid.UUID] | None = Field(
+        default=None,
+        description="Full replacement list of teacher IDs assigned to this subject",
+    )
 
     @field_validator("name", mode="before")
     @classmethod

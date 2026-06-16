@@ -1,8 +1,5 @@
 import { cn } from "../../utils/cn";
-import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
-
-const getInitial = (name = "") =>
-  String(name).trim().charAt(0).toUpperCase() || "U";
+import { getUserAvatarSrc, getUserDisplayName, getUserInitials } from "../../utils/user";
 
 const sizes = {
   sm: "h-8 w-8 text-xs",
@@ -14,6 +11,7 @@ const sizes = {
 function Avatar({ name, src, size = "md", className = "", user }) {
   const displayName = name || (user ? getUserDisplayName(user) : "User");
   const imageSrc = src || (user ? getUserAvatarSrc(user) : undefined);
+  const fallbackInitials = user ? getUserInitials(user) : String(displayName).trim().charAt(0).toUpperCase() || "U";
 
   return (
     <span
@@ -28,7 +26,7 @@ function Avatar({ name, src, size = "md", className = "", user }) {
       {imageSrc ? (
         <img src={imageSrc} alt="" className="h-full w-full object-cover" />
       ) : (
-        getInitial(displayName)
+        fallbackInitials
       )}
     </span>
   );

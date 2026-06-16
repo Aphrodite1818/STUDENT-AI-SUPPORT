@@ -6,15 +6,15 @@ from app.config.database import engine
 from app.shared.base_model import Base
 
 # Import mounted-domain models so Base.metadata knows the current table shapes.
-# Students are still omitted because students.class_id references public.classes,
-# and the current backend does not define/register that table yet. Keep the
-# students mapper out of init_db until the classes domain has a real model.
 import app.tenant_management.models  # noqa: F401
 import app.modules.users.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.superadmin.models  # noqa: F401
 import app.modules.subjects.models  # noqa: F401
+import app.modules.classes.models  # noqa: F401
 import app.modules.teachers.models  # noqa: F401
+import app.modules.parents.models  # noqa: F401
+import app.modules.students.models  # noqa: F401
 
 PUBLIC_SCHEMA = "public"
 
@@ -322,6 +322,46 @@ async def sync_enum_values(conn) -> None:
         "teacherstatus",
         ["ACTIVE", "INACTIVE", "ARCHIVED"],
     )
+    await create_enum_if_missing(
+        conn,
+        "studentgender",
+        ["MALE", "FEMALE"],
+    )
+    await add_enum_values(
+        conn,
+        "studentgender",
+        ["MALE", "FEMALE"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "academicstatus",
+        ["ACTIVE", "WITHDRAWN", "SUSPENDED", "GRADUATED"],
+    )
+    await add_enum_values(
+        conn,
+        "academicstatus",
+        ["ACTIVE", "WITHDRAWN", "SUSPENDED", "GRADUATED"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "parentrelationship",
+        ["FATHER", "MOTHER", "GUARDIAN", "OTHER"],
+    )
+    await add_enum_values(
+        conn,
+        "parentrelationship",
+        ["FATHER", "MOTHER", "GUARDIAN", "OTHER"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "studentprofilestatus",
+        ["INCOMPLETE", "COMPLETE"],
+    )
+    await add_enum_values(
+        conn,
+        "studentprofilestatus",
+        ["INCOMPLETE", "COMPLETE"],
+    )
     await add_enum_values(
         conn,
         "otppurpose",
@@ -330,6 +370,7 @@ async def sync_enum_values(conn) -> None:
 
 
 async def sync_tenant_columns(conn) -> None:
+    await add_column(conn, "tenants", "admission_number_prefix VARCHAR(20)")
     await add_column(conn, "tenants", "school_bot_whatssap_number VARCHAR(20)")
     await add_column(conn, "tenants", "phone VARCHAR(20)")
     await add_column(conn, "tenants", "address TEXT")
@@ -371,6 +412,15 @@ async def sync_tenant_columns(conn) -> None:
         "tenants",
         "verification_status",
         "'PENDING_VERIFICATION'",
+    )
+
+    await execute(
+        conn,
+        f"CREATE UNIQUE INDEX IF NOT EXISTS ix_tenants_admission_number_prefix ON {PUBLIC_SCHEMA}.tenants (admission_number_prefix)",
+    )
+    await execute(
+        conn,
+        f"CREATE UNIQUE INDEX IF NOT EXISTS ix_tenants_school_bot_whatssap_number ON {PUBLIC_SCHEMA}.tenants (school_bot_whatssap_number)",
     )
 
     await backfill_nulls(conn, "tenants", "country", "'Nigeria'")
@@ -453,11 +503,50 @@ async def sync_user_columns(conn) -> None:
 
 
 async def sync_teacher_columns(conn) -> None:
+    await add_column(conn, "teachers", "staff_id VARCHAR(50)")
+    await add_column(conn, "teachers", "qualification VARCHAR(100)")
+    await add_column(conn, "teachers", "specialization VARCHAR(150)")
     await add_column(conn, "teachers", "status public.teacherstatus DEFAULT 'ACTIVE'")
 
     await set_column_default(conn, "teachers", "status", "'ACTIVE'")
+    await execute(
+        conn,
+        f"CREATE UNIQUE INDEX IF NOT EXISTS uq_teachers_tenant_staff_id ON {PUBLIC_SCHEMA}.teachers (tenant_id, staff_id)",
+    )
     await backfill_nulls(conn, "teachers", "status", "'ACTIVE'")
     await set_not_null_if_populated(conn, "teachers", "status")
+
+
+async def sync_student_columns(conn) -> None:
+    await add_column(conn, "students", "admission_number VARCHAR(50)")
+    await add_column(conn, "students", "date_of_birth DATE")
+    await add_column(conn, "students", "gender public.studentgender")
+    await set_column_default(conn, "students", "admission_date", "CURRENT_DATE")
+    await add_column(conn, "students", "passport_photo_url VARCHAR(500)")
+    await add_column(conn, "students", "graduation_date DATE")
+    await add_column(conn, "students", "class_id UUID")
+    await add_column(conn, "students", "arm VARCHAR(20)")
+    await add_column(conn, "students", "status public.academicstatus DEFAULT 'ACTIVE'")
+    await add_column(conn, "students", "profile_status public.studentprofilestatus DEFAULT 'INCOMPLETE'")
+    await execute(
+        conn,
+        f"CREATE UNIQUE INDEX IF NOT EXISTS uq_students_tenant_admission_number ON {PUBLIC_SCHEMA}.students (tenant_id, admission_number)",
+    )
+    await backfill_nulls(conn, "students", "admission_date", "CURRENT_DATE")
+    await set_column_default(conn, "students", "status", "'ACTIVE'")
+    await set_column_default(conn, "students", "profile_status", "'INCOMPLETE'")
+    await backfill_nulls(conn, "students", "status", "'ACTIVE'")
+    await backfill_nulls(conn, "students", "profile_status", "'INCOMPLETE'")
+    await set_not_null_if_populated(conn, "students", "admission_date")
+    await set_not_null_if_populated(conn, "students", "status")
+    await set_not_null_if_populated(conn, "students", "profile_status")
+    await add_fk_if_missing(
+        conn,
+        table_name="students",
+        constraint_name="students_class_id_fkey",
+        column_name="class_id",
+        referenced_table="classes",
+    )
 
 
 async def sync_auth_columns(conn) -> None:
@@ -653,11 +742,51 @@ async def sync_indexes(conn) -> None:
     )
     await execute(
         conn,
+        f"CREATE INDEX IF NOT EXISTS ix_classes_tenant_teacher ON {PUBLIC_SCHEMA}.classes (tenant_id, teacher_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_classes_tenant_active ON {PUBLIC_SCHEMA}.classes (tenant_id, is_active)",
+    )
+    await execute(
+        conn,
         f"CREATE INDEX IF NOT EXISTS ix_teacher_subjects_tenant_teacher ON {PUBLIC_SCHEMA}.teacher_subjects (tenant_id, teacher_id)",
     )
     await execute(
         conn,
         f"CREATE INDEX IF NOT EXISTS ix_teacher_subjects_tenant_subject ON {PUBLIC_SCHEMA}.teacher_subjects (tenant_id, subject_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_parents_tenant_user ON {PUBLIC_SCHEMA}.parents (tenant_id, user_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_students_tenant_user ON {PUBLIC_SCHEMA}.students (tenant_id, user_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_students_tenant_class ON {PUBLIC_SCHEMA}.students (tenant_id, class_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_students_tenant_status ON {PUBLIC_SCHEMA}.students (tenant_id, status)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_student_parent_links_tenant_student ON {PUBLIC_SCHEMA}.student_parent_links (tenant_id, student_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_student_parent_links_tenant_parent ON {PUBLIC_SCHEMA}.student_parent_links (tenant_id, parent_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_student_link_codes_tenant_student ON {PUBLIC_SCHEMA}.student_link_codes (tenant_id, student_id)",
+    )
+    await execute(
+        conn,
+        f"CREATE INDEX IF NOT EXISTS ix_student_link_codes_tenant_code ON {PUBLIC_SCHEMA}.student_link_codes (tenant_id, code)",
     )
 
     await execute(
@@ -717,6 +846,7 @@ async def create_tables() -> None:
         await sync_tenant_columns(conn)
         await sync_user_columns(conn)
         await sync_teacher_columns(conn)
+        await sync_student_columns(conn)
         await sync_auth_columns(conn)
         await migrate_legacy_superadmins(conn)
         await remove_superadmin_from_userrole_enum(conn)

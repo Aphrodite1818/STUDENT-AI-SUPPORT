@@ -15,6 +15,11 @@ const INITIAL_FORM = {
   phone_number: "",
   whatsapp_id: "",
   role: "teacher",
+  parent_email: "",
+  parent_firstname: "",
+  parent_lastname: "",
+  parent_phone_number: "",
+  parent_whatsapp_id: "",
 };
 
 const statusVariant = (status) => {
@@ -68,6 +73,15 @@ function UserManagementPage() {
       await userService.inviteUser({
         ...formData,
         whatsapp_id: formData.whatsapp_id || null,
+        parent_email: formData.role === "student" ? formData.parent_email || null : null,
+        parent_firstname:
+          formData.role === "student" ? formData.parent_firstname || null : null,
+        parent_lastname:
+          formData.role === "student" ? formData.parent_lastname || null : null,
+        parent_phone_number:
+          formData.role === "student" ? formData.parent_phone_number || null : null,
+        parent_whatsapp_id:
+          formData.role === "student" ? formData.parent_whatsapp_id || null : null,
       });
       setFormData(INITIAL_FORM);
       setSuccessMessage("Invite created and emailed successfully.");
@@ -176,6 +190,59 @@ function UserManagementPage() {
               </select>
               {fieldErrors.role && <p className="mt-1.5 text-xs font-medium text-error">{fieldErrors.role}</p>}
             </div>
+            {formData.role === "student" && (
+              <div className="space-y-4 rounded-2xl border border-border bg-surface-muted/40 p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-text">Parent linking</h3>
+                  <p className="mt-1 text-xs text-text-muted">
+                    The student invite will reuse an existing parent account or create a new pending parent invite and link both profiles automatically.
+                  </p>
+                </div>
+                <Input
+                  label="Parent email"
+                  type="email"
+                  name="parent_email"
+                  value={formData.parent_email}
+                  onChange={handleChange}
+                  error={fieldErrors.parent_email}
+                  required
+                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Parent first name"
+                    name="parent_firstname"
+                    value={formData.parent_firstname}
+                    onChange={handleChange}
+                    error={fieldErrors.parent_firstname}
+                  />
+                  <Input
+                    label="Parent last name"
+                    name="parent_lastname"
+                    value={formData.parent_lastname}
+                    onChange={handleChange}
+                    error={fieldErrors.parent_lastname}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Input
+                    label="Parent phone number"
+                    name="parent_phone_number"
+                    value={formData.parent_phone_number}
+                    onChange={handleChange}
+                    placeholder="+2348012345678"
+                    error={fieldErrors.parent_phone_number}
+                  />
+                  <Input
+                    label="Parent WhatsApp ID"
+                    name="parent_whatsapp_id"
+                    value={formData.parent_whatsapp_id}
+                    onChange={handleChange}
+                    placeholder="+2348012345678"
+                    error={fieldErrors.parent_whatsapp_id}
+                  />
+                </div>
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               <Send className="h-4 w-4" />
               {isSubmitting ? "Sending invite..." : "Create user and send invite"}

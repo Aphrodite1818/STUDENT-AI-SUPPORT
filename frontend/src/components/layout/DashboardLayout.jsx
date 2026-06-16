@@ -32,12 +32,13 @@ import {
 import Button from "../ui/Button";
 import Avatar from "../ui/Avatar";
 import Dropdown from "../ui/Dropdown";
-import Input from "../ui/Input";
 import Modal from "../ui/Modal";
+import ProfileCompletionForm from "../shared/ProfileCompletionForm";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
-import { authSession, parseApiError } from "../../services/api";
+import { authSession } from "../../services/api";
 import { userService } from "../../services/user.service";
+import { evaluateOnboardingState, getRoleProfileConfig, loadRoleProfileContext } from "../../config/roleProfileConfig";
 import { cn } from "../../utils/cn";
 import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
 import BottomNav from "./BottomNav";
@@ -64,6 +65,7 @@ const navGroups = {
       items: [
         { label: "Students", to: "/admin/students", icon: GraduationCap },
         { label: "Teachers", to: "/admin/teachers", icon: Users },
+        { label: "Parents", to: "/admin/parents", icon: Users },
         { label: "Classes", to: "/admin/classes", icon: Library },
         { label: "Subjects", to: "/admin/subjects", icon: BookOpen },
         { label: "Timetable", to: "/admin/timetable", icon: CalendarDays },
@@ -151,7 +153,7 @@ function getRole(user, fallback) {
   return String(user?.role || authSession.getRole() || fallback || "admin").toLowerCase();
 }
 
-function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile = false }) {
+function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile = false, schoolName }) {
   const location = useLocation();
   const groups = navGroups[role] || navGroups.admin;
 
@@ -188,7 +190,7 @@ function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile
               <Library className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">Greenfield International School</p>
+              <p className="truncate text-sm font-semibold">{schoolName || "School workspace"}</p>
               <p className="truncate text-xs text-text-muted">AY 2024-25</p>
             </div>
             <ChevronDown className="ml-auto h-4 w-4 text-text-faint" />
@@ -255,7 +257,7 @@ function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile
   );
 }
 
-function Topbar({ role, onOpenMobileNav }) {
+function Topbar({ role, onOpenMobileNav, schoolName, onOpenProfileModal }) {
   const navigate = useNavigate();
   const user = authSession.getUser();
   const userName = getUserLabel(user);
@@ -302,7 +304,7 @@ function Topbar({ role, onOpenMobileNav }) {
 
         <div className="min-w-0 md:hidden">
           <p className="truncate text-xs font-semibold uppercase tracking-wide text-text-muted">Learnly AI</p>
-          <p className="truncate text-sm font-semibold text-text">Greenfield International School</p>
+          <p className="truncate text-sm font-semibold text-text">{schoolName || "School workspace"}</p>
         </div>
 
         <div className="hidden w-full max-w-lg items-center gap-3 rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-sm md:flex">
@@ -383,9 +385,17 @@ function Topbar({ role, onOpenMobileNav }) {
               </div>
             </div>
             <div className="my-2 border-t border-border" />
+            <button
+              type="button"
+              onClick={onOpenProfileModal}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-text-soft hover:bg-surface-muted"
+            >
+              <Settings className="h-4 w-4" />
+              Edit profile
+            </button>
             <Link to="/profile" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-text-soft hover:bg-surface-muted">
               <Settings className="h-4 w-4" />
-              Account settings
+              Profile page
             </Link>
             <button type="button" onClick={handleLogout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-error hover:bg-error-soft">
               <LogOut className="h-4 w-4" />
@@ -407,59 +417,95 @@ function DashboardLayout({
 }) {
   const user = authSession.getUser();
   const role = getRole(user, roleProp);
+  const roleProfileConfig = useMemo(() => getRoleProfileConfig(role), [role]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState(user);
-  const [profileForm, setProfileForm] = useState(() => ({
-    firstname: user?.firstname || "",
-    lastname: user?.lastname || "",
-    phone_number: user?.phone_number || "",
-    whatsapp_id: user?.whatsapp_id || "",
-  }));
-  const [profileErrors, setProfileErrors] = useState({});
-  const [profileSubmitError, setProfileSubmitError] = useState(null);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileContext, setProfileContext] = useState({ tenant: user?.tenant || null, roleProfile: null });
+  const [roleProfileStatus, setRoleProfileStatus] = useState({ loading: true, incomplete: false });
 
   const pageTitle = useMemo(() => title || `${roleLabels[role] || "Workspace"} Dashboard`, [role, title]);
-  const needsOnboarding = Boolean(
-    profileUser?.id &&
-      (!profileUser.firstname || !profileUser.lastname || !profileUser.phone_number)
+  const onboardingState = useMemo(
+    () => evaluateOnboardingState(role, profileUser, profileContext),
+    [profileContext, profileUser, role]
   );
+  const needsOnboarding = Boolean(profileUser?.id && onboardingState.incomplete);
+  const schoolName = profileUser?.tenant?.school_name || profileContext.tenant?.school_name || "School workspace";
 
-  const handleProfileChange = (event) => {
-    const { name, value } = event.target;
-    setProfileForm((current) => ({ ...current, [name]: value }));
-    setProfileErrors((current) => ({ ...current, [name]: undefined }));
-    setProfileSubmitError(null);
-  };
+  useEffect(() => {
+    let mounted = true;
 
-  const handleProfileSubmit = async (event) => {
-    event.preventDefault();
-    if (!profileUser?.id) return;
+    async function hydrateAuthenticatedUser() {
+      if (!authSession.getToken()) {
+        setRoleProfileStatus({ loading: false, incomplete: false });
+        return;
+      }
 
-    setIsSavingProfile(true);
-    setProfileErrors({});
-    setProfileSubmitError(null);
+      try {
+        const nextUser = await userService.getMe();
+        if (!mounted) return;
 
-    try {
-      const updatedUser = await userService.updateProfile(profileUser.id, {
-        firstname: profileForm.firstname,
-        lastname: profileForm.lastname,
-        phone_number: profileForm.phone_number,
-        whatsapp_id: profileForm.whatsapp_id || null,
-      });
-
-      const nextUser = { ...profileUser, ...updatedUser };
-      authSession.setUser(nextUser);
-      setProfileUser(nextUser);
-    } catch (error) {
-      const parsed = parseApiError(error, "Failed to update your profile.");
-      setProfileErrors(parsed.fieldErrors || {});
-      setProfileSubmitError(parsed.message);
-    } finally {
-      setIsSavingProfile(false);
+        authSession.setUser(nextUser);
+        setProfileUser(nextUser);
+        setProfileContext((current) => ({ ...current, tenant: nextUser?.tenant || current.tenant }));
+      } catch {
+        if (!mounted) return;
+      }
     }
-  };
+
+    hydrateAuthenticatedUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function resolveRoleProfileStatus() {
+      if (!profileUser?.id) {
+        setRoleProfileStatus({ loading: false, incomplete: false });
+        return;
+      }
+
+      setRoleProfileStatus({ loading: true, incomplete: false });
+
+      try {
+        const nextContext = await loadRoleProfileContext(role, profileUser);
+        if (!mounted) return;
+
+        setProfileContext(nextContext);
+        const nextOnboardingState = evaluateOnboardingState(role, profileUser, nextContext);
+        setRoleProfileStatus({
+          loading: false,
+          incomplete: nextOnboardingState.roleIncomplete,
+        });
+      } catch {
+        if (!mounted) return;
+        const fallbackContext = { tenant: profileUser?.tenant || null, roleProfile: null };
+        setProfileContext(fallbackContext);
+        setRoleProfileStatus({ loading: false, incomplete: false });
+      }
+    }
+
+    resolveRoleProfileStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profileUser, role, roleProfileConfig]);
+
+  useEffect(() => {
+    if (!profileUser?.id || roleProfileStatus.loading || !needsOnboarding) return;
+
+    const seenKey = `profile-onboarding-seen:${profileUser.id}`;
+    if (window.localStorage.getItem(seenKey)) return;
+
+    window.localStorage.setItem(seenKey, "true");
+    setProfileModalOpen(true);
+  }, [needsOnboarding, profileUser?.id, roleProfileStatus.loading]);
 
   return (
     <div className="min-h-screen bg-background text-text">
@@ -479,6 +525,7 @@ function DashboardLayout({
           role={role}
           collapsed={collapsed}
           onToggleCollapsed={() => setCollapsed((current) => !current)}
+          schoolName={schoolName}
         />
       </aside>
 
@@ -491,13 +538,18 @@ function DashboardLayout({
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <SidebarContent role={role} collapsed={false} mobile onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent role={role} collapsed={false} mobile onNavigate={() => setMobileOpen(false)} schoolName={schoolName} />
           </aside>
         </div>
       )}
 
       <div className={cn("min-h-screen transition-all duration-300", collapsed ? "md:pl-[88px]" : "md:pl-[272px]")}>
-        <Topbar role={role} onOpenMobileNav={() => setMobileOpen(true)} />
+        <Topbar
+          role={role}
+          onOpenMobileNav={() => setMobileOpen(true)}
+          schoolName={schoolName}
+          onOpenProfileModal={() => setProfileModalOpen(true)}
+        />
 
         <main id="dashboard-content" className="px-4 py-4 pb-24 sm:px-6 sm:py-5 md:px-6 md:py-5 lg:px-8 lg:py-6 md:pb-6">
           <div className="mx-auto w-full max-w-[1400px] section-gap">
@@ -524,28 +576,31 @@ function DashboardLayout({
       </div>
       <BottomNav role={role} onOpenMenu={() => setMobileOpen(true)} />
       <Modal
-        open={needsOnboarding}
-        title="Complete your profile"
-        description="Add the required details before continuing to your workspace."
-        footer={
-          <Button form="profile-onboarding-form" type="submit" className="w-full" disabled={isSavingProfile}>
-            {isSavingProfile ? "Saving..." : "Save profile"}
-          </Button>
+        open={profileModalOpen}
+        title={needsOnboarding ? "Complete your profile" : "Update your profile"}
+        description={
+          needsOnboarding
+            ? "Add the required details we can collect right now. School-managed fields will remain read-only."
+            : "Update your personal and role-specific profile details."
         }
+        onClose={() => setProfileModalOpen(false)}
       >
-        {profileSubmitError && (
-          <div className="mb-4 rounded-2xl border border-error/30 bg-error-soft px-4 py-3 text-sm font-medium text-error">
-            {profileSubmitError}
-          </div>
-        )}
-        <form id="profile-onboarding-form" onSubmit={handleProfileSubmit} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="First name" name="firstname" value={profileForm.firstname} onChange={handleProfileChange} error={profileErrors.firstname} required />
-            <Input label="Last name" name="lastname" value={profileForm.lastname} onChange={handleProfileChange} error={profileErrors.lastname} required />
-          </div>
-          <Input label="Phone number" name="phone_number" value={profileForm.phone_number} onChange={handleProfileChange} placeholder="+2348012345678" error={profileErrors.phone_number} required />
-          <Input label="WhatsApp ID" name="whatsapp_id" value={profileForm.whatsapp_id} onChange={handleProfileChange} placeholder="+2348012345678" error={profileErrors.whatsapp_id} />
-        </form>
+        <ProfileCompletionForm
+          user={profileUser}
+          role={role}
+          submitLabel="Save profile"
+          onSaved={(nextUser) => {
+            setProfileUser(nextUser);
+            setProfileContext((current) => ({ ...current, tenant: nextUser?.tenant || current.tenant }));
+            setProfileModalOpen(false);
+          }}
+          onProfileStateResolved={(state) => {
+            setRoleProfileStatus({
+              loading: false,
+              incomplete: Boolean(state?.roleIncomplete),
+            });
+          }}
+        />
       </Modal>
     </div>
   );

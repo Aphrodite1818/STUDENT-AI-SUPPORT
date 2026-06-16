@@ -17,6 +17,7 @@ from app.core.exceptions import ForbiddenException
 from app.core.utils.frontend_urls import resolve_frontend_app_url
 from app.modules.users.models import User, UserRole
 from app.modules.users.schemas import (
+    AuthenticatedUserResponse,
     UserAdminUpdate,
     UserInviteCreate,
     UserResponse,
@@ -90,17 +91,18 @@ async def resend_invite(
 
 @router.get(
     "/get-authenticated-user",
-    response_model=UserResponse,
+    response_model=AuthenticatedUserResponse,
     status_code=status.HTTP_200_OK,
     summary="Get current authenticated user profile",
 )
 async def get_current_user_profile(
+    db: DbSession,
     current_user: CurrentTenantUser,
-) -> User:
+) -> AuthenticatedUserResponse:
     """
     Fetch the currently authenticated user's profile.
     """
-    return current_user
+    return await UserService.get_authenticated_user_context(db, current_user)
 
 
 @router.get(
