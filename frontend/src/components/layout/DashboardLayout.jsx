@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3,
@@ -38,7 +38,7 @@ import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
 import { authSession } from "../../services/api";
 import { userService } from "../../services/user.service";
-import { evaluateOnboardingState, getRoleProfileConfig, loadRoleProfileContext } from "../../config/roleProfileConfig";
+import { evaluateOnboardingState, loadRoleProfileContext } from "../../config/roleProfileConfig";
 import { cn } from "../../utils/cn";
 import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
 import BottomNav from "./BottomNav";
@@ -417,11 +417,11 @@ function DashboardLayout({
 }) {
   const user = authSession.getUser();
   const role = getRole(user, roleProp);
-  const roleProfileConfig = useMemo(() => getRoleProfileConfig(role), [role]);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState(user);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [hasAutoOpenedOnboarding, setHasAutoOpenedOnboarding] = useState(false);
   const [profileContext, setProfileContext] = useState({ tenant: user?.tenant || null, roleProfile: null });
   const [roleProfileStatus, setRoleProfileStatus] = useState({ loading: true, incomplete: false });
 
@@ -432,6 +432,23 @@ function DashboardLayout({
   );
   const needsOnboarding = Boolean(profileUser?.id && onboardingState.incomplete);
   const schoolName = profileUser?.tenant?.school_name || profileContext.tenant?.school_name || "School workspace";
+  const openProfileModal = useCallback(() => {
+    setProfileModalOpen(true);
+  }, []);
+  const closeProfileModal = useCallback(() => {
+    setProfileModalOpen(false);
+  }, []);
+  const handleProfileSaved = useCallback((nextUser) => {
+    setProfileUser(nextUser);
+    setProfileContext((current) => ({ ...current, tenant: nextUser?.tenant || current.tenant }));
+    setProfileModalOpen(false);
+  }, []);
+  const handleProfileStateResolved = useCallback((state) => {
+    setRoleProfileStatus({
+      loading: false,
+      incomplete: Boolean(state?.roleIncomplete),
+    });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -460,6 +477,10 @@ function DashboardLayout({
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setHasAutoOpenedOnboarding(false);
+  }, [profileUser?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -495,17 +516,14 @@ function DashboardLayout({
     return () => {
       mounted = false;
     };
-  }, [profileUser, role, roleProfileConfig]);
+  }, [profileUser, role]);
 
   useEffect(() => {
-    if (!profileUser?.id || roleProfileStatus.loading || !needsOnboarding) return;
+    if (!profileUser?.id || roleProfileStatus.loading || !needsOnboarding || hasAutoOpenedOnboarding) return;
 
-    const seenKey = `profile-onboarding-seen:${profileUser.id}`;
-    if (window.localStorage.getItem(seenKey)) return;
-
-    window.localStorage.setItem(seenKey, "true");
+    setHasAutoOpenedOnboarding(true);
     setProfileModalOpen(true);
-  }, [needsOnboarding, profileUser?.id, roleProfileStatus.loading]);
+  }, [hasAutoOpenedOnboarding, needsOnboarding, profileUser?.id, roleProfileStatus.loading]);
 
   return (
     <div className="min-h-screen bg-background text-text">
@@ -548,7 +566,7 @@ function DashboardLayout({
           role={role}
           onOpenMobileNav={() => setMobileOpen(true)}
           schoolName={schoolName}
-          onOpenProfileModal={() => setProfileModalOpen(true)}
+          onOpenProfileModal={openProfileModal}
         />
 
         <main id="dashboard-content" className="px-4 py-4 pb-24 sm:px-6 sm:py-5 md:px-6 md:py-5 lg:px-8 lg:py-6 md:pb-6">
@@ -583,23 +601,15 @@ function DashboardLayout({
             ? "Add the required details we can collect right now. School-managed fields will remain read-only."
             : "Update your personal and role-specific profile details."
         }
-        onClose={() => setProfileModalOpen(false)}
+        onClose={closeProfileModal}
       >
         <ProfileCompletionForm
           user={profileUser}
           role={role}
           submitLabel="Save profile"
-          onSaved={(nextUser) => {
-            setProfileUser(nextUser);
-            setProfileContext((current) => ({ ...current, tenant: nextUser?.tenant || current.tenant }));
-            setProfileModalOpen(false);
-          }}
-          onProfileStateResolved={(state) => {
-            setRoleProfileStatus({
-              loading: false,
-              incomplete: Boolean(state?.roleIncomplete),
-            });
-          }}
+          initialContext={profileContext}
+          onSaved={handleProfileSaved}
+          onProfileStateResolved={handleProfileStateResolved}
         />
       </Modal>
     </div>

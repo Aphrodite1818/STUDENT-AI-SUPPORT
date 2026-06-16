@@ -22,6 +22,14 @@ const COMMON_USER_FIELDS = [
   },
 ];
 
+const hasRequiredValues = (fields, sourceData) =>
+  fields
+    .filter((field) => field.required)
+    .some((field) => {
+      const value = sourceData?.[field.name];
+      return value === null || value === undefined || value === "";
+    });
+
 const STUDENT_GENDER_OPTIONS = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
@@ -50,7 +58,15 @@ const ROLE_PROFILE_CONFIG = {
           { source: "tenant", name: "school_name", label: "School name", required: true },
           { source: "tenant", name: "email", label: "School email", type: "email", required: true },
           { source: "tenant", name: "phone", label: "School phone" },
-          { source: "tenant", name: "admission_number_prefix", label: "Admission prefix" },
+          {
+            source: "tenant",
+            name: "admission_number_prefix",
+            label: "Admission prefix",
+            required: true,
+            placeholder: "NHS",
+            helperText:
+              "This prefix will be used to generate student admission numbers, e.g. NHS-2026-48291.",
+          },
           { source: "tenant", name: "address", label: "Address", type: "textarea" },
           { source: "tenant", name: "city", label: "City" },
           { source: "tenant", name: "state", label: "State" },
@@ -63,7 +79,10 @@ const ROLE_PROFILE_CONFIG = {
       roleProfile: null,
     }),
     saveRoleProfile: null,
-    isRoleIncomplete: () => false,
+    isRoleIncomplete: ({ tenant }) =>
+      !tenant ||
+      hasRequiredValues(ROLE_PROFILE_CONFIG.admin.sections[1].fields, tenant) ||
+      tenant.onboarding_completed !== true,
   },
   teacher: {
     sections: [

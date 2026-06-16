@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
 import { authSession, parseApiError } from "../../services/api";
@@ -82,6 +82,7 @@ function EditableField({ field, value, error, onChange }) {
             </option>
           ))}
         </select>
+        {field.helperText && <p className="mt-1.5 text-xs text-text-muted">{field.helperText}</p>}
         {error && <p className="mt-1.5 text-xs font-medium text-error">{error}</p>}
       </div>
     );
@@ -101,22 +102,26 @@ function EditableField({ field, value, error, onChange }) {
           required={field.required}
           placeholder={field.placeholder}
         />
+        {field.helperText && <p className="mt-1.5 text-xs text-text-muted">{field.helperText}</p>}
         {error && <p className="mt-1.5 text-xs font-medium text-error">{error}</p>}
       </div>
     );
   }
 
   return (
-    <Input
-      label={field.label}
-      name={field.name}
-      type={field.type || "text"}
-      value={value ?? ""}
-      onChange={onChange}
-      error={error}
-      required={field.required}
-      placeholder={field.placeholder}
-    />
+    <div>
+      <Input
+        label={field.label}
+        name={field.name}
+        type={field.type || "text"}
+        value={value ?? ""}
+        onChange={onChange}
+        error={error}
+        required={field.required}
+        placeholder={field.placeholder}
+      />
+      {field.helperText && <p className="mt-1.5 text-xs text-text-muted">{field.helperText}</p>}
+    </div>
   );
 }
 
@@ -126,6 +131,7 @@ function ProfileCompletionForm({
   submitLabel = "Save profile",
   onSaved,
   onProfileStateResolved,
+  initialContext = EMPTY_CONTEXT,
 }) {
   const roleConfig = useMemo(() => getRoleProfileConfig(role), [role]);
   const allFields = useMemo(
@@ -133,18 +139,36 @@ function ProfileCompletionForm({
     [roleConfig.sections]
   );
   const fieldsBySource = useMemo(() => groupFieldsBySource(allFields), [allFields]);
-  const [context, setContext] = useState(EMPTY_CONTEXT);
-  const [formData, setFormData] = useState(() => buildInitialFormData(user, roleConfig, EMPTY_CONTEXT));
+  const callbacksRef = useRef({ onSaved, onProfileStateResolved });
+  const hasInitialContextData = Boolean(initialContext?.tenant || initialContext?.roleProfile);
+  const [context, setContext] = useState(() => (hasInitialContextData ? initialContext : EMPTY_CONTEXT));
+  const [formData, setFormData] = useState(() =>
+    buildInitialFormData(user, roleConfig, hasInitialContextData ? initialContext : EMPTY_CONTEXT)
+  );
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitError, setSubmitError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingContext, setIsLoadingContext] = useState(true);
+  const [isLoadingContext, setIsLoadingContext] = useState(!hasInitialContextData);
+
+  useEffect(() => {
+    callbacksRef.current = { onSaved, onProfileStateResolved };
+  }, [onSaved, onProfileStateResolved]);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadContext() {
+      if (hasInitialContextData) {
+        setContext(initialContext);
+        setFormData(buildInitialFormData(user, roleConfig, initialContext));
+        callbacksRef.current.onProfileStateResolved?.(
+          evaluateOnboardingState(role, user, initialContext)
+        );
+        setIsLoadingContext(false);
+        return;
+      }
+
       setIsLoadingContext(true);
 
       try {
@@ -154,12 +178,16 @@ function ProfileCompletionForm({
         setContext(nextContext);
         setFormData(buildInitialFormData(user, roleConfig, nextContext));
 
-        onProfileStateResolved?.(evaluateOnboardingState(role, user, nextContext));
+        callbacksRef.current.onProfileStateResolved?.(
+          evaluateOnboardingState(role, user, nextContext)
+        );
       } catch {
         if (!mounted) return;
         setContext(EMPTY_CONTEXT);
         setFormData(buildInitialFormData(user, roleConfig, EMPTY_CONTEXT));
-        onProfileStateResolved?.(evaluateOnboardingState(role, user, EMPTY_CONTEXT));
+        callbacksRef.current.onProfileStateResolved?.(
+          evaluateOnboardingState(role, user, EMPTY_CONTEXT)
+        );
       } finally {
         if (mounted) setIsLoadingContext(false);
       }
@@ -170,7 +198,7 @@ function ProfileCompletionForm({
     return () => {
       mounted = false;
     };
-  }, [onProfileStateResolved, role, roleConfig, user]);
+  }, [hasInitialContextData, initialContext, role, roleConfig, user]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -238,13 +266,13 @@ function ProfileCompletionForm({
         roleProfile: updatedRoleProfile || null,
       });
       setSuccessMessage("Profile updated successfully.");
-      onProfileStateResolved?.(
+      callbacksRef.current.onProfileStateResolved?.(
         evaluateOnboardingState(role, nextUser, {
           tenant: updatedTenant || null,
           roleProfile: updatedRoleProfile || null,
         })
       );
-      onSaved?.(nextUser);
+      callbacksRef.current.onSaved?.(nextUser);
     } catch (error) {
       const parsed = parseApiError(error, "Failed to update your profile.");
       setFieldErrors(parsed.fieldErrors || {});

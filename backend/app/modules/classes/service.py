@@ -14,6 +14,7 @@ from app.modules.classes.schemas import (
     ClassRoomResponse,
     ClassRoomUpdate,
 )
+from app.modules.teachers.models import TeacherStatus
 from app.modules.teachers.repository import TeacherRepository
 
 
@@ -50,7 +51,7 @@ class ClassRoomService:
             if teacher is None:
                 raise NotFoundException("Teacher not found")
 
-            if hasattr(teacher, "is_active") and teacher.is_active is False:
+            if teacher.status != TeacherStatus.ACTIVE:
                 raise BadRequestException("Cannot assign an inactive teacher")
 
         classroom = ClassRoom(
@@ -179,7 +180,7 @@ class ClassRoomService:
             if teacher is None:
                 raise NotFoundException("Teacher not found")
 
-            if hasattr(teacher, "is_active") and teacher.is_active is False:
+            if teacher.status != TeacherStatus.ACTIVE:
                 raise BadRequestException("Cannot assign an inactive teacher")
 
         for field, value in update_data.items():

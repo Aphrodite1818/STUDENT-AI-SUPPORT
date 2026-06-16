@@ -62,6 +62,23 @@ def _normalize_admission_number_prefix(prefix: str | None) -> str | None:
     return cleaned_prefix or None
 
 
+def _is_tenant_onboarding_complete(
+    *,
+    school_name: str | None,
+    email: str | None,
+    admission_number_prefix: str | None,
+) -> bool:
+    """Return whether the tenant has enough data to complete school onboarding."""
+    return bool(
+        school_name
+        and school_name.strip()
+        and email
+        and email.strip()
+        and admission_number_prefix
+        and admission_number_prefix.strip()
+    )
+
+
 class TenantService:
     """Business logic for the tenant management domain."""
 
@@ -444,6 +461,15 @@ class TenantService:
 
                 if existing and existing.id != tenant_id:
                     raise ConflictException("Prefix not available")
+
+        update_data["onboarding_completed"] = _is_tenant_onboarding_complete(
+            school_name=update_data.get("school_name", tenant.school_name),
+            email=update_data.get("email", tenant.email),
+            admission_number_prefix=update_data.get(
+                "admission_number_prefix",
+                tenant.admission_number_prefix,
+            ),
+        )
 
         for field, value in update_data.items():
             setattr(tenant, field, value)
