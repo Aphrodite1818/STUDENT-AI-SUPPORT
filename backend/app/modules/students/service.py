@@ -75,6 +75,26 @@ class StudentService:
         )
 
     @staticmethod
+    async def _assign_missing_admission_number(
+        db: AsyncSession,
+        *,
+        student: Student,
+        raise_if_missing_prefix: bool,
+    ) -> None:
+        """Generate an admission number for an existing student profile when needed."""
+        if student.admission_number is not None:
+            return
+
+        try:
+            student.admission_number = await StudentService.generate_admission_number(
+                db=db,
+                tenant_id=student.tenant_id,
+            )
+        except BadRequestException:
+            if raise_if_missing_prefix:
+                raise
+
+    @staticmethod
     async def create_student_profile(
         db: AsyncSession,
         actor: User,
@@ -280,6 +300,20 @@ class StudentService:
         for field, value in update_data.items():
             setattr(student, field, value)
 
+        should_generate_admission_number = (
+            student.admission_number is None
+            and any(
+                field in update_data
+                for field in ("date_of_birth", "gender", "class_id", "arm")
+            )
+        )
+        if should_generate_admission_number:
+            await StudentService._assign_missing_admission_number(
+                db=db,
+                student=student,
+                raise_if_missing_prefix=True,
+            )
+
         student.profile_status = StudentService._resolve_profile_status(student)
 
         updated_student = await StudentRepository.update_student(
@@ -312,11 +346,11 @@ class StudentService:
         student.arm = payload.arm
         student.passport_photo_url = payload.passport_photo_url
 
-        if student.admission_number is None:
-            student.admission_number = await StudentService.generate_admission_number(
-                db=db,
-                tenant_id=actor.tenant_id,
-            )
+        await StudentService._assign_missing_admission_number(
+            db=db,
+            student=student,
+            raise_if_missing_prefix=True,
+        )
 
         student.profile_status = StudentService._resolve_profile_status(student)
 

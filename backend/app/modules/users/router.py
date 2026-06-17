@@ -18,6 +18,7 @@ from app.core.utils.frontend_urls import resolve_frontend_app_url
 from app.modules.users.models import User, UserRole
 from app.modules.users.schemas import (
     AuthenticatedUserResponse,
+    ProfileCompletionSchemaResponse,
     UserAdminUpdate,
     UserInviteCreate,
     UserResponse,
@@ -103,6 +104,35 @@ async def get_current_user_profile(
     Fetch the currently authenticated user's profile.
     """
     return await UserService.get_authenticated_user_context(db, current_user)
+
+
+@router.get(
+    "/profile-completion/schema",
+    response_model=ProfileCompletionSchemaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get the role-aware profile completion schema for the current user",
+)
+async def get_profile_completion_schema(
+    db: DbSession,
+    current_user: CurrentTenantUser,
+) -> ProfileCompletionSchemaResponse:
+    """Return the onboarding/profile modal schema for the authenticated user."""
+    return await UserService.get_profile_completion_schema(db, current_user)
+
+
+@router.patch(
+    "/profile-completion",
+    response_model=ProfileCompletionSchemaResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Submit or update the authenticated user's onboarding profile",
+)
+async def submit_profile_completion(
+    payload: dict,
+    db: DbSession,
+    current_user: CurrentTenantUser,
+) -> ProfileCompletionSchemaResponse:
+    """Validate and persist role-aware onboarding data for the authenticated user."""
+    return await UserService.submit_profile_completion(db, current_user, payload)
 
 
 @router.get(

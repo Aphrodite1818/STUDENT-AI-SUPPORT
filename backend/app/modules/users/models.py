@@ -61,6 +61,12 @@ class User(BaseModel):
 
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    profile_completed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
 
     student_profile: Mapped["Student | None"] = relationship(
         "Student",

@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from fastapi import BackgroundTasks
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.logging import get_logger
@@ -23,13 +24,32 @@ from app.modules.students.models import (
     StudentProfileStatus,
 )
 from app.modules.students.repository import StudentParentLinkRepository, StudentRepository
+from app.modules.students.service import StudentService
 from app.modules.teachers.models import Teacher, TeacherStatus
 from app.modules.teachers.repository import TeacherRepository
 from app.modules.users.models import AccountStatus, User, UserRole
 from app.modules.users.repository import UserRepository
-from app.modules.users.schemas import AuthenticatedUserResponse
-from app.modules.users.schemas import UserAdminUpdate, UserInviteCreate, UserUpdate
+from app.modules.users.schemas import (
+    AdminProfileCompletionSchema,
+    AuthenticatedUserResponse,
+    ParentProfileCompletionSchema,
+    ProfileCompletionFieldMetadata,
+    ProfileCompletionFieldOption,
+    ProfileCompletionSchemaResponse,
+    ProfileCompletionSectionMetadata,
+    ProfileCompletionValues,
+    StudentProfileCompletionSchema,
+    TeacherProfileCompletionSchema,
+    UserAdminUpdate,
+    UserInviteCreate,
+    UserUpdate,
+)
 from app.tenant_management.repository import TenantRepository
+from app.tenant_management.service import (
+    TenantService,
+    _is_tenant_onboarding_complete,
+    _normalize_admission_number_prefix,
+)
 
 logger = get_logger(__name__)
 
@@ -37,6 +57,55 @@ logger = get_logger(__name__)
 def _normalize_email(email: str) -> str:
     """Normalize the email address."""
     return email.strip().lower()
+
+
+def _format_validation_errors(exc: ValidationError) -> list[dict[str, Any]]:
+    """Convert pydantic validation errors into the API field error shape."""
+    formatted_errors: list[dict[str, Any]] = []
+    for error in exc.errors():
+        formatted_errors.append(
+            {
+                "type": error.get("type", "value_error"),
+                "loc": ["body", *list(error.get("loc", ()))],
+                "msg": error.get("msg", "Invalid value"),
+                "input": error.get("input"),
+            }
+        )
+    return formatted_errors
+
+
+COMMON_PROFILE_COMPLETION_USER_FIELDS = [
+    ProfileCompletionFieldMetadata(
+        source="user",
+        name="firstname",
+        label="First name",
+        required=True,
+    ),
+    ProfileCompletionFieldMetadata(
+        source="user",
+        name="lastname",
+        label="Last name",
+        required=True,
+    ),
+    ProfileCompletionFieldMetadata(
+        source="user",
+        name="phone_number",
+        label="Phone number",
+        required=True,
+        placeholder="+2348012345678",
+    ),
+    ProfileCompletionFieldMetadata(
+        source="user",
+        name="whatsapp_id",
+        label="WhatsApp ID",
+        placeholder="+2348012345678",
+    ),
+]
+
+STUDENT_GENDER_OPTIONS = [
+    ProfileCompletionFieldOption(value="male", label="Male"),
+    ProfileCompletionFieldOption(value="female", label="Female"),
+]
 
 
 class UserService:
@@ -601,6 +670,480 @@ class UserService:
                 "tenant": tenant,
             }
         )
+
+    @staticmethod
+    def _get_profile_completion_sections(
+        role: UserRole,
+    ) -> list[ProfileCompletionSectionMetadata]:
+        """Return frontend field metadata for the current user's onboarding flow."""
+        role_sections: dict[UserRole, list[ProfileCompletionSectionMetadata]] = {
+            UserRole.ADMIN: [
+                ProfileCompletionSectionMetadata(
+                    key="user",
+                    title="Personal details",
+                    description="These details belong to your administrator account.",
+                    fields=COMMON_PROFILE_COMPLETION_USER_FIELDS,
+                ),
+                ProfileCompletionSectionMetadata(
+                    key="tenant",
+                    title="School details",
+                    description="These fields complete your school's onboarding setup.",
+                    fields=[
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="school_name",
+                            label="School name",
+                            required=True,
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="phone",
+                            label="School phone",
+                            placeholder="+2348012345678",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="admission_number_prefix",
+                            label="Admission prefix",
+                            required=True,
+                            placeholder="NHS",
+                            helper_text=(
+                                "This prefix is used to generate student admission numbers, "
+                                "for example NHS-2026-48291."
+                            ),
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="address",
+                            label="Address",
+                            type="textarea",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="city",
+                            label="City",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="state",
+                            label="State",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="tenant",
+                            name="country",
+                            label="Country",
+                        ),
+                    ],
+                ),
+            ],
+            UserRole.STUDENT: [
+                ProfileCompletionSectionMetadata(
+                    key="user",
+                    title="Personal details",
+                    description="These details belong to your account.",
+                    fields=COMMON_PROFILE_COMPLETION_USER_FIELDS,
+                ),
+                ProfileCompletionSectionMetadata(
+                    key="role_profile",
+                    title="Student details",
+                    description="Complete the student details you can manage yourself.",
+                    fields=[
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="gender",
+                            label="Gender",
+                            type="select",
+                            required=True,
+                            options=STUDENT_GENDER_OPTIONS,
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="date_of_birth",
+                            label="Date of birth",
+                            type="date",
+                            required=True,
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="passport_photo_url",
+                            label="Passport photo URL",
+                        ),
+                    ],
+                ),
+            ],
+            UserRole.TEACHER: [
+                ProfileCompletionSectionMetadata(
+                    key="user",
+                    title="Personal details",
+                    description="These details belong to your account.",
+                    fields=COMMON_PROFILE_COMPLETION_USER_FIELDS,
+                ),
+                ProfileCompletionSectionMetadata(
+                    key="role_profile",
+                    title="Teacher details",
+                    description="Add any teacher-specific details you want saved on your profile.",
+                    fields=[
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="staff_id",
+                            label="Staff ID",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="qualification",
+                            label="Qualification",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="specialization",
+                            label="Specialization",
+                        ),
+                    ],
+                ),
+            ],
+            UserRole.PARENT: [
+                ProfileCompletionSectionMetadata(
+                    key="user",
+                    title="Personal details",
+                    description="These details belong to your account.",
+                    fields=COMMON_PROFILE_COMPLETION_USER_FIELDS,
+                ),
+                ProfileCompletionSectionMetadata(
+                    key="role_profile",
+                    title="Parent details",
+                    description="Add any parent-specific details you want saved on your profile.",
+                    fields=[
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="occupation",
+                            label="Occupation",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="address",
+                            label="Address",
+                            type="textarea",
+                        ),
+                        ProfileCompletionFieldMetadata(
+                            source="role_profile",
+                            name="emergency_phone",
+                            label="Emergency phone",
+                            placeholder="+2348012345678",
+                        ),
+                    ],
+                ),
+            ],
+        }
+
+        sections = role_sections.get(role)
+        if sections is None:
+            raise ForbiddenException(detail="Profile completion is not supported for this role.")
+        return sections
+
+    @staticmethod
+    def _build_profile_completion_values(
+        *,
+        user: User,
+        tenant: Any = None,
+        role_profile: Any = None,
+    ) -> ProfileCompletionValues:
+        """Return current onboarding values grouped by source."""
+        return ProfileCompletionValues(
+            user={
+                "firstname": user.firstname,
+                "lastname": user.lastname,
+                "phone_number": user.phone_number,
+                "whatsapp_id": user.whatsapp_id,
+            },
+            tenant=(
+                {
+                    "school_name": tenant.school_name,
+                    "phone": tenant.phone,
+                    "admission_number_prefix": tenant.admission_number_prefix,
+                    "address": tenant.address,
+                    "city": tenant.city,
+                    "state": tenant.state,
+                    "country": tenant.country,
+                }
+                if tenant is not None
+                else None
+            ),
+            role_profile=(
+                {
+                    "date_of_birth": getattr(role_profile, "date_of_birth", None),
+                    "gender": getattr(role_profile, "gender", None),
+                    "passport_photo_url": getattr(role_profile, "passport_photo_url", None),
+                    "staff_id": getattr(role_profile, "staff_id", None),
+                    "qualification": getattr(role_profile, "qualification", None),
+                    "specialization": getattr(role_profile, "specialization", None),
+                    "occupation": getattr(role_profile, "occupation", None),
+                    "address": getattr(role_profile, "address", None),
+                    "emergency_phone": getattr(role_profile, "emergency_phone", None),
+                }
+                if role_profile is not None
+                else None
+            ),
+        )
+
+    @staticmethod
+    async def _get_role_profile_for_user(
+        db: AsyncSession,
+        actor: User,
+    ) -> Any:
+        """Fetch the current user's role-specific business profile."""
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="User is not attached to a tenant.")
+
+        if actor.role == UserRole.ADMIN:
+            return await TenantRepository.get_by_id(db, actor.tenant_id)
+        if actor.role == UserRole.STUDENT:
+            return await StudentRepository.get_by_user_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                user_id=actor.id,
+            )
+        if actor.role == UserRole.TEACHER:
+            return await TeacherRepository.get_teacher_by_user_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                user_id=actor.id,
+            )
+        if actor.role == UserRole.PARENT:
+            return await ParentRepository.get_parent_by_user_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                user_id=actor.id,
+            )
+
+        raise ForbiddenException(detail="Profile completion is not supported for this role.")
+
+    @staticmethod
+    async def get_profile_completion_schema(
+        db: AsyncSession,
+        actor: User,
+    ) -> ProfileCompletionSchemaResponse:
+        """Return the authenticated user's role-aware onboarding schema and values."""
+        user_response = await UserService.get_authenticated_user_context(db, actor)
+        tenant = user_response.tenant if actor.role == UserRole.ADMIN else None
+        role_profile = None if actor.role == UserRole.ADMIN else await UserService._get_role_profile_for_user(db, actor)
+
+        return ProfileCompletionSchemaResponse(
+            role=actor.role,
+            profile_completed=bool(actor.profile_completed),
+            user=user_response,
+            sections=UserService._get_profile_completion_sections(actor.role),
+            values=UserService._build_profile_completion_values(
+                user=actor,
+                tenant=tenant,
+                role_profile=role_profile,
+            ),
+        )
+
+    @staticmethod
+    async def _update_profile_completion_user_details(
+        db: AsyncSession,
+        *,
+        user: User,
+        payload: dict[str, Any],
+    ) -> None:
+        """Apply validated user onboarding fields while preserving uniqueness rules."""
+        phone_number = payload.get("phone_number")
+        if phone_number and phone_number != user.phone_number:
+            existing_phone = await UserRepository.get_by_phone_number(db, phone_number)
+            if existing_phone and existing_phone.id != user.id:
+                raise BadRequestException(
+                    detail="A user with this phone number already exists."
+                )
+
+        whatsapp_id = payload.get("whatsapp_id")
+        if whatsapp_id and whatsapp_id != user.whatsapp_id:
+            existing_whatsapp = await UserRepository.get_by_whatsapp_id(db, whatsapp_id)
+            if existing_whatsapp and existing_whatsapp.id != user.id:
+                raise BadRequestException(
+                    detail="A user with this WhatsApp ID already exists."
+                )
+
+        for field, value in payload.items():
+            setattr(user, field, value)
+
+        await UserRepository.save_user(db, user)
+
+    @staticmethod
+    async def _get_or_create_teacher_profile(
+        db: AsyncSession,
+        *,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> Teacher:
+        """Fetch or create the current user's teacher profile."""
+        teacher = await TeacherRepository.get_teacher_by_user_id(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        if teacher is not None:
+            return teacher
+
+        return await TeacherRepository.create_teacher(
+            db=db,
+            teacher=Teacher(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                status=TeacherStatus.ACTIVE,
+            ),
+        )
+
+    @staticmethod
+    async def _maybe_assign_student_admission_number(
+        db: AsyncSession,
+        *,
+        student: Student,
+        raise_if_missing_prefix: bool,
+    ) -> None:
+        """Assign an admission number when the tenant has completed prefix setup."""
+        if student.admission_number is not None:
+            return
+
+        try:
+            student.admission_number = await StudentService.generate_admission_number(
+                db=db,
+                tenant_id=student.tenant_id,
+            )
+        except BadRequestException:
+            if raise_if_missing_prefix:
+                raise
+
+    @staticmethod
+    async def submit_profile_completion(
+        db: AsyncSession,
+        actor: User,
+        payload: dict[str, Any],
+    ) -> ProfileCompletionSchemaResponse:
+        """Validate and persist role-aware onboarding/profile completion data."""
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="User is not attached to a tenant.")
+
+        schema_by_role = {
+            UserRole.ADMIN: AdminProfileCompletionSchema,
+            UserRole.PARENT: ParentProfileCompletionSchema,
+            UserRole.STUDENT: StudentProfileCompletionSchema,
+            UserRole.TEACHER: TeacherProfileCompletionSchema,
+        }
+        schema_class = schema_by_role.get(actor.role)
+        if schema_class is None:
+            raise ForbiddenException(detail="Profile completion is not supported for this role.")
+
+        try:
+            validated_payload = schema_class.model_validate(payload)
+        except ValidationError as exc:
+            raise BadRequestException(detail=_format_validation_errors(exc)) from exc
+
+        await UserService._update_profile_completion_user_details(
+            db=db,
+            user=actor,
+            payload=validated_payload.user.model_dump(mode="python"),
+        )
+
+        if actor.role == UserRole.PARENT:
+            parent = await UserService._ensure_parent_profile(
+                db=db,
+                tenant_id=actor.tenant_id,
+                user_id=actor.id,
+            )
+            for field, value in validated_payload.role_profile.model_dump(mode="python").items():
+                setattr(parent, field, value)
+            await ParentRepository.update_parent(db=db, parent=parent)
+
+        elif actor.role == UserRole.TEACHER:
+            teacher = await UserService._get_or_create_teacher_profile(
+                db=db,
+                tenant_id=actor.tenant_id,
+                user_id=actor.id,
+            )
+            role_profile_payload = validated_payload.role_profile.model_dump(mode="python")
+            staff_id = role_profile_payload.get("staff_id")
+            if staff_id and staff_id != teacher.staff_id:
+                existing_teacher = await TeacherRepository.get_teacher_by_staff_id(
+                    db=db,
+                    tenant_id=actor.tenant_id,
+                    staff_id=staff_id,
+                )
+                if existing_teacher and existing_teacher.id != teacher.id:
+                    raise BadRequestException(
+                        detail="A teacher with this staff ID already exists"
+                    )
+            for field, value in role_profile_payload.items():
+                setattr(teacher, field, value)
+            await TeacherRepository.update_teacher(db=db, teacher=teacher)
+
+        elif actor.role == UserRole.STUDENT:
+            student = await UserService._ensure_student_profile(
+                db=db,
+                tenant_id=actor.tenant_id,
+                user_id=actor.id,
+            )
+            for field, value in validated_payload.role_profile.model_dump(mode="python").items():
+                setattr(student, field, value)
+
+            await UserService._maybe_assign_student_admission_number(
+                db=db,
+                student=student,
+                raise_if_missing_prefix=False,
+            )
+            student.profile_status = StudentService._resolve_profile_status(student)
+            await StudentRepository.update_student(db=db, student=student)
+
+        elif actor.role == UserRole.ADMIN:
+            tenant = await TenantRepository.get_by_id(db, actor.tenant_id)
+            if tenant is None:
+                raise NotFoundException(detail="Tenant not found.")
+
+            tenant_payload = validated_payload.tenant.model_dump(mode="python")
+            school_name = tenant_payload["school_name"].strip()
+            if school_name.casefold() != tenant.school_name.strip().casefold():
+                existing_tenant = await TenantRepository.get_by_school_name(
+                    db,
+                    school_name,
+                )
+                if existing_tenant is not None and existing_tenant.id != tenant.id:
+                    raise BadRequestException(detail="A school with this name already exists.")
+                tenant.school_name = school_name
+                tenant.slug = await TenantService._unique_slug_for_tenant(
+                    db,
+                    school_name,
+                    tenant.id,
+                )
+            else:
+                tenant.school_name = school_name
+
+            normalized_prefix = _normalize_admission_number_prefix(
+                tenant_payload["admission_number_prefix"]
+            )
+            existing_prefix_owner = await TenantRepository.get_by_admission_number_prefix(
+                db,
+                normalized_prefix,
+            )
+            if existing_prefix_owner and existing_prefix_owner.id != tenant.id:
+                raise BadRequestException(detail="Prefix not available")
+
+            tenant.phone = tenant_payload.get("phone")
+            tenant.address = tenant_payload.get("address")
+            tenant.city = tenant_payload.get("city")
+            tenant.state = tenant_payload.get("state")
+            tenant.country = tenant_payload.get("country") or tenant.country
+            tenant.admission_number_prefix = normalized_prefix
+            tenant.onboarding_completed = _is_tenant_onboarding_complete(
+                school_name=tenant.school_name,
+                email=tenant.email,
+                admission_number_prefix=tenant.admission_number_prefix,
+            )
+
+            await TenantRepository.save(db, tenant)
+
+        actor.profile_completed = True
+        await UserRepository.save_user(db, actor)
+
+        return await UserService.get_profile_completion_schema(db, actor)
 
 
 

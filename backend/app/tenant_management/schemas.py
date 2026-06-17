@@ -48,6 +48,7 @@ class OutputBase(BaseModel):
         from_attributes=True,
         use_enum_values=True,
         populate_by_name=True,
+        frozen=True,
     )
 
 
@@ -258,12 +259,7 @@ class TenantStatusUpdate(InputBase):
 
 class TenantPublicResponse(OutputBase):
     """Pydantic schema for the tenant management domain."""
-    model_config = ConfigDict(
-        from_attributes=True,
-        use_enum_values=True,
-        populate_by_name=True,
-        frozen=True,
-    )
+   
 
     id: uuid.UUID
     school_name: str

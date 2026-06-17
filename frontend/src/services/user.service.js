@@ -3,6 +3,8 @@ import { api } from "./api";
 export const userService = {
     // Current user
     getMe: () => api.get("/users/get-authenticated-user"),
+    getProfileCompletionSchema: () => api.get("/users/profile-completion/schema"),
+    submitProfileCompletion: (data) => api.patch("/users/profile-completion", data),
     
     // General user endpoints
     inviteUser: (data) => api.post("/users/user-create", data),

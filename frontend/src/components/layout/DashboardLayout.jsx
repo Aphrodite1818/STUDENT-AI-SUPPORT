@@ -38,7 +38,6 @@ import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
 import { authSession } from "../../services/api";
 import { userService } from "../../services/user.service";
-import { evaluateOnboardingState, loadRoleProfileContext } from "../../config/roleProfileConfig";
 import { cn } from "../../utils/cn";
 import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
 import BottomNav from "./BottomNav";
@@ -422,32 +421,42 @@ function DashboardLayout({
   const [profileUser, setProfileUser] = useState(user);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [hasAutoOpenedOnboarding, setHasAutoOpenedOnboarding] = useState(false);
-  const [profileContext, setProfileContext] = useState({ tenant: user?.tenant || null, roleProfile: null });
-  const [roleProfileStatus, setRoleProfileStatus] = useState({ loading: true, incomplete: false });
+  const [profileSchemaData, setProfileSchemaData] = useState(null);
+  const [isLoadingOnboardingState, setIsLoadingOnboardingState] = useState(Boolean(authSession.getToken()));
 
   const pageTitle = useMemo(() => title || `${roleLabels[role] || "Workspace"} Dashboard`, [role, title]);
-  const onboardingState = useMemo(
-    () => evaluateOnboardingState(role, profileUser, profileContext),
-    [profileContext, profileUser, role]
-  );
-  const needsOnboarding = Boolean(profileUser?.id && onboardingState.incomplete);
-  const schoolName = profileUser?.tenant?.school_name || profileContext.tenant?.school_name || "School workspace";
-  const openProfileModal = useCallback(() => {
-    setProfileModalOpen(true);
+  const needsOnboarding = Boolean(profileUser?.id && profileUser?.profile_completed !== true);
+  const schoolName = profileUser?.tenant?.school_name || profileSchemaData?.user?.tenant?.school_name || "School workspace";
+
+  const loadProfileCompletionSchema = useCallback(async () => {
+    const nextSchema = await userService.getProfileCompletionSchema();
+    setProfileSchemaData(nextSchema);
+    return nextSchema;
   }, []);
+
+  const openProfileModal = useCallback(async () => {
+    if (profileUser?.id && !profileSchemaData) {
+      try {
+        await loadProfileCompletionSchema();
+      } catch {
+        // The form will surface its own load error state if this fetch fails.
+      }
+    }
+    setProfileModalOpen(true);
+  }, [loadProfileCompletionSchema, profileSchemaData, profileUser?.id]);
   const closeProfileModal = useCallback(() => {
     setProfileModalOpen(false);
   }, []);
-  const handleProfileSaved = useCallback((nextUser) => {
+  const handleProfileSaved = useCallback((nextUser, response) => {
     setProfileUser(nextUser);
-    setProfileContext((current) => ({ ...current, tenant: nextUser?.tenant || current.tenant }));
+    setProfileSchemaData(response || null);
     setProfileModalOpen(false);
   }, []);
   const handleProfileStateResolved = useCallback((state) => {
-    setRoleProfileStatus({
-      loading: false,
-      incomplete: Boolean(state?.roleIncomplete),
-    });
+    setIsLoadingOnboardingState(false);
+    if (state?.completed === true) {
+      setProfileUser((current) => (current ? { ...current, profile_completed: true } : current));
+    }
   }, []);
 
   useEffect(() => {
@@ -455,7 +464,7 @@ function DashboardLayout({
 
     async function hydrateAuthenticatedUser() {
       if (!authSession.getToken()) {
-        setRoleProfileStatus({ loading: false, incomplete: false });
+        setIsLoadingOnboardingState(false);
         return;
       }
 
@@ -465,9 +474,17 @@ function DashboardLayout({
 
         authSession.setUser(nextUser);
         setProfileUser(nextUser);
-        setProfileContext((current) => ({ ...current, tenant: nextUser?.tenant || current.tenant }));
+        if (nextUser?.profile_completed !== true) {
+          const nextSchema = await userService.getProfileCompletionSchema();
+          if (!mounted) return;
+          setProfileSchemaData(nextSchema);
+        } else {
+          setProfileSchemaData(null);
+        }
       } catch {
         if (!mounted) return;
+      } finally {
+        if (mounted) setIsLoadingOnboardingState(false);
       }
     }
 
@@ -483,47 +500,11 @@ function DashboardLayout({
   }, [profileUser?.id]);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function resolveRoleProfileStatus() {
-      if (!profileUser?.id) {
-        setRoleProfileStatus({ loading: false, incomplete: false });
-        return;
-      }
-
-      setRoleProfileStatus({ loading: true, incomplete: false });
-
-      try {
-        const nextContext = await loadRoleProfileContext(role, profileUser);
-        if (!mounted) return;
-
-        setProfileContext(nextContext);
-        const nextOnboardingState = evaluateOnboardingState(role, profileUser, nextContext);
-        setRoleProfileStatus({
-          loading: false,
-          incomplete: nextOnboardingState.roleIncomplete,
-        });
-      } catch {
-        if (!mounted) return;
-        const fallbackContext = { tenant: profileUser?.tenant || null, roleProfile: null };
-        setProfileContext(fallbackContext);
-        setRoleProfileStatus({ loading: false, incomplete: false });
-      }
-    }
-
-    resolveRoleProfileStatus();
-
-    return () => {
-      mounted = false;
-    };
-  }, [profileUser, role]);
-
-  useEffect(() => {
-    if (!profileUser?.id || roleProfileStatus.loading || !needsOnboarding || hasAutoOpenedOnboarding) return;
+    if (!profileUser?.id || isLoadingOnboardingState || !needsOnboarding || hasAutoOpenedOnboarding) return;
 
     setHasAutoOpenedOnboarding(true);
     setProfileModalOpen(true);
-  }, [hasAutoOpenedOnboarding, needsOnboarding, profileUser?.id, roleProfileStatus.loading]);
+  }, [hasAutoOpenedOnboarding, isLoadingOnboardingState, needsOnboarding, profileUser?.id]);
 
   return (
     <div className="min-h-screen bg-background text-text">
@@ -605,9 +586,8 @@ function DashboardLayout({
       >
         <ProfileCompletionForm
           user={profileUser}
-          role={role}
           submitLabel="Save profile"
-          initialContext={profileContext}
+          initialSchemaData={profileSchemaData}
           onSaved={handleProfileSaved}
           onProfileStateResolved={handleProfileStateResolved}
         />

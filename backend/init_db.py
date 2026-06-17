@@ -466,8 +466,10 @@ async def sync_user_columns(conn) -> None:
     await add_column(conn, "users", "phone_number VARCHAR(20)")
     await add_column(conn, "users", "whatsapp_id VARCHAR(100)")
     await add_column(conn, "users", "is_verified BOOLEAN DEFAULT TRUE")
+    await add_column(conn, "users", "profile_completed BOOLEAN DEFAULT FALSE")
 
     await set_column_default(conn, "users", "is_verified", "TRUE")
+    await set_column_default(conn, "users", "profile_completed", "FALSE")
 
     await execute(
         conn,
@@ -481,6 +483,46 @@ async def sync_user_columns(conn) -> None:
         """,
     )
 
+    await execute(
+        conn,
+        f"""
+        UPDATE {PUBLIC_SCHEMA}.users AS users
+        SET profile_completed = CASE
+            WHEN users.role::text = 'ADMIN' THEN (
+                users.firstname IS NOT NULL
+                AND users.lastname IS NOT NULL
+                AND users.phone_number IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM {PUBLIC_SCHEMA}.tenants AS tenants
+                    WHERE tenants.id = users.tenant_id
+                      AND tenants.onboarding_completed = TRUE
+                )
+            )
+            WHEN users.role::text = 'STUDENT' THEN (
+                users.firstname IS NOT NULL
+                AND users.lastname IS NOT NULL
+                AND users.phone_number IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                    FROM {PUBLIC_SCHEMA}.students AS students
+                    WHERE students.user_id = users.id
+                      AND students.tenant_id = users.tenant_id
+                      AND students.date_of_birth IS NOT NULL
+                      AND students.gender IS NOT NULL
+                )
+            )
+            WHEN users.role::text IN ('TEACHER', 'PARENT') THEN (
+                users.firstname IS NOT NULL
+                AND users.lastname IS NOT NULL
+                AND users.phone_number IS NOT NULL
+            )
+            ELSE FALSE
+        END
+        WHERE users.profile_completed IS NULL OR users.profile_completed = FALSE;
+        """,
+    )
+
     for column_name in (
         "tenant_id",
         "email",
@@ -488,6 +530,7 @@ async def sync_user_columns(conn) -> None:
         "account_status",
         "role",
         "is_verified",
+        "profile_completed",
         "created_at",
         "updated_at",
     ):

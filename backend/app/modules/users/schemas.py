@@ -3,10 +3,11 @@
 #======================================#
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
-from app.modules.students.models import ParentRelationship
+from app.modules.students.models import Gender, ParentRelationship
 from app.modules.users.models import UserRole, AccountStatus
 from app.tenant_management.schemas import TenantPublicResponse
 
@@ -44,7 +45,7 @@ class UserBase(InputBase):
     firstname: str = Field(..., min_length=2, max_length=100)
     lastname: str = Field(..., min_length=2, max_length=100)
     email: EmailStr = Field(..., max_length=100)
-    phone_number: str = Field(..., min_length=7, max_length=20)
+    phone_number: str | None = Field(default = None, min_length=7, max_length=20)
 
     @field_validator("phone_number")
     @classmethod
@@ -175,6 +176,227 @@ class UserAdminUpdate(InputBase):
     account_status: AccountStatus | None = None
 
 
+class ProfileCompletionUserDetails(InputBase):
+    """Shared user fields required during profile completion."""
+
+    firstname: str = Field(..., min_length=2, max_length=100)
+    lastname: str = Field(..., min_length=2, max_length=100)
+    phone_number: str = Field(..., min_length=7, max_length=20)
+    whatsapp_id: str | None = Field(default=None, max_length=100)
+
+    @field_validator("phone_number", "whatsapp_id")
+    @classmethod
+    def validate_profile_completion_contact_number(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Validate contact numbers used by the onboarding flow."""
+        if value is None:
+            return value
+        cleaned_value = value.replace(" ", "").replace("-", "")
+        if not cleaned_value.startswith("+"):
+            raise ValueError("contact number must include country code")
+        if not cleaned_value[1:].isdigit():
+            raise ValueError("contact number must contain only digits after country code")
+        return cleaned_value
+
+
+class ParentProfileCompletionDetails(InputBase):
+    """Parent-specific fields used by the onboarding modal."""
+
+    occupation: str | None = Field(default=None, max_length=100)
+    address: str | None = Field(default=None, max_length=500)
+    emergency_phone: str | None = Field(default=None, min_length=7, max_length=20)
+
+    @field_validator("occupation", "address", "emergency_phone", mode="before")
+    @classmethod
+    def clean_parent_profile_completion_fields(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Normalize parent profile completion text fields."""
+        if value is None:
+            return None
+        cleaned_value = value.strip()
+        return cleaned_value or None
+
+
+class StudentProfileCompletionDetails(InputBase):
+    """Student-specific fields used by the onboarding modal."""
+
+    date_of_birth: date
+    gender: Gender
+    passport_photo_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("date_of_birth", mode="before")
+    @classmethod
+    def normalize_student_date_of_birth(
+        cls,
+        value: Any,
+    ) -> Any:
+        """Accept ISO date inputs without silently coercing blank strings."""
+        if value == "":
+            return None
+        return value
+
+    @field_validator("passport_photo_url", mode="before")
+    @classmethod
+    def clean_student_profile_completion_photo(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Normalize optional passport photo url."""
+        if value is None:
+            return None
+        cleaned_value = value.strip()
+        return cleaned_value or None
+
+
+class TeacherProfileCompletionDetails(InputBase):
+    """Teacher-specific fields used by the onboarding modal."""
+
+    staff_id: str | None = Field(default=None, max_length=50)
+    qualification: str | None = Field(default=None, max_length=100)
+    specialization: str | None = Field(default=None, max_length=150)
+
+    @field_validator("staff_id", "qualification", "specialization", mode="before")
+    @classmethod
+    def clean_teacher_profile_completion_fields(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Normalize teacher profile completion text fields."""
+        if value is None:
+            return None
+        cleaned_value = value.strip()
+        return cleaned_value or None
+
+
+class AdminProfileCompletionTenantDetails(InputBase):
+    """Administrator tenant fields used by the onboarding modal."""
+
+    school_name: str = Field(..., min_length=2, max_length=255)
+    phone: str | None = Field(default=None, min_length=7, max_length=20)
+    address: str | None = Field(default=None, max_length=500)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+    country: str | None = Field(default=None, max_length=100)
+    admission_number_prefix: str = Field(..., min_length=2, max_length=20)
+
+    @field_validator(
+        "school_name",
+        "phone",
+        "address",
+        "city",
+        "state",
+        "country",
+        "admission_number_prefix",
+        mode="before",
+    )
+    @classmethod
+    def clean_admin_profile_completion_fields(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Normalize admin profile completion tenant fields."""
+        if value is None:
+            return None
+        cleaned_value = value.strip()
+        return cleaned_value or None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_admin_profile_completion_phone(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Validate school contact phone."""
+        if value is None:
+            return None
+        cleaned_value = value.replace(" ", "").replace("-", "")
+        if not cleaned_value.startswith("+"):
+            raise ValueError("phone must include country code")
+        if not cleaned_value[1:].isdigit():
+            raise ValueError("phone must contain only digits after country code")
+        return cleaned_value
+
+    @field_validator("admission_number_prefix")
+    @classmethod
+    def normalize_admin_profile_completion_prefix(
+        cls,
+        value: str,
+    ) -> str:
+        """Uppercase the admission number prefix."""
+        return value.upper()
+
+
+class ParentProfileCompletionSchema(InputBase):
+    """Dedicated onboarding schema for parent users."""
+
+    user: ProfileCompletionUserDetails
+    role_profile: ParentProfileCompletionDetails
+
+
+class StudentProfileCompletionSchema(InputBase):
+    """Dedicated onboarding schema for student users."""
+
+    user: ProfileCompletionUserDetails
+    role_profile: StudentProfileCompletionDetails
+
+
+class TeacherProfileCompletionSchema(InputBase):
+    """Dedicated onboarding schema for teacher users."""
+
+    user: ProfileCompletionUserDetails
+    role_profile: TeacherProfileCompletionDetails
+
+
+class AdminProfileCompletionSchema(InputBase):
+    """Dedicated onboarding schema for admin users."""
+
+    user: ProfileCompletionUserDetails
+    tenant: AdminProfileCompletionTenantDetails
+
+
+class ProfileCompletionFieldOption(OutputBase):
+    """Single select option for dynamic onboarding fields."""
+
+    value: str
+    label: str
+
+
+class ProfileCompletionFieldMetadata(OutputBase):
+    """Frontend-facing field metadata for the onboarding modal."""
+
+    source: Literal["user", "tenant", "role_profile"]
+    name: str
+    label: str
+    required: bool = False
+    type: str = "text"
+    read_only: bool = False
+    placeholder: str | None = None
+    helper_text: str | None = None
+    empty_label: str | None = None
+    options: list[ProfileCompletionFieldOption] = Field(default_factory=list)
+
+
+class ProfileCompletionSectionMetadata(OutputBase):
+    """Group related onboarding fields for the frontend modal."""
+
+    key: str
+    title: str
+    description: str | None = None
+    fields: list[ProfileCompletionFieldMetadata]
+
+
+class ProfileCompletionValues(OutputBase):
+    """Current values grouped by source for the onboarding modal."""
+
+    user: dict[str, Any]
+    tenant: dict[str, Any] | None = None
+    role_profile: dict[str, Any] | None = None
+
+
 class UserResponse(OutputBase):
     # inherits: from_attributes, use_enum_values, populate_by_name
     # frozen=True — response objects should never be mutated after creation
@@ -197,12 +419,23 @@ class UserResponse(OutputBase):
     role: UserRole
     account_status: AccountStatus
     whatsapp_id: str | None = None
+    profile_completed: bool = False
 
 
 class AuthenticatedUserResponse(UserResponse):
     """Authenticated user payload enriched with tenant context."""
 
     tenant: TenantPublicResponse | None = None
+
+
+class ProfileCompletionSchemaResponse(OutputBase):
+    """Role-aware onboarding schema plus current values."""
+
+    role: UserRole
+    profile_completed: bool
+    user: AuthenticatedUserResponse
+    sections: list[ProfileCompletionSectionMetadata]
+    values: ProfileCompletionValues
 
 
 class UserPublicResponse(OutputBase):

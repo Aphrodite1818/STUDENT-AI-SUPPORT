@@ -1,52 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
 import { authSession, parseApiError } from "../../services/api";
-import { tenantService } from "../../services/tenant.service";
 import { userService } from "../../services/user.service";
-import {
-  evaluateOnboardingState,
-  getRoleProfileConfig,
-  loadRoleProfileContext,
-} from "../../config/roleProfileConfig";
 
-const titleCase = (value) =>
-  String(value || "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-const EMPTY_CONTEXT = {
-  tenant: null,
-  roleProfile: null,
+const EMPTY_FORM_DATA = {
+  user: {},
+  tenant: {},
+  role_profile: {},
 };
 
-function buildInitialFormData(user, config, context) {
-  return config.sections.reduce((formData, section) => {
-    for (const field of section.fields) {
-      const sourceData =
-        field.source === "user"
-          ? user
-          : field.source === "tenant"
-            ? context.tenant
-            : context.roleProfile;
-      formData[field.name] = sourceData?.[field.name] ?? "";
-    }
-    return formData;
-  }, {});
-}
+const toFormData = (schemaData) => ({
+  user: { ...(schemaData?.values?.user || {}) },
+  tenant: { ...(schemaData?.values?.tenant || {}) },
+  role_profile: { ...(schemaData?.values?.role_profile || {}) },
+});
 
-function getFieldValueForSave(field, value) {
-  if (field.readOnly) return undefined;
-  return value === "" ? null : value;
-}
-
-function groupFieldsBySource(fields) {
-  return fields.reduce((grouped, field) => {
-    if (!grouped[field.source]) grouped[field.source] = [];
-    grouped[field.source].push(field);
-    return grouped;
-  }, {});
-}
+const toFieldKey = (field) => `${field.source}.${field.name}`;
 
 function ReadOnlyField({ field, value }) {
   return (
@@ -69,9 +39,8 @@ function EditableField({ field, value, error, onChange }) {
           {field.label}
         </label>
         <select
-          name={field.name}
           value={value ?? ""}
-          onChange={onChange}
+          onChange={(event) => onChange(field, event.target.value)}
           className="input-base"
           required={field.required}
         >
@@ -95,9 +64,8 @@ function EditableField({ field, value, error, onChange }) {
           {field.label}
         </label>
         <textarea
-          name={field.name}
           value={value ?? ""}
-          onChange={onChange}
+          onChange={(event) => onChange(field, event.target.value)}
           className="input-base min-h-24"
           required={field.required}
           placeholder={field.placeholder}
@@ -112,10 +80,9 @@ function EditableField({ field, value, error, onChange }) {
     <div>
       <Input
         label={field.label}
-        name={field.name}
         type={field.type || "text"}
         value={value ?? ""}
-        onChange={onChange}
+        onChange={(event) => onChange(field, event.target.value)}
         error={error}
         required={field.required}
         placeholder={field.placeholder}
@@ -127,90 +94,94 @@ function EditableField({ field, value, error, onChange }) {
 
 function ProfileCompletionForm({
   user,
-  role,
   submitLabel = "Save profile",
   onSaved,
   onProfileStateResolved,
-  initialContext = EMPTY_CONTEXT,
+  initialSchemaData = null,
 }) {
-  const roleConfig = useMemo(() => getRoleProfileConfig(role), [role]);
-  const allFields = useMemo(
-    () => roleConfig.sections.flatMap((section) => section.fields),
-    [roleConfig.sections]
-  );
-  const fieldsBySource = useMemo(() => groupFieldsBySource(allFields), [allFields]);
   const callbacksRef = useRef({ onSaved, onProfileStateResolved });
-  const hasInitialContextData = Boolean(initialContext?.tenant || initialContext?.roleProfile);
-  const [context, setContext] = useState(() => (hasInitialContextData ? initialContext : EMPTY_CONTEXT));
-  const [formData, setFormData] = useState(() =>
-    buildInitialFormData(user, roleConfig, hasInitialContextData ? initialContext : EMPTY_CONTEXT)
-  );
+  const [schemaData, setSchemaData] = useState(initialSchemaData);
+  const [formData, setFormData] = useState(() => toFormData(initialSchemaData));
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitError, setSubmitError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingContext, setIsLoadingContext] = useState(!hasInitialContextData);
+  const [isLoadingSchema, setIsLoadingSchema] = useState(!initialSchemaData);
 
   useEffect(() => {
     callbacksRef.current = { onSaved, onProfileStateResolved };
   }, [onSaved, onProfileStateResolved]);
 
   useEffect(() => {
+    if (!initialSchemaData) return;
+
+    setSchemaData(initialSchemaData);
+    setFormData(toFormData(initialSchemaData));
+    callbacksRef.current.onProfileStateResolved?.({
+      completed: Boolean(initialSchemaData.profile_completed),
+    });
+    setIsLoadingSchema(false);
+  }, [initialSchemaData]);
+
+  useEffect(() => {
     let mounted = true;
 
-    async function loadContext() {
-      if (hasInitialContextData) {
-        setContext(initialContext);
-        setFormData(buildInitialFormData(user, roleConfig, initialContext));
-        callbacksRef.current.onProfileStateResolved?.(
-          evaluateOnboardingState(role, user, initialContext)
-        );
-        setIsLoadingContext(false);
+    async function loadSchema() {
+      if (initialSchemaData || !user?.id) {
+        if (!initialSchemaData) {
+          setSchemaData(null);
+          setFormData(EMPTY_FORM_DATA);
+          setIsLoadingSchema(false);
+        }
         return;
       }
 
-      setIsLoadingContext(true);
+      setIsLoadingSchema(true);
 
       try {
-        const nextContext = await loadRoleProfileContext(role, user);
+        const nextSchema = await userService.getProfileCompletionSchema();
         if (!mounted) return;
 
-        setContext(nextContext);
-        setFormData(buildInitialFormData(user, roleConfig, nextContext));
-
-        callbacksRef.current.onProfileStateResolved?.(
-          evaluateOnboardingState(role, user, nextContext)
-        );
-      } catch {
+        setSchemaData(nextSchema);
+        setFormData(toFormData(nextSchema));
+        callbacksRef.current.onProfileStateResolved?.({
+          completed: Boolean(nextSchema.profile_completed),
+        });
+      } catch (error) {
         if (!mounted) return;
-        setContext(EMPTY_CONTEXT);
-        setFormData(buildInitialFormData(user, roleConfig, EMPTY_CONTEXT));
-        callbacksRef.current.onProfileStateResolved?.(
-          evaluateOnboardingState(role, user, EMPTY_CONTEXT)
-        );
+        const parsed = parseApiError(error, "Failed to load your profile form.");
+        setSubmitError(parsed.message);
       } finally {
-        if (mounted) setIsLoadingContext(false);
+        if (mounted) setIsLoadingSchema(false);
       }
     }
 
-    loadContext();
+    loadSchema();
 
     return () => {
       mounted = false;
     };
-  }, [hasInitialContextData, initialContext, role, roleConfig, user]);
+  }, [initialSchemaData, user?.id]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: value }));
-    setFieldErrors((current) => ({ ...current, [name]: undefined }));
+  const handleChange = (field, value) => {
+    setFormData((current) => ({
+      ...current,
+      [field.source]: {
+        ...(current[field.source] || {}),
+        [field.name]: value,
+      },
+    }));
+    setFieldErrors((current) => ({
+      ...current,
+      [toFieldKey(field)]: undefined,
+    }));
     setSubmitError(null);
     setSuccessMessage(null);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!user?.id) return;
+    if (!schemaData) return;
 
     setIsSubmitting(true);
     setFieldErrors({});
@@ -218,61 +189,27 @@ function ProfileCompletionForm({
     setSuccessMessage(null);
 
     try {
-      let updatedUser = null;
-      let updatedTenant = context.tenant;
-      let updatedRoleProfile = context.roleProfile;
+      const payload = {};
 
-      const userFields = fieldsBySource.user || [];
-      if (userFields.length > 0) {
-        const userPayload = userFields.reduce((payload, field) => {
-          const nextValue = getFieldValueForSave(field, formData[field.name]);
-          if (nextValue !== undefined) payload[field.name] = nextValue;
-          return payload;
-        }, {});
-        updatedUser = await userService.updateProfile(user.id, userPayload);
+      for (const section of schemaData.sections || []) {
+        for (const field of section.fields || []) {
+          if (field.read_only) continue;
+
+          if (!payload[field.source]) payload[field.source] = {};
+          const rawValue = formData?.[field.source]?.[field.name];
+          payload[field.source][field.name] = rawValue === "" ? null : rawValue;
+        }
       }
 
-      const tenantFields = fieldsBySource.tenant || [];
-      if (tenantFields.length > 0 && user?.tenant_id) {
-        const tenantPayload = tenantFields.reduce((payload, field) => {
-          const nextValue = getFieldValueForSave(field, formData[field.name]);
-          if (nextValue !== undefined) payload[field.name] = nextValue;
-          return payload;
-        }, {});
-        updatedTenant = await tenantService.updateTenant(user.tenant_id, tenantPayload);
-      }
-
-      const roleFields = (fieldsBySource.roleProfile || []).filter((field) => !field.readOnly);
-      if (roleFields.length > 0 && typeof roleConfig.saveRoleProfile === "function") {
-        const rolePayload = roleFields.reduce((payload, field) => {
-          const nextValue = getFieldValueForSave(field, formData[field.name]);
-          if (nextValue !== undefined) payload[field.name] = nextValue;
-          return payload;
-        }, {});
-        updatedRoleProfile = await roleConfig.saveRoleProfile(rolePayload);
-      } else if (typeof roleConfig.saveRoleProfile === "function") {
-        updatedRoleProfile = context.roleProfile;
-      }
-
-      const nextUser = {
-        ...user,
-        ...(updatedUser || {}),
-        tenant: updatedTenant || null,
-      };
-
-      authSession.setUser(nextUser);
-      setContext({
-        tenant: updatedTenant || null,
-        roleProfile: updatedRoleProfile || null,
-      });
+      const response = await userService.submitProfileCompletion(payload);
+      authSession.setUser(response.user);
+      setSchemaData(response);
+      setFormData(toFormData(response));
       setSuccessMessage("Profile updated successfully.");
-      callbacksRef.current.onProfileStateResolved?.(
-        evaluateOnboardingState(role, nextUser, {
-          tenant: updatedTenant || null,
-          roleProfile: updatedRoleProfile || null,
-        })
-      );
-      callbacksRef.current.onSaved?.(nextUser);
+      callbacksRef.current.onProfileStateResolved?.({
+        completed: Boolean(response.profile_completed),
+      });
+      callbacksRef.current.onSaved?.(response.user, response);
     } catch (error) {
       const parsed = parseApiError(error, "Failed to update your profile.");
       setFieldErrors(parsed.fieldErrors || {});
@@ -295,45 +232,47 @@ function ProfileCompletionForm({
         </div>
       )}
 
-      {roleConfig.sections.map((section) => (
+      {(schemaData?.sections || []).map((section) => (
         <div key={section.key} className="space-y-4 rounded-2xl border border-border bg-surface-muted/40 p-4">
           <div>
-            <h3 className="text-sm font-semibold text-text">
-              {section.title || `${titleCase(role)} profile details`}
-            </h3>
+            <h3 className="text-sm font-semibold text-text">{section.title}</h3>
             {section.description && (
               <p className="mt-1 text-xs text-text-muted">{section.description}</p>
             )}
           </div>
 
-          {isLoadingContext ? (
+          {isLoadingSchema ? (
             <p className="text-sm text-text-muted">Loading profile details...</p>
           ) : (
-            section.fields.map((field) =>
-              field.readOnly ? (
-                <ReadOnlyField key={`${section.key}-${field.name}`} field={field} value={formData[field.name]} />
+            section.fields.map((field) => {
+              const value = formData?.[field.source]?.[field.name] ?? "";
+              const errorKey = `${field.source}.${field.name}`;
+
+              return field.read_only ? (
+                <ReadOnlyField
+                  key={`${section.key}-${field.source}-${field.name}`}
+                  field={field}
+                  value={value}
+                />
               ) : (
                 <EditableField
-                  key={`${section.key}-${field.name}`}
+                  key={`${section.key}-${field.source}-${field.name}`}
                   field={field}
-                  value={formData[field.name]}
-                  error={fieldErrors[field.name]}
+                  value={value}
+                  error={fieldErrors[errorKey]}
                   onChange={handleChange}
                 />
-              )
-            )
+              );
+            })
           )}
         </div>
       ))}
 
-      <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting || isLoadingContext}>
+      <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting || isLoadingSchema || !schemaData}>
         {isSubmitting ? "Saving..." : submitLabel}
       </Button>
     </form>
   );
 }
 
-ProfileCompletionForm.getRoleProfileConfig = getRoleProfileConfig;
-
-export { getRoleProfileConfig };
 export default ProfileCompletionForm;

@@ -14,10 +14,10 @@ from sqlalchemy import (
     Text,
     Enum as SQLEnum,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
+from sqlalchemy.dialects.postgresql import  JSONB, ARRAY
 from sqlalchemy.orm import  Mapped, mapped_column
 from app.shared.mixins import TimestampMixin, UUIDMixin
-from app.shared.base_model import BaseModel, Base, PUBLIC_SCHEMA
+from app.shared.base_model import  Base, PUBLIC_SCHEMA
 from typing import List
 
 
