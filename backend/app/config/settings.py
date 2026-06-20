@@ -9,11 +9,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DEV_DATABASE_URL = "postgresql+asyncpg://postgres:252236@localhost:5433/learnly_local"
 
 
 class EnvironmentType(str, Enum): 
@@ -44,7 +45,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = Field(default="HS256", description="JWT signing algorithm")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    DATABASE_URL: str = Field(..., description="PostgreSQL connection URL")
+    DATABASE_URL: str | None = Field(
+        default=None,
+        description="PostgreSQL connection URL",
+    )
 
     GEMINI_API_KEY: str | None = Field(default=None, description="Api Key for Gemini")
     GEMINI_MODEL: str = "gemini-2.5-flash"
@@ -81,6 +85,18 @@ class Settings(BaseSettings):
     FRONTEND_APP_URL: str = "http://localhost:5173"
 
     APP_SCRIPT_URL : str = Field(...,)
+
+    @model_validator(mode="after")
+    def apply_database_url_for_environment(self) -> "Settings":
+        """Select the correct database URL for the active environment."""
+        if self.ENV == EnvironmentType.DEVELOPMENT:
+            self.DATABASE_URL = DEV_DATABASE_URL
+            return self
+
+        if not self.DATABASE_URL:
+            raise ValueError("DATABASE_URL must be set when ENV is not dev.")
+
+        return self
 
     @computed_field  #creates and compute the value of this property method
     @property

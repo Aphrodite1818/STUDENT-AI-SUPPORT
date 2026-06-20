@@ -108,6 +108,11 @@ class TenantService:
 
         if tenant is not None and tenant.is_deleted:
             return EmailRegistrationState.DELETED
+        
+
+        
+        if tenant is not None and tenant.verification_status == TenantVerificationStatus.REJECTED:
+            return EmailRegistrationState.REJECTED
 
         if user is None and tenant is None:
             return EmailRegistrationState.AVAILABLE
@@ -122,8 +127,6 @@ class TenantService:
         ):
             return EmailRegistrationState.PENDING
 
-        if tenant is not None and tenant.verification_status == TenantVerificationStatus.REJECTED:
-            return EmailRegistrationState.REJECTED
 
         return EmailRegistrationState.ACTIVE
 
