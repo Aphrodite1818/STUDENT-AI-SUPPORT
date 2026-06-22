@@ -4,7 +4,7 @@
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import Enum as PyEnum
 
 from sqlalchemy import (
     Boolean,
@@ -23,7 +23,7 @@ from typing import List
 
 
 
-class TenantStatus(str, Enum):
+class TenantStatus(str, PyEnum):
     """Represent the lifecycle state of a tenant account."""
     ACTIVE    = "active"
     INACTIVE  = "inactive"
@@ -32,7 +32,7 @@ class TenantStatus(str, Enum):
     EXPIRED   = "expired"        # subscription lapsed
 
 
-class SubscriptionPlan(str, Enum):
+class SubscriptionPlan(str, PyEnum):
     """Represents the subscription plan options for a tenant (school)."""
     FREE       = "free"
     STARTER    = "starter"
@@ -41,7 +41,7 @@ class SubscriptionPlan(str, Enum):
 
 
 
-class TenantVerificationStatus(str , Enum):
+class TenantVerificationStatus(str , PyEnum):
     """Represent a tenant's verification state during onboarding."""
     PENDING_VERIFICATION = "pending_verification"
     ACTIVE = "active"
@@ -93,12 +93,22 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
 
     # ── Status & subscription ────────────────────────────────────────────────
     status: Mapped[TenantStatus] = mapped_column(
-        SQLEnum(TenantStatus, name="tenantstatus", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            TenantStatus,
+            name="tenantstatus",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=TenantStatus.TRIAL,   # new schools start on trial
         nullable=False,
     )
     plan: Mapped[SubscriptionPlan] = mapped_column(
-        SQLEnum(SubscriptionPlan, name="subscriptionplan", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            SubscriptionPlan,
+            name="subscriptionplan",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=SubscriptionPlan.FREE,
         nullable=False,
     )
@@ -150,6 +160,7 @@ class Tenant(UUIDMixin, TimestampMixin, Base):
             TenantVerificationStatus,
             name="tenantverificationstatus",
             schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
         ),
         nullable=False,
         default=TenantVerificationStatus.PENDING_VERIFICATION,

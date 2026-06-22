@@ -2,6 +2,8 @@
 #     tenant_management/schemas.py       #
 # ====================================== #
 
+"""Tenant management request and response schemas."""
+
 import uuid
 from datetime import datetime
 from typing import Any
@@ -31,8 +33,9 @@ PHONE_PATTERN = r"^\+?[1-9]\d{7,14}$"
 # SHARED BASE CONFIGS
 # ──────────────────────────────────────────────
 
+
 class InputBase(BaseModel):
-    """Base for all request/input schemas."""
+    """Base class for tenant request schemas."""
 
     model_config = ConfigDict(
         str_strip_whitespace=True,
@@ -42,7 +45,7 @@ class InputBase(BaseModel):
 
 
 class OutputBase(BaseModel):
-    """Base for all response/output schemas."""
+    """Base class for tenant response schemas."""
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -53,11 +56,13 @@ class OutputBase(BaseModel):
 
 
 # ──────────────────────────────────────────────
-# SHARED VALIDATORS
+# SHARED HELPERS
 # ──────────────────────────────────────────────
 
+
 def _clean_optional_string(value: str | None) -> str | None:
-    """Internal helper for clean optional string."""
+    """Trim optional string fields and convert empty strings to None."""
+
     if value is None:
         return None
 
@@ -66,11 +71,13 @@ def _clean_optional_string(value: str | None) -> str | None:
 
 
 # ──────────────────────────────────────────────
-# SCHEMAS
+# BASE TENANT SCHEMAS
 # ──────────────────────────────────────────────
 
+
 class TenantBase(InputBase):
-    """Pydantic schema for the tenant management domain."""
+    """Shared tenant/school profile fields."""
+
     school_name: str = Field(
         ...,
         min_length=3,
@@ -90,12 +97,17 @@ class TenantBase(InputBase):
     logo_url: HttpUrl | None = None
     timezone: str = Field(default="Africa/Lagos", max_length=50)
     language: str = Field(default="en", max_length=10)
-    admission_number_prefix: str | None = Field(default=None, min_length=2, max_length=20)
+    admission_number_prefix: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=20,
+    )
 
     @field_validator("school_name")
     @classmethod
     def validate_school_name(cls, value: str) -> str:
-        """Validate school name."""
+        """Validate and clean school name."""
+
         if not value.strip():
             raise ValueError("school_name cannot be empty")
         return value.strip()
@@ -113,20 +125,35 @@ class TenantBase(InputBase):
     )
     @classmethod
     def clean_text_fields(cls, value: str | None) -> str | None:
-        """Normalize text fields."""
+        """Clean optional tenant text fields."""
+
         return _clean_optional_string(value)
 
     @field_validator("admission_number_prefix")
     @classmethod
     def normalize_admission_number_prefix(cls, value: str | None) -> str | None:
-        """Normalize the tenant admission number prefix."""
+        """Uppercase admission number prefix when provided."""
+
         if value is None:
             return None
         return value.upper()
 
 
+# ──────────────────────────────────────────────
+# REQUEST SCHEMAS
+# ──────────────────────────────────────────────
+
+
 class TenantRegisterRequest(InputBase):
-    """Pydantic schema for the tenant management domain."""
+    """Schema for public tenant registration.
+
+    This request creates:
+    - Tenant
+    - TenantAdmin
+    - AuthIdentity
+    - Verification OTP
+    """
+
     school_name: str = Field(
         ...,
         min_length=3,
@@ -134,14 +161,24 @@ class TenantRegisterRequest(InputBase):
         examples=["GreenField Academy Lagos"],
     )
     email: EmailStr
-    password: str = Field(..., min_length=8, description="Admin user password")
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        description="Tenant admin password",
+    )
     slug: str | None = None
-    admission_number_prefix: str | None = Field(default=None, min_length=2, max_length=20)
+    admission_number_prefix: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=20,
+    )
 
     @field_validator("school_name")
     @classmethod
     def validate_school_name(cls, value: str) -> str:
-        """Validate school name."""
+        """Validate and clean school name."""
+
         if not value.strip():
             raise ValueError("school_name cannot be empty")
         return value.strip()
@@ -149,32 +186,38 @@ class TenantRegisterRequest(InputBase):
     @field_validator("slug", mode="before")
     @classmethod
     def clean_slug(cls, value: str | None) -> str | None:
-        """Normalize slug."""
+        """Clean optional slug."""
+
         return _clean_optional_string(value)
 
     @field_validator("admission_number_prefix", mode="before")
     @classmethod
     def clean_admission_number_prefix(cls, value: str | None) -> str | None:
-        """Normalize admission number prefix."""
+        """Clean optional admission number prefix."""
+
         return _clean_optional_string(value)
 
     @field_validator("admission_number_prefix")
     @classmethod
-    def normalize_register_admission_number_prefix(cls, value: str | None) -> str | None:
-        """Uppercase the admission number prefix."""
+    def normalize_register_admission_number_prefix(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Uppercase admission number prefix when provided."""
+
         if value is None:
             return None
         return value.upper()
 
 
 class TenantCreate(TenantBase):
-    """Pydantic schema for the tenant management domain."""
+    """Schema for internal tenant creation."""
+
     school_bot_whatssap_number: str | None = Field(
         default=None,
         pattern=PHONE_PATTERN,
-        description="The whatssap number the school bot would listen on",
+        description="The WhatsApp number the school bot listens on",
     )
-
     plan: SubscriptionPlan = SubscriptionPlan.FREE
     max_students: int = Field(default=500, ge=1, le=100_000)
     max_teachers: int = Field(default=50, ge=1, le=100_000)
@@ -182,37 +225,42 @@ class TenantCreate(TenantBase):
     @field_validator("school_bot_whatssap_number", mode="before")
     @classmethod
     def clean_school_bot_whatssap_number(cls, value: str | None) -> str | None:
-        """Normalize school bot whatssap number."""
+        """Clean optional school bot WhatsApp number."""
+
         return _clean_optional_string(value)
 
     @computed_field
     @property
     def log_slug_preview(self) -> str:
-        """Return the generated slug preview without persisting it."""
+        """Return generated slug preview without persisting it."""
+
         return generate_slug(self.school_name)
 
 
 class TenantUpdate(InputBase):
-    """Pydantic schema for the tenant management domain."""
+    """Schema for general tenant/school profile updates."""
+
     school_name: str | None = Field(default=None, min_length=2, max_length=255)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
     address: str | None = Field(default=None, max_length=500)
     city: str | None = Field(default=None, max_length=100)
     state: str | None = Field(default=None, max_length=100)
-    country: str = Field(default="Nigeria", max_length=100)
+    country: str | None = Field(default=None, max_length=100)
     logo_url: HttpUrl | None = None
-    timezone: str = Field(default="Africa/Lagos", max_length=50)
-    language: str = Field(default="en", max_length=10)
-    admission_number_prefix: str | None = Field(default=None, min_length=2, max_length=20)
-
+    timezone: str | None = Field(default=None, max_length=50)
+    language: str | None = Field(default=None, max_length=10)
+    admission_number_prefix: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=20,
+    )
     school_bot_whatssap_number: str | None = Field(
         default=None,
         pattern=PHONE_PATTERN,
-        description="The whatssap number the school bot would listen on",
+        description="The WhatsApp number the school bot listens on",
     )
-
-    onboarding_completed: bool | None = True
+    onboarding_completed: bool | None = None
 
     @field_validator(
         "school_name",
@@ -229,37 +277,83 @@ class TenantUpdate(InputBase):
     )
     @classmethod
     def clean_text_fields(cls, value: str | None) -> str | None:
-        """Normalize text fields."""
+        """Clean optional update text fields."""
+
         return _clean_optional_string(value)
 
     @field_validator("admission_number_prefix")
     @classmethod
-    def normalize_update_admission_number_prefix(cls, value: str | None) -> str | None:
-        """Uppercase the admission number prefix."""
+    def normalize_update_admission_number_prefix(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        """Uppercase admission number prefix when provided."""
+
         if value is None:
             return None
         return value.upper()
 
 
+class TenantOnboardingUpdate(InputBase):
+    """Schema for first-time tenant onboarding completion."""
+
+    phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
+    address: str = Field(..., min_length=3, max_length=500)
+    city: str = Field(..., min_length=2, max_length=100)
+    state: str = Field(..., min_length=2, max_length=100)
+    country: str = Field(default="Nigeria", max_length=100)
+    logo_url: HttpUrl | None = None
+    timezone: str = Field(default="Africa/Lagos", max_length=50)
+    language: str = Field(default="en", max_length=10)
+    school_bot_whatssap_number: str | None = Field(
+        default=None,
+        pattern=PHONE_PATTERN,
+        description="The WhatsApp number the school bot listens on",
+    )
+
+    @field_validator(
+        "phone",
+        "address",
+        "city",
+        "state",
+        "country",
+        "timezone",
+        "language",
+        "school_bot_whatssap_number",
+        mode="before",
+    )
+    @classmethod
+    def clean_text_fields(cls, value: str | None) -> str | None:
+        """Clean onboarding text fields."""
+
+        return _clean_optional_string(value)
+
+
 class TenantStatusUpdate(InputBase):
-    """Pydantic schema for the tenant management domain."""
+    """Schema for changing tenant status."""
+
     status: TenantStatus
     reason: str | None = Field(
         default=None,
         max_length=500,
-        description="reason why the tenant status update is happening",
+        description="Reason why the tenant status update is happening",
     )
 
     @field_validator("reason", mode="before")
     @classmethod
     def clean_reason(cls, value: str | None) -> str | None:
-        """Normalize reason."""
+        """Clean optional status update reason."""
+
         return _clean_optional_string(value)
 
 
+# ──────────────────────────────────────────────
+# RESPONSE SCHEMAS
+# ──────────────────────────────────────────────
+
+
 class TenantPublicResponse(OutputBase):
-    """Pydantic schema for the tenant management domain."""
-   
+    """Public tenant response schema."""
 
     id: uuid.UUID
     school_name: str
@@ -283,8 +377,9 @@ class TenantPublicResponse(OutputBase):
     updated_at: datetime
 
 
-class TenantAdminResponse(TenantPublicResponse):
-    """Pydantic schema for the tenant management domain."""
+class TenantManagementResponse(TenantPublicResponse):
+    """Detailed tenant response schema for tenant/admin management."""
+
     max_students: int
     max_teachers: int
     feature_flags: dict[str, Any] | None
@@ -295,11 +390,13 @@ class TenantAdminResponse(TenantPublicResponse):
 
 
 class TenantContext(OutputBase):
-    """Represent the TenantContext type."""
+    """Tenant context used by authenticated tenant actors."""
+
     id: uuid.UUID
     slug: str
     school_name: str
     status: TenantStatus
+    verification_status: TenantVerificationStatus
     plan: SubscriptionPlan
     timezone: str
     language: str
@@ -307,13 +404,22 @@ class TenantContext(OutputBase):
     max_students: int
     max_teachers: int
     feature_flags: dict[str, Any] | None
+    onboarding_completed: bool
 
     @property
     def is_active(self) -> bool:
-        """Return whether active."""
+        """Return whether tenant is active."""
+
         return self.status == TenantStatus.ACTIVE
 
     @property
+    def is_verified(self) -> bool:
+        """Return whether tenant is verified."""
+
+        return self.verification_status == TenantVerificationStatus.ACTIVE
+
+    @property
     def whatsapp_enabled(self) -> bool:
-        """Return the whatsapp_enabled value for the tenantcontext."""
+        """Return whether WhatsApp bot is enabled."""
+
         return bool(self.feature_flags and self.feature_flags.get("whatsapp_bot"))

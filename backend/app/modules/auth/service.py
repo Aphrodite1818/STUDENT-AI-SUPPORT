@@ -44,8 +44,12 @@ from app.modules.auth.schemas import (
     UpdatePassword,
     VerifyOTP,
 )
+from app.modules.auth_identity.models import ActorType, IdentifierType
+from app.modules.auth_identity.service import AuthIdentityService
 from app.modules.superadmin.models import SuperAdmin
 from app.modules.superadmin.repository import SuperAdminRepository
+from app.modules.tenant_admins.models import TenantAdmin, TenantAdminStatus
+from app.modules.tenant_admins.repository import TenantAdminRepository
 from app.modules.users.models import AccountStatus, User, UserRole
 from app.modules.users.repository import UserRepository
 from app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
@@ -89,6 +93,73 @@ async def _authenticate_superadmin(
     await SuperAdminRepository.save(db, superadmin)
     await db.commit()
     return superadmin
+
+
+async def _authenticate_tenant_admin(
+    db: AsyncSession,
+    *,
+    email: str,
+    password: str,
+    background_tasks: BackgroundTasks | None = None,
+) -> TenantAdmin | None:
+    """Authenticate a tenant admin through AuthIdentity."""
+
+    normalized_email = _normalize_email(email)
+
+    try:
+        resolution = await AuthIdentityService.resolve_identifier(
+            db=db,
+            identifier=normalized_email,
+            identifier_type=IdentifierType.EMAIL,
+        )
+    except NotFoundException:
+        return None
+
+    if resolution.actor_type != ActorType.TENANT_ADMIN:
+        return None
+
+    admin = await TenantAdminRepository.get_by_id(
+        db=db,
+        admin_id=resolution.actor_id,
+    )
+    if admin is None or admin.tenant_id != resolution.tenant_id:
+        raise UnauthorizedException("Account not found")
+
+    if not verify_password(password, admin.password_hash):
+        raise UnauthorizedException("Invalid email or password")
+
+    tenant = await TenantRepository.get_by_id(db, admin.tenant_id)
+    if tenant is None:
+        raise UnauthorizedException("Account not found")
+
+    if tenant.verification_status == TenantVerificationStatus.PENDING_VERIFICATION:
+        await AuthService._raise_verification_required(
+            db,
+            email=normalized_email,
+            background_tasks=background_tasks,
+        )
+
+    if tenant.verification_status == TenantVerificationStatus.REJECTED:
+        raise UnauthorizedException("Account has been rejected. Please contact support.")
+
+    if not _tenant_allows_login(tenant):
+        raise UnauthorizedException("Account is not active")
+
+    if not admin.is_active or admin.account_status != TenantAdminStatus.ACTIVE:
+        raise UnauthorizedException("Account is not active")
+
+    if not admin.is_verified:
+        await AuthService._raise_verification_required(
+            db,
+            email=normalized_email,
+            background_tasks=background_tasks,
+        )
+
+    admin.last_login_at = datetime.now(timezone.utc)
+    await TenantAdminRepository.save(db, admin)
+    await db.commit()
+
+    return admin
 
 
 def _tenant_allows_login(tenant: Tenant | None) -> bool:
@@ -139,10 +210,11 @@ def _user_can_reset_password(user: User | None, tenant: Tenant | None) -> bool:
 @dataclass
 class AuthenticatedActor:
     """Represent the AuthenticatedActor type."""
+    actor_type: str
     account_type: str
     actor_id: uuid.UUID
     email: str
-    role: str
+    role: str | None = None
     tenant_id: uuid.UUID | None = None
 
 
@@ -245,10 +317,26 @@ class AuthService:
         )
         if superadmin is not None:
             return AuthenticatedActor(
+                actor_type="superadmin",
                 account_type="superadmin",
                 actor_id=superadmin.id,
                 email=superadmin.email,
                 role="superadmin",
+            )
+
+        tenant_admin = await _authenticate_tenant_admin(
+            db,
+            email=payload.email,
+            password=payload.password,
+            background_tasks=background_tasks,
+        )
+        if tenant_admin is not None:
+            return AuthenticatedActor(
+                actor_type=ActorType.TENANT_ADMIN.value,
+                account_type=ActorType.TENANT_ADMIN.value,
+                actor_id=tenant_admin.id,
+                email=tenant_admin.email,
+                tenant_id=tenant_admin.tenant_id,
             )
 
         user = await UserRepository.get_user_by_email(db, payload.email)
@@ -297,6 +385,7 @@ class AuthService:
             raise UnauthorizedException("Account is not active")
 
         return AuthenticatedActor(
+            actor_type="tenant_user",
             account_type="tenant_user",
             actor_id=user.id,
             email=user.email,
@@ -805,21 +894,107 @@ class OTPService:
     """Business logic for the auth domain."""
 
     @staticmethod
+    async def _get_verification_target(
+        db: AsyncSession,
+        email: str,
+        *,
+        lock: bool = False,
+    ) -> tuple[TenantAdmin, Tenant]:
+        """Resolve a verification email to its tenant admin and tenant."""
+
+        normalized_email = _normalize_email(email)
+
+        try:
+            resolution = await AuthIdentityService.resolve_identifier(
+                db=db,
+                identifier=normalized_email,
+                identifier_type=IdentifierType.EMAIL,
+            )
+        except NotFoundException as exc:
+            raise NotFoundException("Tenant admin with this email not found.") from exc
+
+        if resolution.actor_type != ActorType.TENANT_ADMIN:
+            raise BadRequestException(
+                "OTP verification is only available for tenant admin signup accounts."
+            )
+
+        admin_query = select(TenantAdmin).where(TenantAdmin.id == resolution.actor_id)
+        tenant_query = select(Tenant).where(Tenant.id == resolution.tenant_id)
+
+        if lock:
+            admin_query = admin_query.with_for_update()
+            tenant_query = tenant_query.with_for_update()
+
+        admin_result = await db.execute(admin_query)
+        admin = admin_result.scalar_one_or_none()
+        if admin is None:
+            raise NotFoundException("Tenant admin not found.")
+
+        tenant_result = await db.execute(tenant_query)
+        tenant = tenant_result.scalar_one_or_none()
+        if tenant is None:
+            raise NotFoundException("Tenant not found.")
+
+        if admin.tenant_id != tenant.id:
+            raise BadRequestException(
+                "OTP verification is not available for this account."
+            )
+
+        return admin, tenant
+
+    @staticmethod
+    def _ensure_verification_target_allowed(
+        admin: TenantAdmin,
+        tenant: Tenant,
+    ) -> None:
+        """Validate whether a tenant admin can complete OTP verification."""
+
+        if admin.account_status != TenantAdminStatus.PENDING or admin.is_verified:
+            raise BadRequestException(
+                "OTP verification is not available for this account."
+            )
+
+        if tenant.verification_status == TenantVerificationStatus.REJECTED:
+            raise BadRequestException("Tenant verification has been rejected.")
+
+        if not _tenant_allows_otp_verification(tenant):
+            raise BadRequestException(
+                "OTP verification is not available for this account."
+            )
+
+    @staticmethod
     async def _replace_otp_record(
         db: AsyncSession,
         payload: RequestOTP,
         otp_code: str,
         expires_at: datetime,
-    ) -> User:
+    ) -> None:
         """Internal helper for replace otp record."""
         normalized_email = _normalize_email(payload.email)
-        result = await db.execute(
-            select(User).where(func.lower(User.email) == normalized_email).with_for_update()
-        )
-        user = result.scalar_one_or_none()
 
-        if not user:
-            raise NotFoundException("User with this email not found.")
+        if payload.purpose == AuthPurpose.VERIFICATION:
+            admin, _tenant = await OTPService._get_verification_target(
+                db,
+                normalized_email,
+                lock=True,
+            )
+            record_email = admin.email
+            tenant_id = admin.tenant_id
+        elif payload.purpose == AuthPurpose.PASSWORD_RESET:
+            result = await db.execute(
+                select(User).where(
+                    func.lower(User.email) == normalized_email
+                ).with_for_update()
+            )
+            user = result.scalar_one_or_none()
+
+            if not user:
+                raise NotFoundException("User with this email not found.")
+
+            record_email = user.email
+            tenant_id = user.tenant_id
+        else:
+            raise BadRequestException(f"Unhandled OTP purpose : {payload.purpose}")
 
         await db.execute(
             delete(AuthRecord).where(
@@ -830,15 +1005,14 @@ class OTPService:
 
         db.add(
             AuthRecord(
-                email=user.email,
+                email=record_email,
                 hashed_value=hash_otp(otp_code),
                 purpose=payload.purpose,
                 expires_at=expires_at,
-                tenant_id=user.tenant_id,
+                tenant_id=tenant_id,
             )
         )
         await db.flush()
-        return user
 
     @staticmethod
     async def generate_otp(
@@ -849,41 +1023,34 @@ class OTPService:
         commit: bool = True,
     ) -> None:
         """Perform generate otp."""
-        existing_user = await UserRepository.get_user_by_email(db, payload.email)
-        if not existing_user:
-            raise NotFoundException("User with this email not found.")
-
-        tenant = await TenantRepository.get_by_id(db, existing_user.tenant_id)
-        if tenant is None:
-            raise NotFoundException("Tenant not found.")
+        normalized_email = _normalize_email(payload.email)
 
         if payload.purpose == AuthPurpose.VERIFICATION:
-            is_public_tenant_admin = (
-                existing_user.role == UserRole.ADMIN
-                and tenant.email.strip().lower() == existing_user.email.strip().lower()
+            admin, tenant = await OTPService._get_verification_target(
+                db,
+                normalized_email,
             )
-            if not is_public_tenant_admin:
-                raise BadRequestException(
-                    "OTP verification is only available for public tenant signup accounts."
-                )
-            if tenant.status == TenantStatus.INACTIVE:
-                raise BadRequestException(
-                    "Account activation must be completed from the invite link sent to your email."
-                )
-            if not _tenant_allows_otp_verification(tenant):
-                raise BadRequestException(
-                    "OTP verification is not available for this account."
-                )
+            OTPService._ensure_verification_target_allowed(admin, tenant)
+        elif payload.purpose == AuthPurpose.PASSWORD_RESET:
+            # Password reset remains on the legacy User flow for now.
+            existing_user = await UserRepository.get_user_by_email(db, normalized_email)
+            if not existing_user:
+                raise NotFoundException("User with this email not found.")
 
-        if payload.purpose == AuthPurpose.PASSWORD_RESET:
+            tenant = await TenantRepository.get_by_id(db, existing_user.tenant_id)
+            if tenant is None:
+                raise NotFoundException("Tenant not found.")
+
             if not _user_can_reset_password(existing_user, tenant):
                 raise BadRequestException(
                     "Password reset is not available for this account."
                 )
+        else:
+            raise BadRequestException(f"Unhandled OTP purpose : {payload.purpose}")
 
         rate_limiter = OTPRateLimiter()
         allowed, retry_after = rate_limiter.is_allowed(
-            _normalize_email(payload.email),
+            normalized_email,
             payload.purpose,
         )
 
@@ -953,40 +1120,32 @@ class OTPService:
         if otp_record.expires_at.replace(tzinfo=timezone.utc) < now:
             raise BadRequestException("OTP has expired")
 
-        user = await UserRepository.get_user_by_email(db, payload.email)
-        if not user:
-            raise NotFoundException("User not found")
-
-        tenant = await TenantRepository.get_by_id(db, user.tenant_id)
-        if not tenant:
-            raise NotFoundException("Tenant not found")
-
         response_data = {"detail": "OTP verified successfully"}
 
         if payload.purpose == AuthPurpose.VERIFICATION:
-            is_public_tenant_admin = (
-                user.role == UserRole.ADMIN
-                and tenant.email.strip().lower() == user.email.strip().lower()
+            admin, tenant = await OTPService._get_verification_target(
+                db,
+                normalized_email,
+                lock=True,
             )
-            if not is_public_tenant_admin:
-                raise BadRequestException(
-                    "OTP verification is only available for public tenant signup accounts."
-                )
+            OTPService._ensure_verification_target_allowed(admin, tenant)
 
-            if not _tenant_allows_otp_verification(tenant):
-                raise BadRequestException("OTP verification is not available for this account.")
-
-            if tenant.verification_status == TenantVerificationStatus.REJECTED:
-                raise BadRequestException("Tenant verification has been rejected.")
-
-            user.account_status = AccountStatus.ACTIVE
-            user.is_verified = True
+            admin.account_status = TenantAdminStatus.ACTIVE
+            admin.is_verified = True
             tenant.verification_status = TenantVerificationStatus.ACTIVE
             if tenant.status == TenantStatus.INACTIVE:
                 tenant.status = TenantStatus.TRIAL
             otp_record.is_used = True
 
         elif payload.purpose == AuthPurpose.PASSWORD_RESET:
+            user = await UserRepository.get_user_by_email(db, payload.email)
+            if not user:
+                raise NotFoundException("User not found")
+
+            tenant = await TenantRepository.get_by_id(db, user.tenant_id)
+            if not tenant:
+                raise NotFoundException("Tenant not found")
+
             if not _user_can_reset_password(user, tenant):
                 raise BadRequestException("Password reset is not available for this account.")
 

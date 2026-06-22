@@ -10,14 +10,14 @@ from app.modules.superadmin.models import SuperAdmin
 from app.modules.superadmin.schemas import SuperadminInviteCreate, SuperadminResponse
 from app.modules.superadmin.service import SuperadminService
 from app.tenant_management.models import Tenant
-from app.tenant_management.schemas import TenantAdminResponse, TenantCreate, TenantStatusUpdate
+from app.tenant_management.schemas import TenantManagementResponse, TenantCreate, TenantStatusUpdate
 
 
 router = APIRouter(prefix="/superadmin", tags=["Superadmin"])
 SuperadminActor: TypeAlias = Annotated[SuperAdmin, Depends(require_superadmin)]
 
 
-@router.post("/tenants", response_model=TenantAdminResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/tenants", response_model=TenantManagementResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     payload: TenantCreate,
     db: DbSession,
@@ -34,7 +34,7 @@ async def create_tenant(
     )
 
 
-@router.get("/tenants", response_model=list[TenantAdminResponse], status_code=status.HTTP_200_OK)
+@router.get("/tenants", response_model=list[TenantManagementResponse], status_code=status.HTTP_200_OK)
 async def list_tenants(
     db: DbSession,
     current_superadmin: SuperadminActor,
@@ -51,7 +51,7 @@ async def list_tenants(
     )
 
 
-@router.get("/tenants/{tenant_id}", response_model=TenantAdminResponse, status_code=status.HTTP_200_OK)
+@router.get("/tenants/{tenant_id}", response_model=TenantManagementResponse, status_code=status.HTTP_200_OK)
 async def get_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,
@@ -62,7 +62,7 @@ async def get_tenant(
     return await SuperadminService.get_tenant(db, tenant_id, include_deleted=include_deleted)
 
 
-@router.patch("/tenants/{tenant_id}/status", response_model=TenantAdminResponse, status_code=status.HTTP_200_OK)
+@router.patch("/tenants/{tenant_id}/status", response_model=TenantManagementResponse, status_code=status.HTTP_200_OK)
 async def update_tenant_status(
     tenant_id: uuid.UUID,
     payload: TenantStatusUpdate,
@@ -73,7 +73,7 @@ async def update_tenant_status(
     return await SuperadminService.update_tenant_status(db, tenant_id, payload)
 
 
-@router.patch("/tenants/{tenant_id}/restore", response_model=TenantAdminResponse, status_code=status.HTTP_200_OK)
+@router.patch("/tenants/{tenant_id}/restore", response_model=TenantManagementResponse, status_code=status.HTTP_200_OK)
 async def restore_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,

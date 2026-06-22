@@ -3,7 +3,7 @@
 #======================================#
 
 from datetime import datetime
-from enum import Enum
+from enum import Enum as PyEnum
 
 from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 
-class AuthPurpose(str, Enum):
+class AuthPurpose(str, PyEnum):
     """Enumeration of supported auth values."""
     VERIFICATION = "verification"
     PASSWORD_RESET = "password_reset"
@@ -26,7 +26,12 @@ class AuthRecord(BaseModel):
     email: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     hashed_value: Mapped[str] = mapped_column(String(255), nullable=False)
     purpose: Mapped[AuthPurpose] = mapped_column(
-        SQLEnum(AuthPurpose, name="otppurpose", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            AuthPurpose,
+            name="otppurpose",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

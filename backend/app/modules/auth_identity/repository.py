@@ -1,0 +1,140 @@
+# ====================================== #
+#      auth_identity/repository.py       #
+# ====================================== #
+
+"""Auth identity data access layer."""
+
+import uuid
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.auth_identity.models import (
+    ActorType,
+    AuthIdentity,
+    IdentifierType,
+)
+
+
+class AuthIdentityRepository:
+    """Database operations for AuthIdentity records."""
+
+    @staticmethod
+    async def create(
+        db: AsyncSession,
+        record: AuthIdentity,
+    ) -> AuthIdentity:
+        """Create an auth identity record."""
+
+        db.add(record)
+        await db.flush()
+        await db.refresh(record)
+        return record
+
+    @staticmethod
+    async def get_by_id(
+        db: AsyncSession,
+        identity_id: uuid.UUID,
+    ) -> AuthIdentity | None:
+        """Fetch an auth identity by its primary ID."""
+
+        result = await db.execute(
+            select(AuthIdentity).where(
+                AuthIdentity.id == identity_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_identifier(
+        db: AsyncSession,
+        identifier: str,
+        identifier_type: IdentifierType,
+    ) -> AuthIdentity | None:
+        """Fetch an identity by login identifier, active or inactive."""
+
+        result = await db.execute(
+            select(AuthIdentity).where(
+                func.lower(AuthIdentity.identifier) == identifier.strip().lower(),
+                AuthIdentity.identifier_type == identifier_type,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_active_by_identifier(
+        db: AsyncSession,
+        identifier: str,
+        identifier_type: IdentifierType,
+    ) -> AuthIdentity | None:
+        """Fetch an active identity by login identifier."""
+
+        result = await db.execute(
+            select(AuthIdentity).where(
+                func.lower(AuthIdentity.identifier) == identifier.strip().lower(),
+                AuthIdentity.identifier_type == identifier_type,
+                AuthIdentity.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_actor(
+        db: AsyncSession,
+        actor_type: ActorType,
+        actor_id: uuid.UUID,
+    ) -> AuthIdentity | None:
+        """Fetch an identity by actor type and actor ID."""
+
+        result = await db.execute(
+            select(AuthIdentity).where(
+                AuthIdentity.actor_type == actor_type,
+                AuthIdentity.actor_id == actor_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def identifier_exists(
+        db: AsyncSession,
+        identifier: str,
+        identifier_type: IdentifierType,
+        exclude_identity_id: uuid.UUID | None = None,
+    ) -> bool:
+        """Return True if a login identifier already exists."""
+
+        query = select(AuthIdentity.id).where(
+            func.lower(AuthIdentity.identifier) == identifier.strip().lower(),
+            AuthIdentity.identifier_type == identifier_type,
+        )
+
+        if exclude_identity_id is not None:
+            query = query.where(AuthIdentity.id != exclude_identity_id)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none() is not None
+
+    @staticmethod
+    async def save(
+        db: AsyncSession,
+        record: AuthIdentity,
+    ) -> AuthIdentity:
+        """Persist changes to an existing identity record."""
+
+        db.add(record)
+        await db.flush()
+        await db.refresh(record)
+        return record
+
+    @staticmethod
+    async def deactivate(
+        db: AsyncSession,
+        record: AuthIdentity,
+    ) -> AuthIdentity:
+        """Deactivate an identity record."""
+
+        record.is_active = False
+        db.add(record)
+        await db.flush()
+        await db.refresh(record)
+        return record

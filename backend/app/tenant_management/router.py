@@ -11,13 +11,15 @@ from fastapi.responses import JSONResponse
 
 from app.core.dependencies.db import DbSession
 from app.core.dependencies.route_guards import (
-    require_tenant_role,
-    require_tenant_ownership,
+    get_current_tenant_admin,
+    get_current_tenant_member,
 )
+from app.core.exceptions import ForbiddenException
+from app.modules.tenant_admins.models import TenantAdmin
 from app.modules.users.models import User, UserRole
 from app.tenant_management.models import Tenant
 from app.tenant_management.schemas import (
-    TenantAdminResponse,
+    TenantManagementResponse,
     TenantRegisterRequest,
     TenantUpdate,
 )
@@ -25,15 +27,11 @@ from app.tenant_management.service import TenantService
 
 
 router = APIRouter(tags=["Tenants"])
-TenantAdminUser: TypeAlias = Annotated[
-    User,
-    Depends(require_tenant_role([UserRole.ADMIN])),
+CurrentTenantAdmin: TypeAlias = Annotated[TenantAdmin, Depends(get_current_tenant_admin)]
+CurrentTenantMember: TypeAlias = Annotated[
+    User | TenantAdmin,
+    Depends(get_current_tenant_member),
 ]
-TenantAdminOrTeacherUser: TypeAlias = Annotated[
-    User,
-    Depends(require_tenant_role([UserRole.ADMIN, UserRole.TEACHER])),
-]
-TenantOwnedUser: TypeAlias = Annotated[User, Depends(require_tenant_ownership)]
 
 
 @router.post(
@@ -65,23 +63,30 @@ async def register_tenant(
 
 @router.get(
     "/{tenant_id}",
-    response_model=TenantAdminResponse,
+    response_model=TenantManagementResponse,
     status_code=status.HTTP_200_OK,
     summary="Get tenant details by ID",
 )
 async def get_tenant(
     tenant_id: uuid.UUID,
     db: DbSession,
-    current_user: TenantAdminOrTeacherUser,
-    owned_user: TenantOwnedUser,
+    current_actor: CurrentTenantMember,
 ) -> Tenant:
     """Return tenant."""
+    if current_actor.tenant_id != tenant_id:
+        raise ForbiddenException("You do not have access to this tenant's resources")
+    if isinstance(current_actor, User) and current_actor.role not in (
+        UserRole.ADMIN,
+        UserRole.TEACHER,
+    ):
+        raise ForbiddenException("Operation not permitted. Required roles: admin, teacher")
+
     return await TenantService.get_tenant_by_id(db, tenant_id)
 
 
 @router.patch(
     "/{tenant_id}",
-    response_model=TenantAdminResponse,
+    response_model=TenantManagementResponse,
     status_code=status.HTTP_200_OK,
     summary="Update tenant profile",
 )
@@ -89,10 +94,12 @@ async def update_tenant(
     tenant_id: uuid.UUID,
     payload: TenantUpdate,
     db: DbSession,
-    current_user: TenantAdminUser,
-    owned_user: TenantOwnedUser,
+    current_admin: CurrentTenantAdmin,
 ) -> Tenant:
     """Update tenant."""
+    if current_admin.tenant_id != tenant_id:
+        raise ForbiddenException("You do not have access to this tenant's resources")
+
     return await TenantService.update_tenant_profile(
         db,
         tenant_id,

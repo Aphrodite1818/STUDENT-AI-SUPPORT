@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timezone
-from enum import Enum
+from enum import Enum as PyEnum
 from secrets import token_urlsafe
 from typing import TYPE_CHECKING
 
@@ -22,26 +22,26 @@ if TYPE_CHECKING:
     from app.modules.users.models import User
 
 
-class Gender(str, Enum):
+class Gender(str, PyEnum):
     MALE = "male"
     FEMALE = "female"
 
 
-class AcademicStatus(str, Enum):
+class AcademicStatus(str, PyEnum):
     ACTIVE = "active"
     WITHDRAWN = "withdrawn"
     SUSPENDED = "suspended"
     GRADUATED = "graduated"
 
 
-class ParentRelationship(str, Enum):
+class ParentRelationship(str, PyEnum):
     FATHER = "father"
     MOTHER = "mother"
     GUARDIAN = "guardian"
     OTHER = "other"
 
 
-class StudentProfileStatus(str, Enum):
+class StudentProfileStatus(str, PyEnum):
     INCOMPLETE = "incomplete"
     COMPLETE = "complete"
 
@@ -64,7 +64,12 @@ class Student(BaseModel):
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     gender: Mapped[Gender | None] = mapped_column(
-        SQLEnum(Gender, name="studentgender", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            Gender,
+            name="studentgender",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=True,
     )
 
@@ -87,13 +92,23 @@ class Student(BaseModel):
     arm: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     status: Mapped[AcademicStatus] = mapped_column(
-        SQLEnum(AcademicStatus, name="academicstatus", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            AcademicStatus,
+            name="academicstatus",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=AcademicStatus.ACTIVE,
     )
 
     profile_status: Mapped[StudentProfileStatus] = mapped_column(
-        SQLEnum(StudentProfileStatus, name="studentprofilestatus", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            StudentProfileStatus,
+            name="studentprofilestatus",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=StudentProfileStatus.INCOMPLETE,
         nullable=False,
     )
@@ -162,7 +177,12 @@ class StudentParentLink(BaseModel):
     )
 
     relationship_type: Mapped[ParentRelationship] = mapped_column(
-        SQLEnum(ParentRelationship, name="parentrelationship", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            ParentRelationship,
+            name="parentrelationship",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=ParentRelationship.GUARDIAN,
     )

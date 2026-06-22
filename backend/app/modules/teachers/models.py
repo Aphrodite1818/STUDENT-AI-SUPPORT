@@ -3,7 +3,7 @@
 #======================================#
 
 import uuid
-from enum import Enum
+from enum import Enum as PyEnum
 from typing import Any, TYPE_CHECKING
 
 from sqlalchemy import Enum as SQLEnum, ForeignKey, Index, String, UniqueConstraint
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from app.modules.users.models import User
 
 
-class TeacherStatus(str, Enum):
+class TeacherStatus(str, PyEnum):
     """Enumeration of supported teachers values."""
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -43,9 +43,14 @@ class Teacher(BaseModel):
     specialization: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     status: Mapped[TeacherStatus] = mapped_column(
-        SQLEnum(TeacherStatus, name="teacherstatus", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            TeacherStatus,
+            name="teacherstatus",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=TeacherStatus.ACTIVE,
-        server_default=TeacherStatus.ACTIVE.name,
+        server_default=TeacherStatus.ACTIVE.value,
         nullable=False,
     )
 

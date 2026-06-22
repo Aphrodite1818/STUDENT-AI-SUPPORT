@@ -2,7 +2,7 @@
 #            user models.py            #
 #======================================#
 
-from enum import Enum
+from enum import Enum as PyEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum as SQLEnum, Index, String
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from app.modules.students.models import Student
 
 
-class UserRole(str, Enum):
+class UserRole(str, PyEnum):
     """Represent the UserRole type."""
     TEACHER = "teacher"
     STUDENT = "student"
@@ -24,7 +24,7 @@ class UserRole(str, Enum):
     PARENT = "parent"
 
 
-class AccountStatus(str, Enum):
+class AccountStatus(str, PyEnum):
     """Enumeration of supported users values."""
     ACTIVE = "active"
     BANNED = "banned"
@@ -47,13 +47,23 @@ class User(BaseModel):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     account_status: Mapped[AccountStatus] = mapped_column(
-        SQLEnum(AccountStatus, name="accountstatus", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            AccountStatus,
+            name="accountstatus",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=AccountStatus.PENDING,
         nullable=False,
     )
 
     role: Mapped[UserRole] = mapped_column(
-        SQLEnum(UserRole, name="userrole", schema=PUBLIC_SCHEMA),
+        SQLEnum(
+            UserRole,
+            name="userrole",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
     )
 

@@ -10,8 +10,8 @@ from enum import StrEnum
 from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config.logging import get_logger
 from app.config.security import hash_password
+from app.config.logging import get_logger
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
@@ -22,8 +22,10 @@ from app.core.utils.validators import generate_slug
 from app.modules.auth.models import AuthPurpose
 from app.modules.auth.schemas import RequestOTP
 from app.modules.auth.service import OTPService
-from app.modules.users.models import AccountStatus, User, UserRole
-from app.modules.users.repository import UserRepository
+from app.modules.tenant_admins.models import TenantAdmin, TenantAdminStatus
+from app.modules.tenant_admins.repository import TenantAdminRepository
+from app.modules.tenant_admins.schemas import TenantAdminCreate
+from app.modules.tenant_admins.service import TenantAdminService
 from app.tenant_management.models import (
     Tenant,
     TenantStatus,
@@ -84,20 +86,20 @@ class TenantService:
 
     @staticmethod
     def get_email_registration_state(
-        user: User | None,
+        admin: TenantAdmin | None,
         tenant: Tenant | None,
     ) -> EmailRegistrationState:
         """
         Decide how tenant registration should treat an email.
 
         AVAILABLE:
-            No user or tenant owns this email yet.
+            No tenant admin or tenant owns this email yet.
 
         PENDING:
-            A user or tenant exists but has not completed verification.
+            A tenant admin or tenant exists but has not completed verification.
 
         ACTIVE:
-            A user or tenant already owns this email.
+            A tenant admin or tenant already owns this email.
 
         REJECTED:
             A tenant registration exists but was rejected.
@@ -108,16 +110,17 @@ class TenantService:
 
         if tenant is not None and tenant.is_deleted:
             return EmailRegistrationState.DELETED
-        
 
-        
-        if tenant is not None and tenant.verification_status == TenantVerificationStatus.REJECTED:
+        if (
+            tenant is not None
+            and tenant.verification_status == TenantVerificationStatus.REJECTED
+        ):
             return EmailRegistrationState.REJECTED
 
-        if user is None and tenant is None:
+        if admin is None and tenant is None:
             return EmailRegistrationState.AVAILABLE
 
-        if user is not None and user.account_status == AccountStatus.PENDING:
+        if admin is not None and admin.account_status == TenantAdminStatus.PENDING:
             return EmailRegistrationState.PENDING
 
         if (
@@ -126,7 +129,6 @@ class TenantService:
             == TenantVerificationStatus.PENDING_VERIFICATION
         ):
             return EmailRegistrationState.PENDING
-
 
         return EmailRegistrationState.ACTIVE
 
@@ -185,15 +187,20 @@ class TenantService:
                 db,
                 school_name,
             )
-            existing_user = await UserRepository.get_user_by_email(
+            existing_admin = await TenantAdminRepository.get_by_email(
                 db,
                 normalized_email,
             )
+
             existing_tenant_by_email = (
                 await TenantRepository.get_by_email_including_deleted(
                     db,
                     normalized_email,
                 )
+            )
+            email_state = TenantService.get_email_registration_state(
+                admin=existing_admin,
+                tenant=existing_tenant_by_email,
             )
 
             if admission_number_prefix is not None:
@@ -218,7 +225,7 @@ class TenantService:
                     raise ConflictException("This school name is already registered.")
 
             email_state = TenantService.get_email_registration_state(
-                existing_user,
+                existing_admin,
                 existing_tenant_by_email,
             )
 
@@ -234,13 +241,18 @@ class TenantService:
                 )
 
             if email_state == EmailRegistrationState.PENDING:
-                if existing_user is None or existing_tenant_by_email is None:
+                if existing_admin is None or existing_tenant_by_email is None:
                     raise ConflictException(
                         "This email is already registered. Please contact support."
                     )
 
                 tenant = existing_tenant_by_email
                 reused_pending_account = True
+                existing_admin.password_hash = hash_password(payload.password)
+                await TenantAdminRepository.save(
+                    db,
+                    existing_admin,
+                )
 
                 logger.info(
                     "Tenant registration reused existing pending account",
@@ -249,7 +261,6 @@ class TenantService:
 
             else:
                 slug = await TenantService._unique_slug(db, school_name)
-                password_hash = hash_password(payload.password)
 
                 tenant = Tenant(
                     school_name=school_name,
@@ -262,23 +273,21 @@ class TenantService:
                 await TenantRepository.create(db, tenant)
                 await db.flush()
 
-                admin_user = User(
-                    email=normalized_email,
-                    password_hash=password_hash,
-                    role=UserRole.ADMIN,
-                    account_status=AccountStatus.PENDING,
+                await TenantAdminService.create_tenant_admin(
+                    db=db,
                     tenant_id=tenant.id,
-                    is_verified=False,
+                    payload=TenantAdminCreate(
+                        email=normalized_email,
+                        password=payload.password,
+                    ),
                 )
 
-                await UserRepository.create_user(db, admin_user)
-
                 logger.info(
-                    "Tenant and admin user created during registration",
+                    "Tenant and tenant admin created during registration",
                     extra={
                         "tenant_id": str(tenant.id),
                         "email": normalized_email,
-                        "role": UserRole.ADMIN.value,
+                        "actor_type": "tenant_admin",
                     },
                 )
 

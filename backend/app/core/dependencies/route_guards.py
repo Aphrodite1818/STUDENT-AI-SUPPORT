@@ -12,8 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config.settings import settings
 from app.core.dependencies.db import get_db
 from app.core.exceptions import ForbiddenException, UnauthorizedException
+from app.modules.auth_identity.models import ActorType
 from app.modules.superadmin.models import SuperAdmin
 from app.modules.superadmin.repository import SuperAdminRepository
+from app.modules.tenant_admins.models import TenantAdmin, TenantAdminStatus
+from app.modules.tenant_admins.repository import TenantAdminRepository
 from app.modules.users.models import AccountStatus, User, UserRole
 from app.modules.users.repository import UserRepository
 from app.tenant_management.models import TenantStatus, TenantVerificationStatus
@@ -28,20 +31,27 @@ DbDependency: TypeAlias = Annotated[AsyncSession, Depends(get_db)]
 async def get_current_actor(
     token: TokenDependency,
     db: DbDependency,
-) -> User | SuperAdmin:
+) -> User | TenantAdmin | SuperAdmin:
     """Return current actor."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         actor_id_str: str | None = payload.get("sub")
+        actor_type: str | None = payload.get("actor_type")
         account_type: str | None = payload.get("account_type")
         if actor_id_str is None:
             raise UnauthorizedException("Could not validate credentials")
 
         actor_id = uuid.UUID(actor_id_str)
-        if account_type is None:
+        if actor_type is None and account_type is None:
             account_type = "superadmin" if payload.get("role") == "superadmin" else "tenant_user"
     except (JWTError, ValueError):
         raise UnauthorizedException("Could not validate credentials")
+
+    if actor_type == ActorType.TENANT_ADMIN.value:
+        tenant_admin = await TenantAdminRepository.get_by_id(db, actor_id)
+        if tenant_admin is None:
+            raise UnauthorizedException("Tenant admin not found")
+        return tenant_admin
 
     if account_type == "superadmin":
         superadmin = await SuperAdminRepository.get_by_id(db, actor_id)
@@ -55,12 +65,31 @@ async def get_current_actor(
     return tenant_user
 
 
+
+
+
+
+
 async def get_current_tenant_user(
-    actor: Annotated[User | SuperAdmin, Depends(get_current_actor)],
+    actor: Annotated[User | TenantAdmin | SuperAdmin, Depends(get_current_actor)],
     db: DbDependency,
 ) -> User:
     """Return current tenant user."""
     if isinstance(actor, SuperAdmin):
+        raise ForbiddenException("Tenant user credentials are required for this operation")
+
+    if isinstance(actor, TenantAdmin):
+        if not actor.is_active or actor.account_status != TenantAdminStatus.ACTIVE:
+            raise ForbiddenException("Inactive account")
+
+        tenant = await TenantRepository.get_by_id(db, actor.tenant_id)
+        if tenant is None or tenant.is_deleted:
+            raise ForbiddenException("Inactive tenant")
+        if tenant.verification_status != TenantVerificationStatus.ACTIVE:
+            raise ForbiddenException("Tenant is not verified")
+        if tenant.status not in (TenantStatus.ACTIVE, TenantStatus.TRIAL):
+            raise ForbiddenException("Inactive tenant")
+
         raise ForbiddenException("Tenant user credentials are required for this operation")
 
     if actor.account_status != AccountStatus.ACTIVE:
@@ -77,15 +106,82 @@ async def get_current_tenant_user(
     return actor
 
 
+
+
+
+
+
+
+
+
+async def get_current_tenant_admin(
+    actor: Annotated[User | TenantAdmin | SuperAdmin, Depends(get_current_actor)],
+    db: DbDependency,
+) -> TenantAdmin:
+    """Return current tenant admin."""
+    if isinstance(actor, SuperAdmin):
+        raise ForbiddenException("Tenant admin credentials are required for this operation")
+
+    if isinstance(actor, User):
+        raise ForbiddenException("Tenant admin credentials are required for this operation")
+
+    if not actor.is_active:
+        raise ForbiddenException("Inactive account")
+    if not actor.is_verified:
+        raise ForbiddenException("Tenant admin account is not verified")
+    if actor.account_status != TenantAdminStatus.ACTIVE:
+        raise ForbiddenException("Inactive account")
+
+    tenant = await TenantRepository.get_by_id(db, actor.tenant_id)
+    if tenant is None or tenant.is_deleted:
+        raise ForbiddenException("Inactive tenant")
+    if tenant.verification_status != TenantVerificationStatus.ACTIVE:
+        raise ForbiddenException("Tenant is not verified")
+    if tenant.status not in (TenantStatus.ACTIVE, TenantStatus.TRIAL):
+        raise ForbiddenException("Inactive tenant")
+
+    return actor
+
+
+async def get_current_tenant_member(
+    actor: Annotated[User | TenantAdmin | SuperAdmin, Depends(get_current_actor)],
+    db: DbDependency,
+) -> User | TenantAdmin:
+    """Return the current tenant-scoped actor."""
+    if isinstance(actor, SuperAdmin):
+        raise ForbiddenException("Tenant credentials are required for this operation")
+
+    if isinstance(actor, TenantAdmin):
+        return await get_current_tenant_admin(actor, db)
+
+    if actor.account_status != AccountStatus.ACTIVE:
+        raise ForbiddenException("Inactive account")
+
+    tenant = await TenantRepository.get_by_id(db, actor.tenant_id)
+    if tenant is None or tenant.is_deleted:
+        raise ForbiddenException("Inactive tenant")
+    if tenant.verification_status != TenantVerificationStatus.ACTIVE:
+        raise ForbiddenException("Tenant is not verified")
+    if tenant.status not in (TenantStatus.ACTIVE, TenantStatus.TRIAL):
+        raise ForbiddenException("Inactive tenant")
+
+    return actor
+
+
 async def get_current_superadmin(
-    actor: Annotated[User | SuperAdmin, Depends(get_current_actor)],
+    actor: Annotated[User | TenantAdmin | SuperAdmin, Depends(get_current_actor)],
 ) -> SuperAdmin:
     """Return current superadmin."""
-    if isinstance(actor, User):
+    if isinstance(actor, (User, TenantAdmin)):
         raise ForbiddenException("Superadmin credentials are required for this operation")
     if not actor.is_active:
         raise ForbiddenException("Inactive superadmin account")
     return actor
+
+
+
+
+
 
 
 async def require_superadmin(
@@ -93,6 +189,12 @@ async def require_superadmin(
 ) -> SuperAdmin:
     """Return a dependency that requires superadmin."""
     return current_superadmin
+
+
+
+
+
+
 
 
 def require_tenant_role(
@@ -111,6 +213,10 @@ def require_tenant_role(
         return current_user
 
     return role_checker
+
+
+
+
 
 
 async def require_tenant_ownership(

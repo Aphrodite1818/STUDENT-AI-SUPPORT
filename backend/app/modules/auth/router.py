@@ -30,6 +30,7 @@ class LoginResponse(Token):
     detail: str | None = None
     resend_otp_available: bool = False
     email: str | None = None
+    actor_type: str | None = None
     role: str | None = None
     account_type: str | None = None
 
@@ -50,17 +51,20 @@ async def login(
     token_data = {
         "sub": str(actor.actor_id),
         "email": actor.email,
-        "role": actor.role,
-        "account_type": actor.account_type,
+        "actor_type": actor.actor_type,
     }
     if actor.tenant_id is not None:
         token_data["tenant_id"] = str(actor.tenant_id)
+    if actor.actor_type != "tenant_admin":
+        token_data["role"] = actor.role
+        token_data["account_type"] = actor.account_type
 
     access_token = create_access_token(data=token_data)
 
     return LoginResponse(
         access_token=access_token,
         email=actor.email,
+        actor_type=actor.actor_type,
         role=actor.role,
         account_type=actor.account_type,
     )
