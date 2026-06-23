@@ -1,7 +1,3 @@
-#==========================#
-#   subjects/schemas.py    #
-#==========================#
-
 import uuid
 from datetime import datetime
 
@@ -29,6 +25,7 @@ class OutputBase(BaseModel):
 
 def _clean_optional_string(value: str | None) -> str | None:
     """Internal helper for clean optional string."""
+
     if value is None:
         return None
 
@@ -38,6 +35,7 @@ def _clean_optional_string(value: str | None) -> str | None:
 
 class SubjectCreate(InputBase):
     """Pydantic schema for the subjects domain."""
+
     name: str = Field(
         ...,
         min_length=2,
@@ -65,6 +63,7 @@ class SubjectCreate(InputBase):
     @classmethod
     def validate_name(cls, value: str) -> str:
         """Validate name."""
+
         cleaned_value = value.strip()
 
         if not cleaned_value:
@@ -76,11 +75,13 @@ class SubjectCreate(InputBase):
     @classmethod
     def clean_optional_text_fields(cls, value: str | None) -> str | None:
         """Normalize optional text fields."""
+
         return _clean_optional_string(value)
 
 
 class SubjectUpdate(InputBase):
     """Pydantic schema for the subjects domain."""
+
     name: str | None = Field(default=None, min_length=2, max_length=100)
     code: str | None = Field(default=None, min_length=2, max_length=30)
     description: str | None = Field(default=None, max_length=500)
@@ -93,6 +94,7 @@ class SubjectUpdate(InputBase):
     @classmethod
     def clean_name(cls, value: str | None) -> str | None:
         """Normalize name."""
+
         cleaned_value = _clean_optional_string(value)
 
         if cleaned_value is not None and len(cleaned_value) < 2:
@@ -104,26 +106,29 @@ class SubjectUpdate(InputBase):
     @classmethod
     def clean_optional_text_fields(cls, value: str | None) -> str | None:
         """Normalize optional text fields."""
+
         return _clean_optional_string(value)
 
 
 class SubjectStatusUpdate(InputBase):
     """Pydantic schema for the subjects domain."""
+
     is_active: bool
 
 
 class SubjectTeacherResponse(OutputBase):
-    """Pydantic schema for the subjects domain."""
-    id: uuid.UUID
-    user_id: uuid.UUID
-    staff_id: str | None
-    firstname: str | None
-    lastname: str | None
+    """Teacher summary inside subject responses."""
+
+    teacher_id: uuid.UUID = Field(validation_alias="id")
     email: str
+    first_name: str | None
+    last_name: str | None
+    staff_id: str | None
 
 
 class SubjectResponse(OutputBase):
     """Pydantic schema for the subjects domain."""
+
     id: uuid.UUID
     tenant_id: uuid.UUID
     name: str
@@ -137,5 +142,6 @@ class SubjectResponse(OutputBase):
 
 class SubjectListResponse(OutputBase):
     """Pydantic schema for the subjects domain."""
+
     items: list[SubjectResponse]
     total: int

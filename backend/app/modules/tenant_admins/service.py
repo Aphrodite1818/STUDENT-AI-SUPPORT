@@ -6,13 +6,20 @@
 
 import uuid
 from datetime import datetime , timezone
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.security import hash_password
 from app.core.exceptions import ConflictException , NotFoundException
+from app.modules.auth.models import AuthPurpose, AuthRecord
 from app.modules.auth_identity.models import ActorType , IdentifierType
 from app.modules.auth_identity.schemas import AuthIdentityCreate
 from app.modules.auth_identity.service import AuthIdentityService
+from app.modules.classes.models import ClassRoom
+from app.modules.parents.models import Parent, ParentAccountStatus
+from app.modules.students.models import Student, StudentParentLinkRequest, StudentParentLinkRequestStatus, StudentProfileStatus
+from app.modules.subjects.models import Subject
+from app.modules.teachers.models import Teacher, TeacherAccountStatus
 from app.modules.tenant_admins.models import TenantAdmin ,TenantAdminStatus
 from app.modules.tenant_admins.repository import TenantAdminRepository
 from app.modules.tenant_admins.schemas import (
@@ -265,3 +272,115 @@ class TenantAdminService:
         )
 
         return TenantAdminResponse.model_validate(saved_admin)
+
+    @staticmethod
+    async def get_analytics_overview(
+        db: AsyncSession,
+        *,
+        tenant_id: uuid.UUID,
+    ) -> dict[str, object]:
+        """Return tenant-scoped analytics for the admin dashboard."""
+
+        total_students = (
+            await db.execute(
+                select(func.count()).select_from(Student).where(Student.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+        total_teachers = (
+            await db.execute(
+                select(func.count()).select_from(Teacher).where(Teacher.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+        total_parents = (
+            await db.execute(
+                select(func.count()).select_from(Parent).where(Parent.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+        total_classes = (
+            await db.execute(
+                select(func.count()).select_from(ClassRoom).where(ClassRoom.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+        total_subjects = (
+            await db.execute(
+                select(func.count()).select_from(Subject).where(Subject.tenant_id == tenant_id)
+            )
+        ).scalar_one()
+        student_profiles_complete = (
+            await db.execute(
+                select(func.count()).select_from(Student).where(
+                    Student.tenant_id == tenant_id,
+                    Student.profile_status == StudentProfileStatus.COMPLETE,
+                )
+            )
+        ).scalar_one()
+        student_profiles_incomplete = total_students - student_profiles_complete
+        pending_teacher_invites = (
+            await db.execute(
+                select(func.count()).select_from(Teacher).where(
+                    Teacher.tenant_id == tenant_id,
+                    Teacher.account_status == TeacherAccountStatus.PENDING,
+                )
+            )
+        ).scalar_one()
+        pending_parent_invites = (
+            await db.execute(
+                select(func.count()).select_from(Parent).where(
+                    Parent.tenant_id == tenant_id,
+                    Parent.account_status == ParentAccountStatus.PENDING,
+                )
+            )
+        ).scalar_one()
+        pending_user_invites = (
+            await db.execute(
+                select(func.count()).select_from(AuthRecord).where(
+                    AuthRecord.tenant_id == tenant_id,
+                    AuthRecord.purpose == AuthPurpose.USER_INVITE,
+                    AuthRecord.is_used.is_(False),
+                )
+            )
+        ).scalar_one()
+        pending_parent_link_requests = (
+            await db.execute(
+                select(func.count()).select_from(StudentParentLinkRequest).where(
+                    StudentParentLinkRequest.tenant_id == tenant_id,
+                    StudentParentLinkRequest.status == StudentParentLinkRequestStatus.PENDING,
+                )
+            )
+        ).scalar_one()
+
+        return {
+            "stats": {
+                "total_students": total_students,
+                "total_teachers": total_teachers,
+                "total_parents": total_parents,
+                "total_classes": total_classes,
+                "total_subjects": total_subjects,
+                "student_profiles_complete": student_profiles_complete,
+                "student_profiles_incomplete": student_profiles_incomplete,
+                "pending_user_invites": pending_user_invites,
+                "pending_parent_link_requests": pending_parent_link_requests,
+            },
+            "charts": {
+                "population_breakdown": [
+                    {"label": "students", "value": total_students},
+                    {"label": "teachers", "value": total_teachers},
+                    {"label": "parents", "value": total_parents},
+                    {"label": "classes", "value": total_classes},
+                    {"label": "subjects", "value": total_subjects},
+                ],
+                "profile_completion": [
+                    {"label": "complete", "value": student_profiles_complete},
+                    {"label": "incomplete", "value": student_profiles_incomplete},
+                ],
+                "pending_workflows": [
+                    {"label": "teacher_invites", "value": pending_teacher_invites},
+                    {"label": "parent_invites", "value": pending_parent_invites},
+                    {"label": "user_invites", "value": pending_user_invites},
+                    {
+                        "label": "parent_link_requests",
+                        "value": pending_parent_link_requests,
+                    },
+                ],
+            },
+        }

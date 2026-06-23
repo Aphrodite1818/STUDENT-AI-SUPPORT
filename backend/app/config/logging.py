@@ -5,6 +5,7 @@
 import logging
 import logging.handlers
 import sys
+from copy import copy
 from pathlib import Path
 
 
@@ -33,7 +34,7 @@ _CONFIGURED_ATTR = "_learnlyai_logging_configured"
 
 _STANDARD_RECORD_ATTRS = frozenset(
     logging.LogRecord("", 0, "", 0, "", (), None).__dict__
-) | frozenset({"message", "asctime"})
+) | frozenset({"message", "asctime", "source"})
 
 
 def is_development() -> bool:
@@ -60,16 +61,38 @@ def resolve_log_level() -> int:
 
 
 class ContextFormatter(logging.Formatter):
-    """Adds custom extra={...} fields to log lines."""
+    """Format app logs with context and fall back cleanly for foreign records."""
+
+    _ACCESS_LOGGER_NAME = "uvicorn.access"
+    _PLAIN_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+    def __init__(
+        self,
+        fmt: str | None = None,
+        datefmt: str | None = None,
+        style: str = "%",
+    ) -> None:
+        """Initialize formatter and a plain fallback for Uvicorn access records."""
+        super().__init__(fmt=fmt, datefmt=datefmt, style=style)
+        self._plain_formatter = logging.Formatter(
+            fmt=self._PLAIN_FORMAT,
+            datefmt=datefmt,
+            style=style,
+        )
 
     def format(self, record: logging.LogRecord) -> str:
         """Format a log record."""
-        record.source = self._source_path(record)
-        message = super().format(record)
+        record_copy = copy(record)
+
+        if self._should_use_plain_format(record_copy):
+            return self._plain_formatter.format(record_copy)
+
+        record_copy.source = self._source_path(record_copy)
+        message = super().format(record_copy)
 
         extras = [
             (key, value)
-            for key, value in record.__dict__.items()
+            for key, value in record_copy.__dict__.items()
             if key not in _STANDARD_RECORD_ATTRS
         ]
 
@@ -82,6 +105,11 @@ class ContextFormatter(logging.Formatter):
         )
 
         return f"{message} | {extra_part}"
+
+    @classmethod
+    def _should_use_plain_format(cls, record: logging.LogRecord) -> bool:
+        """Return whether the record should bypass the context formatter."""
+        return record.name == cls._ACCESS_LOGGER_NAME
 
     @staticmethod
     def _source_path(record: logging.LogRecord) -> str:

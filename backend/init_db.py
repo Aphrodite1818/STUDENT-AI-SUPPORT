@@ -7,7 +7,6 @@ from app.shared.base_model import Base
 
 # Import mounted-domain models so Base.metadata knows the current table shapes.
 import app.tenant_management.models  # noqa: F401
-import app.modules.users.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.auth_identity.models  # noqa: F401
 import app.modules.superadmin.models  # noqa: F401
@@ -23,6 +22,47 @@ PUBLIC_SCHEMA = "public"
 
 async def execute(conn, statement: str) -> None:
     await conn.execute(text(statement))
+
+
+async def create_index_if_columns_exist(
+    conn,
+    *,
+    index_name: str,
+    table_name: str,
+    columns: list[str],
+    unique: bool = False,
+) -> None:
+    """Create an index only when every referenced column already exists."""
+
+    quoted_columns = ", ".join(columns)
+    existence_checks = " AND ".join(
+        [
+            f"""
+            EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = '{PUBLIC_SCHEMA}'
+                  AND table_name = '{table_name}'
+                  AND column_name = '{column_name}'
+            )
+            """
+            for column_name in columns
+        ]
+    )
+    index_kind = "UNIQUE INDEX" if unique else "INDEX"
+
+    await execute(
+        conn,
+        f"""
+        DO $$
+        BEGIN
+            IF {existence_checks} THEN
+                CREATE {index_kind} IF NOT EXISTS {index_name}
+                ON {PUBLIC_SCHEMA}.{table_name} ({quoted_columns});
+            END IF;
+        END $$;
+        """,
+    )
 
 
 async def add_enum_values(conn, enum_name: str, labels: list[str]) -> None:
@@ -338,15 +378,6 @@ async def sync_enum_values(conn) -> None:
         ("tenantverificationstatus", "PENDING_VERIFICATION", "pending_verification"),
         ("tenantverificationstatus", "ACTIVE", "active"),
         ("tenantverificationstatus", "REJECTED", "rejected"),
-        ("userrole", "TEACHER", "teacher"),
-        ("userrole", "STUDENT", "student"),
-        ("userrole", "ADMIN", "admin"),
-        ("userrole", "PARENT", "parent"),
-        ("accountstatus", "ACTIVE", "active"),
-        ("accountstatus", "BANNED", "banned"),
-        ("accountstatus", "SUSPENDED", "suspended"),
-        ("accountstatus", "DEACTIVATED", "deactivated"),
-        ("accountstatus", "PENDING", "pending"),
         ("teacherstatus", "ACTIVE", "active"),
         ("teacherstatus", "INACTIVE", "inactive"),
         ("teacherstatus", "ARCHIVED", "archived"),
@@ -393,16 +424,6 @@ async def sync_enum_values(conn) -> None:
         conn,
         "tenantverificationstatus",
         ["pending_verification", "active", "rejected"],
-    )
-    await add_enum_values(
-        conn,
-        "userrole",
-        ["teacher", "student", "admin", "parent"],
-    )
-    await add_enum_values(
-        conn,
-        "accountstatus",
-        ["active", "banned", "suspended", "deactivated", "pending"],
     )
     await create_enum_if_missing(
         conn,
@@ -582,91 +603,6 @@ async def sync_tenant_columns(conn) -> None:
         await set_not_null_if_populated(conn, "tenants", column_name)
 
 
-async def sync_user_columns(conn) -> None:
-    await add_column(conn, "users", "firstname VARCHAR(100)")
-    await add_column(conn, "users", "lastname VARCHAR(100)")
-    await add_column(conn, "users", "phone_number VARCHAR(20)")
-    await add_column(conn, "users", "whatsapp_id VARCHAR(100)")
-    await add_column(conn, "users", "is_verified BOOLEAN DEFAULT TRUE")
-    await add_column(conn, "users", "profile_completed BOOLEAN DEFAULT FALSE")
-
-    await set_column_default(conn, "users", "is_verified", "TRUE")
-    await set_column_default(conn, "users", "profile_completed", "FALSE")
-
-    await execute(
-        conn,
-        f"""
-        UPDATE {PUBLIC_SCHEMA}.users
-        SET is_verified = CASE
-            WHEN lower(account_status::text) = 'pending' THEN FALSE
-            ELSE TRUE
-        END
-        WHERE is_verified IS NULL;
-        """,
-    )
-
-    await execute(
-        conn,
-        f"""
-        UPDATE {PUBLIC_SCHEMA}.users AS users
-        SET profile_completed = CASE
-            WHEN lower(users.role::text) = 'admin' THEN (
-                users.firstname IS NOT NULL
-                AND users.lastname IS NOT NULL
-                AND users.phone_number IS NOT NULL
-                AND EXISTS (
-                    SELECT 1
-                    FROM {PUBLIC_SCHEMA}.tenants AS tenants
-                    WHERE tenants.id = users.tenant_id
-                      AND tenants.onboarding_completed = TRUE
-                )
-            )
-            WHEN lower(users.role::text) = 'student' THEN (
-                users.firstname IS NOT NULL
-                AND users.lastname IS NOT NULL
-                AND users.phone_number IS NOT NULL
-                AND EXISTS (
-                    SELECT 1
-                    FROM {PUBLIC_SCHEMA}.students AS students
-                    WHERE students.user_id = users.id
-                      AND students.tenant_id = users.tenant_id
-                      AND students.date_of_birth IS NOT NULL
-                      AND students.gender IS NOT NULL
-                )
-            )
-            WHEN lower(users.role::text) IN ('teacher', 'parent') THEN (
-                users.firstname IS NOT NULL
-                AND users.lastname IS NOT NULL
-                AND users.phone_number IS NOT NULL
-            )
-            ELSE FALSE
-        END
-        WHERE users.profile_completed IS NULL OR users.profile_completed = FALSE;
-        """,
-    )
-
-    for column_name in (
-        "tenant_id",
-        "email",
-        "password_hash",
-        "account_status",
-        "role",
-        "is_verified",
-        "profile_completed",
-        "created_at",
-        "updated_at",
-    ):
-        await set_not_null_if_populated(conn, "users", column_name)
-
-    await add_fk_if_missing(
-        conn,
-        table_name="users",
-        constraint_name="users_tenant_id_fkey",
-        column_name="tenant_id",
-        referenced_table="tenants",
-    )
-
-
 async def sync_teacher_columns(conn) -> None:
     await add_column(conn, "teachers", "staff_id VARCHAR(50)")
     await add_column(conn, "teachers", "qualification VARCHAR(100)")
@@ -728,10 +664,22 @@ async def sync_auth_columns(conn) -> None:
         conn,
         f"""
         UPDATE {PUBLIC_SCHEMA}.auth AS auth
-        SET tenant_id = users.tenant_id
-        FROM {PUBLIC_SCHEMA}.users AS users
+        SET tenant_id = resolved.tenant_id
+        FROM (
+            SELECT lower(email) AS email, tenant_id
+            FROM {PUBLIC_SCHEMA}.tenant_admins
+            UNION ALL
+            SELECT lower(email) AS email, tenant_id
+            FROM {PUBLIC_SCHEMA}.teachers
+            UNION ALL
+            SELECT lower(email) AS email, tenant_id
+            FROM {PUBLIC_SCHEMA}.parents
+            UNION ALL
+            SELECT lower(email) AS email, id AS tenant_id
+            FROM {PUBLIC_SCHEMA}.tenants
+        ) AS resolved
         WHERE auth.tenant_id IS NULL
-          AND auth.email = users.email;
+          AND lower(auth.email) = resolved.email;
         """,
     )
     await backfill_nulls(conn, "auth", "is_used", "FALSE")
@@ -837,197 +785,6 @@ async def sync_auth_identity_columns(conn) -> None:
     )
 
 
-async def migrate_legacy_superadmins(conn) -> None:
-    await rename_column_if_exists(
-        conn,
-        "superadmin_invites",
-        "superadmin_id",
-        "invited_by_superadmin_id",
-    )
-
-    # Only activated legacy superadmins belong in public.superadmins.
-    # Pending legacy invitees must be re-invited under the new invite-only flow.
-    await execute(
-        conn,
-        f"""
-        INSERT INTO {PUBLIC_SCHEMA}.superadmins (
-            id,
-            email,
-            password_hash,
-            is_active,
-            last_login_at,
-            created_at,
-            updated_at
-        )
-        SELECT
-            users.id,
-            users.email,
-            users.password_hash,
-            CASE WHEN lower(users.account_status::text) = 'active' THEN TRUE ELSE FALSE END,
-            NULL,
-            users.created_at,
-            users.updated_at
-        FROM {PUBLIC_SCHEMA}.users AS users
-        WHERE lower(users.role::text) = 'superadmin'
-          AND lower(users.account_status::text) = 'active'
-          AND NOT EXISTS (
-              SELECT 1
-              FROM {PUBLIC_SCHEMA}.superadmins AS superadmins
-              WHERE lower(superadmins.email) = lower(users.email)
-          );
-        """,
-    )
-
-    await execute(
-        conn,
-        f"""
-        DELETE FROM {PUBLIC_SCHEMA}.auth
-        WHERE lower(purpose::text) = 'user_invite'
-          AND EXISTS (
-              SELECT 1
-              FROM {PUBLIC_SCHEMA}.users AS users
-              WHERE lower(users.role::text) = 'superadmin'
-                AND lower(users.email) = lower({PUBLIC_SCHEMA}.auth.email)
-          );
-        """,
-    )
-
-    await execute(
-        conn,
-        f"DELETE FROM {PUBLIC_SCHEMA}.users WHERE lower(role::text) = 'superadmin'",
-    )
-
-
-async def migrate_legacy_tenant_admins(conn) -> None:
-    await execute(
-        conn,
-        f"""
-        INSERT INTO {PUBLIC_SCHEMA}.tenant_admins (
-            id,
-            tenant_id,
-            email,
-            password_hash,
-            account_status,
-            is_verified,
-            is_active,
-            last_login_at,
-            created_at,
-            updated_at
-        )
-        SELECT
-            users.id,
-            users.tenant_id,
-            lower(users.email),
-            users.password_hash,
-            CASE
-                WHEN lower(users.account_status::text) = 'active' THEN 'active'::{PUBLIC_SCHEMA}.tenant_admin_status
-                WHEN lower(users.account_status::text) = 'pending' THEN 'pending'::{PUBLIC_SCHEMA}.tenant_admin_status
-                ELSE 'inactive'::{PUBLIC_SCHEMA}.tenant_admin_status
-            END,
-            COALESCE(users.is_verified, FALSE),
-            CASE
-                WHEN lower(users.account_status::text) IN ('active', 'pending') THEN TRUE
-                ELSE FALSE
-            END,
-            NULL,
-            users.created_at,
-            users.updated_at
-        FROM {PUBLIC_SCHEMA}.users AS users
-        JOIN {PUBLIC_SCHEMA}.tenants AS tenants
-          ON tenants.id = users.tenant_id
-        WHERE lower(users.role::text) = 'admin'
-          AND lower(users.email) = lower(tenants.email)
-          AND NOT EXISTS (
-              SELECT 1
-              FROM {PUBLIC_SCHEMA}.tenant_admins AS tenant_admins
-              WHERE tenant_admins.id = users.id
-                 OR lower(tenant_admins.email) = lower(users.email)
-                 OR tenant_admins.tenant_id = users.tenant_id
-          );
-        """,
-    )
-
-    await execute(
-        conn,
-        f"""
-        INSERT INTO {PUBLIC_SCHEMA}.auth_identities (
-            tenant_id,
-            identifier,
-            identifier_type,
-            actor_type,
-            actor_id,
-            is_active
-        )
-        SELECT
-            tenant_admins.tenant_id,
-            lower(tenant_admins.email),
-            'email'::{PUBLIC_SCHEMA}.identifier_type,
-            'tenant_admin'::{PUBLIC_SCHEMA}.actor_type,
-            tenant_admins.id,
-            tenant_admins.is_active
-        FROM {PUBLIC_SCHEMA}.tenant_admins AS tenant_admins
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM {PUBLIC_SCHEMA}.auth_identities AS auth_identities
-            WHERE auth_identities.actor_type = 'tenant_admin'::{PUBLIC_SCHEMA}.actor_type
-              AND auth_identities.actor_id = tenant_admins.id
-        )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM {PUBLIC_SCHEMA}.auth_identities AS auth_identities
-            WHERE auth_identities.identifier_type = 'email'::{PUBLIC_SCHEMA}.identifier_type
-              AND lower(auth_identities.identifier) = lower(tenant_admins.email)
-        );
-        """,
-    )
-
-
-async def remove_superadmin_from_userrole_enum(conn) -> None:
-    await execute(
-        conn,
-        f"""
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1
-                FROM pg_type t
-                JOIN pg_namespace n ON n.oid = t.typnamespace
-                JOIN pg_enum e ON e.enumtypid = t.oid
-                WHERE n.nspname = '{PUBLIC_SCHEMA}'
-                  AND t.typname = 'userrole'
-                  AND e.enumlabel IN ('SUPERADMIN', 'superadmin')
-            ) THEN
-                IF EXISTS (
-                    SELECT 1
-                    FROM {PUBLIC_SCHEMA}.users
-                    WHERE lower(role::text) = 'superadmin'
-                ) THEN
-                    RAISE EXCEPTION
-                        'Cannot remove SUPERADMIN from public.userrole while users still reference it.';
-                END IF;
-
-                ALTER TABLE {PUBLIC_SCHEMA}.users
-                ALTER COLUMN role TYPE TEXT
-                USING role::text;
-
-                DROP TYPE {PUBLIC_SCHEMA}.userrole;
-
-                CREATE TYPE {PUBLIC_SCHEMA}.userrole AS ENUM (
-                    'teacher',
-                    'student',
-                    'admin',
-                    'parent'
-                );
-
-                ALTER TABLE {PUBLIC_SCHEMA}.users
-                ALTER COLUMN role TYPE {PUBLIC_SCHEMA}.userrole
-                USING role::text::{PUBLIC_SCHEMA}.userrole;
-            END IF;
-        END $$;
-        """,
-    )
-
-
 async def sync_indexes(conn) -> None:
     await execute(
         conn,
@@ -1041,29 +798,17 @@ async def sync_indexes(conn) -> None:
         conn,
         f"CREATE INDEX IF NOT EXISTS ix_tenants_is_deleted ON {PUBLIC_SCHEMA}.tenants (is_deleted)",
     )
-    await execute(
+    await create_index_if_columns_exist(
         conn,
-        f"CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON {PUBLIC_SCHEMA}.users (email)",
+        index_name="ix_teachers_tenant_email",
+        table_name="teachers",
+        columns=["tenant_id", "email"],
     )
-    await execute(
+    await create_index_if_columns_exist(
         conn,
-        f"CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone_number ON {PUBLIC_SCHEMA}.users (phone_number)",
-    )
-    await execute(
-        conn,
-        f"CREATE UNIQUE INDEX IF NOT EXISTS ix_users_whatsapp_id ON {PUBLIC_SCHEMA}.users (whatsapp_id)",
-    )
-    await execute(
-        conn,
-        f"CREATE INDEX IF NOT EXISTS ix_users_tenant_phone ON {PUBLIC_SCHEMA}.users (tenant_id, phone_number)",
-    )
-    await execute(
-        conn,
-        f"CREATE INDEX IF NOT EXISTS ix_users_tenant_role ON {PUBLIC_SCHEMA}.users (tenant_id, role)",
-    )
-    await execute(
-        conn,
-        f"CREATE INDEX IF NOT EXISTS ix_teachers_tenant_user ON {PUBLIC_SCHEMA}.teachers (tenant_id, user_id)",
+        index_name="ix_teachers_tenant_staff_id",
+        table_name="teachers",
+        columns=["tenant_id", "staff_id"],
     )
     await execute(
         conn,
@@ -1085,13 +830,29 @@ async def sync_indexes(conn) -> None:
         conn,
         f"CREATE INDEX IF NOT EXISTS ix_teacher_subjects_tenant_subject ON {PUBLIC_SCHEMA}.teacher_subjects (tenant_id, subject_id)",
     )
-    await execute(
+    await create_index_if_columns_exist(
         conn,
-        f"CREATE INDEX IF NOT EXISTS ix_parents_tenant_user ON {PUBLIC_SCHEMA}.parents (tenant_id, user_id)",
+        index_name="ix_parents_tenant_email",
+        table_name="parents",
+        columns=["tenant_id", "email"],
     )
-    await execute(
+    await create_index_if_columns_exist(
         conn,
-        f"CREATE INDEX IF NOT EXISTS ix_students_tenant_user ON {PUBLIC_SCHEMA}.students (tenant_id, user_id)",
+        index_name="ix_parents_tenant_account_status",
+        table_name="parents",
+        columns=["tenant_id", "account_status"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_students_tenant_admission_number",
+        table_name="students",
+        columns=["tenant_id", "admission_number"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_students_tenant_account_status",
+        table_name="students",
+        columns=["tenant_id", "account_status"],
     )
     await execute(
         conn,
@@ -1197,15 +958,11 @@ async def create_tables() -> None:
 
         await sync_enum_values(conn)
         await sync_tenant_columns(conn)
-        await sync_user_columns(conn)
         await sync_teacher_columns(conn)
         await sync_student_columns(conn)
         await sync_auth_columns(conn)
         await sync_tenant_admin_columns(conn)
         await sync_auth_identity_columns(conn)
-        await migrate_legacy_tenant_admins(conn)
-        await migrate_legacy_superadmins(conn)
-        await remove_superadmin_from_userrole_enum(conn)
         await sync_indexes(conn)
 
 

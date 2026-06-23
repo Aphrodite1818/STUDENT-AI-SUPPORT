@@ -5,12 +5,14 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
+import AnalyticsBarChart from "../../components/charts/AnalyticsBarChart";
+import AnalyticsDonutChart from "../../components/charts/AnalyticsDonutChart";
 import EmptyState from "../../components/shared/EmptyState";
 import LoadingState from "../../components/shared/LoadingState";
 import StatCard from "../../components/shared/StatCard";
 import { authSession, getErrorMessage } from "../../services/api";
 import { parentService } from "../../services/parentService";
-import { studentService } from "../../services/studentService";
+import { displayName } from "../../utils/user";
 
 const links = [
   { label: "Attendance", to: "/parent/attendance", icon: Bell },
@@ -21,18 +23,23 @@ const links = [
 
 function ParentDashboardPage() {
   const [children, setChildren] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLinking, setIsLinking] = useState(false);
-  const [linkCode, setLinkCode] = useState("");
+  const [admissionNumber, setAdmissionNumber] = useState("");
   const [loadError, setLoadError] = useState(null);
   const [linkError, setLinkError] = useState(null);
   const [linkSuccess, setLinkSuccess] = useState(null);
   const user = authSession.getUser();
-  const firstName = user?.firstname || "Parent";
+  const firstName = user?.first_name || user?.firstname || "Parent";
 
-  const loadChildren = async () => {
-    const response = await parentService.getMyStudents();
-    setChildren(response?.items || []);
+  const loadDashboardData = async () => {
+    const [studentsResponse, requestsResponse] = await Promise.all([
+      parentService.getMyStudents(),
+      parentService.getMyStudentLinkRequests(),
+    ]);
+    setChildren(studentsResponse?.items || []);
+    setRequests(requestsResponse?.items || []);
   };
 
   useEffect(() => {
@@ -43,8 +50,7 @@ function ParentDashboardPage() {
       setLoadError(null);
 
       try {
-        const response = await parentService.getMyStudents();
-        if (mounted) setChildren(response?.items || []);
+        await loadDashboardData();
       } catch (error) {
         if (mounted) setLoadError(getErrorMessage(error, "Failed to load linked students."));
       } finally {
@@ -61,24 +67,44 @@ function ParentDashboardPage() {
 
   const handleLinkSubmit = async (event) => {
     event.preventDefault();
-    const normalizedCode = linkCode.trim().toUpperCase();
-    if (!normalizedCode) return;
+    const normalizedAdmissionNumber = admissionNumber.trim().toUpperCase();
+    if (!normalizedAdmissionNumber) return;
 
     setIsLinking(true);
     setLinkError(null);
     setLinkSuccess(null);
 
     try {
-      await studentService.redeemLinkCode({ code: normalizedCode });
-      await loadChildren();
-      setLinkCode("");
-      setLinkSuccess("Student linked successfully.");
+      await parentService.createStudentLinkRequest({
+        admission_number: normalizedAdmissionNumber,
+      });
+      await loadDashboardData();
+      setAdmissionNumber("");
+      setLinkSuccess("Link request submitted. The student must approve it before you can view their dashboard.");
     } catch (error) {
-      setLinkError(getErrorMessage(error, "Could not link student."));
+      setLinkError(getErrorMessage(error, "Could not submit link request."));
     } finally {
       setIsLinking(false);
     }
   };
+
+  const pendingRequests = requests.filter((item) => item.status === "pending");
+  const approvedRequests = requests.filter((item) => item.status === "approved").length;
+  const rejectedRequests = requests.filter((item) => item.status === "rejected").length;
+  const completeProfiles = children.filter((item) => item?.student?.profile_status === "complete").length;
+  const incompleteProfiles = Math.max(children.length - completeProfiles, 0);
+  const familySnapshotData = [
+    { label: "linked_students", value: children.length },
+    { label: "pending_requests", value: pendingRequests.length },
+    { label: "primary_contacts", value: children.filter((item) => item.link?.is_primary_contact).length },
+  ];
+  const requestStatusData = [
+    { label: "approved", value: approvedRequests },
+    { label: "pending", value: pendingRequests.length },
+    { label: "rejected", value: rejectedRequests },
+    { label: "profiles_complete", value: completeProfiles },
+    { label: "profiles_incomplete", value: incompleteProfiles },
+  ];
 
   if (isLoading) {
     return (
@@ -124,6 +150,29 @@ function ParentDashboardPage() {
             tone="success"
             compact
           />
+          <StatCard
+            label="Pending Requests"
+            value={pendingRequests.length}
+            description="awaiting student approval"
+            icon={GraduationCap}
+            tone={pendingRequests.length > 0 ? "warning" : "primary"}
+            compact
+          />
+        </section>
+      )}
+
+      {!loadError && (
+        <section className="dashboard-grid xl:grid-cols-2">
+          <AnalyticsBarChart
+            title="Family Snapshot"
+            description="Live counts for linked students, pending approvals, and primary-contact coverage."
+            data={familySnapshotData}
+          />
+          <AnalyticsDonutChart
+            title="Requests And Profile Status"
+            description="Combines link-request outcomes with linked-student profile completion."
+            data={requestStatusData}
+          />
         </section>
       )}
 
@@ -137,7 +186,7 @@ function ParentDashboardPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-text">
-                        {[student.firstname, student.lastname].filter(Boolean).join(" ") || "Student"}
+                        {displayName(student)}
                       </p>
                       <p className="mt-1 text-xs font-medium text-text-muted">
                         {student.admission_number || "No admission number"} - {student.profile_status}
@@ -154,7 +203,7 @@ function ParentDashboardPage() {
             <EmptyState
               icon={GraduationCap}
               title="No linked students yet"
-              description="Enter a student link code from the school to connect your parent account to a child profile."
+              description="Submit a student admission number to request access. The student must approve it before the link becomes active."
             />
           )}
         </Card>
@@ -164,26 +213,55 @@ function ParentDashboardPage() {
           <form onSubmit={handleLinkSubmit} className="mt-4 space-y-3">
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Student link code
+                Admission number
               </span>
               <input
-                value={linkCode}
+                value={admissionNumber}
                 onChange={(event) => {
-                  setLinkCode(event.target.value);
+                  setAdmissionNumber(event.target.value);
                   setLinkError(null);
                   setLinkSuccess(null);
                 }}
-                placeholder="STU..."
+                placeholder="NHS-2026-12345"
                 className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm font-medium text-text outline-none transition placeholder:text-text-faint focus:border-primary focus:ring-4 focus:ring-primary/10"
               />
             </label>
             {linkError && <p className="text-sm font-medium text-error">{linkError}</p>}
             {linkSuccess && <p className="text-sm font-medium text-success">{linkSuccess}</p>}
-            <Button type="submit" className="w-full" disabled={isLinking || !linkCode.trim()}>
+            <Button type="submit" className="w-full" disabled={isLinking || !admissionNumber.trim()}>
               <Link2 className="h-4 w-4" />
-              {isLinking ? "Linking..." : "Link student"}
+              {isLinking ? "Submitting..." : "Request student link"}
             </Button>
           </form>
+
+          <div className="my-5 border-t border-border" />
+
+          <h2 className="section-title">Request Status</h2>
+          <div className="mt-4 space-y-3">
+            {requests.length === 0 ? (
+              <p className="text-sm text-text-muted">
+                No parent-student link requests yet.
+              </p>
+            ) : (
+              requests.map((request) => (
+                <div key={request.id} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-text">
+                        {displayName(request.student)}
+                      </p>
+                      <p className="mt-1 text-xs text-text-muted">
+                        {request.admission_number_snapshot || request.student?.admission_number || "No admission number"}
+                      </p>
+                    </div>
+                    <Badge variant={request.status === "approved" ? "success" : request.status === "rejected" ? "error" : "warning"}>
+                      {request.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
 
           <div className="my-5 border-t border-border" />
 

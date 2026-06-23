@@ -6,22 +6,39 @@ const AVATAR_SRC_KEYS = [
   "passport_photo_url",
 ];
 
-export function getUserDisplayName(user) {
+export function fullName(user) {
   return (
-    [user?.firstname, user?.lastname].filter(Boolean).join(" ") ||
-    user?.email ||
-    "User"
+    [user?.first_name || user?.firstname, user?.last_name || user?.lastname]
+      .filter(Boolean)
+      .join(" ") || ""
   );
 }
 
+export function displayName(user) {
+  return fullName(user) || user?.admission_number || user?.email || "User";
+}
+
+export function schoolName(tenant) {
+  return (
+    tenant?.school_name ||
+    tenant?.schoolName ||
+    tenant?.name ||
+    "School workspace"
+  );
+}
+
+export function getUserDisplayName(user) {
+  return displayName(user);
+}
+
 export function getUserInitials(user) {
-  const firstInitial = String(user?.firstname || "").trim().charAt(0);
-  const lastInitial = String(user?.lastname || "").trim().charAt(0);
+  const firstInitial = String(user?.first_name || user?.firstname || "").trim().charAt(0);
+  const lastInitial = String(user?.last_name || user?.lastname || "").trim().charAt(0);
   const initials = `${firstInitial}${lastInitial}`.trim().toUpperCase();
 
   if (initials) return initials;
 
-  return String(user?.email || "U").trim().charAt(0).toUpperCase() || "U";
+  return String(user?.admission_number || user?.email || "U").trim().charAt(0).toUpperCase() || "U";
 }
 
 export function getUserAvatarSrc(user) {

@@ -14,13 +14,14 @@ from app.config.settings import settings
 from app.core.exception_handlers import register_exception_handlers
 from app.modules import import_model_modules
 from app.modules.superadmin.router import router as superadmin_router
-from app.modules.users.router import router as users_router
 from app.modules.auth.router import router as auth_router
+from app.modules.tenant_admins.router import router as tenant_admin_router
 from app.tenant_management.router import router as tenant_router
 from app.modules.subjects.router import router as subject_router
 from app.modules.students.router import router as student_router
 from app.modules.parents.router import router as parent_router
 from app.modules.teachers.router import router as teacher_router
+from app.modules.classes.router import router as class_router
 
 
 logger = get_logger(__name__)
@@ -48,6 +49,9 @@ def create_app() -> FastAPI:
         description="WhatsApp-powered school management assistant API",
         version="0.1.0",
         lifespan=lifespan,
+        docs_url="/docs" if settings.is_development else None,
+        redoc_url="/redoc" if settings.is_development else None,
+        openapi_url="/openapi.json" if settings.is_development else None,
     )
 
     middleware_options = {
@@ -72,12 +76,13 @@ def create_app() -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
     app.include_router(superadmin_router, prefix="/api/v1")
-    app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
+    app.include_router(tenant_admin_router, prefix="/api/v1/tenant-admin", tags=["Tenant Admin"])
     app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Tenants"])
     app.include_router(teacher_router, prefix="/api/v1/teachers", tags=["Teachers"])
     app.include_router(student_router, prefix="/api/v1/students", tags=["Students"])
     app.include_router(parent_router, prefix="/api/v1")
     app.include_router(subject_router, prefix="/api/v1/subjects", tags=["Subjects"])
+    app.include_router(class_router, prefix="/api/v1", tags=["Classes"])
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])

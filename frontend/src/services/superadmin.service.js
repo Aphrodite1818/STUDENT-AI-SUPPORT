@@ -14,6 +14,8 @@ const buildQuery = (params) => {
 };
 
 export const superadminService = {
+  getAnalyticsOverview: () => api.get("/superadmin/analytics/overview"),
+
   createTenant: (data) => api.post("/superadmin/tenants", data),
 
   getTenants: (skip = 0, limit = 50, includeDeleted = true) =>

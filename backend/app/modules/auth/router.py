@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks
 from app.config.security import create_access_token
 from app.core.dependencies.db import DbSession
 from app.modules.auth.schemas import (
+    LoginSessionUser,
     LoginRequest,
     RequestOTP,
     TenantActivationRequest,
@@ -33,6 +34,8 @@ class LoginResponse(Token):
     actor_type: str | None = None
     role: str | None = None
     account_type: str | None = None
+    password_reset_required: bool | None = None
+    user: LoginSessionUser | None = None
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -52,12 +55,11 @@ async def login(
         "sub": str(actor.actor_id),
         "email": actor.email,
         "actor_type": actor.actor_type,
+        "role": actor.role,
+        "account_type": actor.account_type,
     }
     if actor.tenant_id is not None:
         token_data["tenant_id"] = str(actor.tenant_id)
-    if actor.actor_type != "tenant_admin":
-        token_data["role"] = actor.role
-        token_data["account_type"] = actor.account_type
 
     access_token = create_access_token(data=token_data)
 
@@ -67,6 +69,8 @@ async def login(
         actor_type=actor.actor_type,
         role=actor.role,
         account_type=actor.account_type,
+        password_reset_required=actor.password_reset_required,
+        user=actor.user,
     )
 
 

@@ -2,18 +2,38 @@
 #            auth/schemas.py           #
 #======================================#
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 class Token(BaseModel):
     """Represent the Token type."""
     access_token: str
     token_type: str = "bearer"
 
+
+class LoginSessionUser(BaseModel):
+    """Compact authenticated actor payload returned to the frontend."""
+
+    id: str | None = None
+    tenant_id: str | None = None
+    email: str | None = None
+    admission_number: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    actor_type: str | None = None
+    account_type: str | None = None
+    role: str | None = None
+    password_reset_required: bool | None = None
+    profile_status: str | None = None
+    meta: dict[str, Any] | None = None
+
 class LoginRequest(BaseModel):
     """Pydantic schema for the auth domain."""
-    email: EmailStr
+
+    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True, extra="forbid")
+
+    identifier: str = Field(..., alias="email", min_length=1, max_length=255)
     password: str
 
 

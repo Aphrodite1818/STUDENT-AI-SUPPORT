@@ -1,12 +1,13 @@
-#======================================#
-#          teacher/models.py           #
-#======================================#
+"""Teacher domain models."""
+
+from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from enum import Enum as PyEnum
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum as SQLEnum, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,87 +15,152 @@ from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 if TYPE_CHECKING:
     from app.modules.subjects.models import Subject
-    from app.modules.users.models import User
+
+
+class TeacherAccountStatus(str, PyEnum):
+    """Teacher account lifecycle status."""
+
+    PENDING = "pending"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
 
 
 class TeacherStatus(str, PyEnum):
-    """Enumeration of supported teachers values."""
+    """Teacher employment/profile status."""
+
     ACTIVE = "active"
     INACTIVE = "inactive"
     ARCHIVED = "archived"
 
 
 class Teacher(BaseModel):
-    """Represent the Teacher type."""
+    """Teacher actor account and academic profile."""
+
     __tablename__ = "teachers"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+    email: Mapped[str] = mapped_column(
+        String(300),
         nullable=False,
-        unique=True,
-        index=True,
     )
 
-    staff_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    password_hash: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
 
-    qualification: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
 
-    specialization: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    staff_id: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    qualification: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    specialization: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
+    account_status: Mapped[TeacherAccountStatus] = mapped_column(
+        SQLEnum(
+            TeacherAccountStatus,
+            name="teacher_account_status",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=TeacherAccountStatus.PENDING,
+        server_default=TeacherAccountStatus.PENDING.value,
+    )
 
     status: Mapped[TeacherStatus] = mapped_column(
         SQLEnum(
             TeacherStatus,
-            name="teacherstatus",
+            name="teacher_status",
             schema=PUBLIC_SCHEMA,
             values_callable=lambda enum_cls: [item.value for item in enum_cls],
         ),
+        nullable=False,
         default=TeacherStatus.ACTIVE,
         server_default=TeacherStatus.ACTIVE.value,
-        nullable=False,
     )
 
-    user: Mapped["User"] = relationship(
-        "User",
-        back_populates="teacher_profile",
-        lazy="joined",
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     subject_links: Mapped[list["TeacherSubject"]] = relationship(
         "TeacherSubject",
         back_populates="teacher",
         cascade="all, delete-orphan",
+        overlaps="subjects,teachers",
     )
 
-    @property
-    def firstname(self) -> str | None:
-        """Return the firstname value for the teacher."""
-        return self.user.firstname if self.user else None
-
-    @property
-    def lastname(self) -> str | None:
-        """Return the lastname value for the teacher."""
-        return self.user.lastname if self.user else None
-
-    @property
-    def email(self) -> str | None:
-        """Return the email value for the teacher."""
-        return self.user.email if self.user else None
-
-    @property
-    def subjects(self) -> list[Any]:
-        """Return the subjects value for the teacher."""
-        return [link.subject for link in self.subject_links if link.subject is not None]
+    subjects: Mapped[list["Subject"]] = relationship(
+        secondary="public.teacher_subjects",
+        back_populates="teachers",
+        overlaps="subject_links,teacher_links,teacher,subject",
+    )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "staff_id", name="uq_teachers_tenant_staff_id"),
-        Index("ix_teachers_tenant_user", "tenant_id", "user_id"),
-        Index("ix_teachers_tenant_status", "tenant_id", "status"),
+        UniqueConstraint(
+            "tenant_id",
+            "staff_id",
+            name="uq_teachers_tenant_staff_id",
+        ),
+        Index(
+            "ix_teachers_tenant_email",
+            "tenant_id",
+            "email",
+        ),
+        Index(
+            "ix_teachers_tenant_status",
+            "tenant_id",
+            "status",
+        ),
     )
+
+    @property
+    def profile_completed(self) -> bool:
+        """Return whether the teacher completed the required self-service fields."""
+
+        return bool(
+            self.first_name
+            and self.first_name.strip()
+            and self.last_name
+            and self.last_name.strip()
+        )
 
 
 class TeacherSubject(BaseModel):
-    """Join table for the teacher-to-subject many-to-many relationship."""
+    """Link table between teachers and subjects."""
 
     __tablename__ = "teacher_subjects"
 
@@ -113,11 +179,13 @@ class TeacherSubject(BaseModel):
     teacher: Mapped["Teacher"] = relationship(
         "Teacher",
         back_populates="subject_links",
+        overlaps="subjects,teachers",
     )
 
     subject: Mapped["Subject"] = relationship(
         "Subject",
         back_populates="teacher_links",
+        overlaps="subjects,teachers",
     )
 
     __table_args__ = (
@@ -125,7 +193,7 @@ class TeacherSubject(BaseModel):
             "tenant_id",
             "teacher_id",
             "subject_id",
-            name="uq_teacher_subject_tenant_teacher_subject",
+            name="uq_teacher_subjects_tenant_teacher_subject",
         ),
         Index("ix_teacher_subjects_tenant_teacher", "tenant_id", "teacher_id"),
         Index("ix_teacher_subjects_tenant_subject", "tenant_id", "subject_id"),

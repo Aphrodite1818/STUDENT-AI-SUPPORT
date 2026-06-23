@@ -75,6 +75,10 @@ function LoginPage() {
 
       authService.clearPendingVerificationEmail();
       const role = String(data?.role || data?.user?.role || "").toUpperCase();
+      if (role === "STUDENT" && data?.user?.password_reset_required) {
+        navigate("/student/change-password", { replace: true });
+        return;
+      }
       navigate(ROLE_ROUTES[role] || "/", { replace: true });
     } catch (err) {
       const apiError = parseApiError(err, "Invalid email or password.");
@@ -115,7 +119,7 @@ function LoginPage() {
       {error && <Notice type="error">{error}</Notice>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Input label="Work email" type="email" name="email" value={formData.email} onChange={handleChange} placeholder="name@school.edu" required error={fieldErrors.email} />
+        <Input label="Email or admission number" type="text" name="email" value={formData.email} onChange={handleChange} placeholder="name@school.edu or NHS-2026-12345" required error={fieldErrors.email} />
         <Input label="Password" type="password" name="password" value={formData.password} onChange={handleChange} placeholder="Enter your password" required error={fieldErrors.password} />
         <div className="flex items-center justify-between gap-4 text-sm">
           <label className="flex items-center gap-2">

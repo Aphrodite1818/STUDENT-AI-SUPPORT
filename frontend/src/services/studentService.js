@@ -14,11 +14,26 @@ export const studentService = {
   getStudents: (options = {}) =>
     api.get(`/students?${buildStudentQuery(options)}`),
 
+  getAdminStudents: (options = {}) =>
+    api.get(`/tenant-admin/students?${buildStudentQuery(options)}`),
+
+  createStudent: (payload) =>
+    api.post("/tenant-admin/students", payload),
+
   getMyStudent: () =>
     api.get("/students/me"),
 
   updateMyStudentProfile: (payload) =>
     api.patch("/students/me/profile", payload),
+
+  changeMyPassword: (payload) =>
+    api.post("/students/me/change-password", payload),
+
+  getMyParentLinkRequests: () =>
+    api.get("/students/me/parent-link-requests"),
+
+  respondToParentLinkRequest: (requestId, payload) =>
+    api.post(`/students/me/parent-link-requests/${requestId}/respond`, payload),
 
   getMyParentLinks: () =>
     api.get("/students/me/parent-links"),
@@ -26,12 +41,27 @@ export const studentService = {
   getStudent: (studentId) =>
     api.get(`/students/${studentId}`),
 
+  getAdminStudent: (studentId) =>
+    api.get(`/tenant-admin/students/${studentId}`),
+
   updateStudent: (studentId, payload) =>
-    api.patch(`/students/${studentId}`, payload),
+    api.patch(`/tenant-admin/students/${studentId}`, payload),
+
+  updateAdminStudent: (studentId, payload) =>
+    api.patch(`/tenant-admin/students/${studentId}`, payload),
 
   deleteStudent: (studentId) =>
-    api.delete(`/students/${studentId}`),
+    api.delete(`/tenant-admin/students/${studentId}`),
 
-  redeemLinkCode: (payload) =>
-    api.post("/students/link-codes/redeem", payload),
+  completeStudentProfile: (studentId, payload) =>
+    api.patch(`/tenant-admin/students/${studentId}/complete-profile`, payload),
+
+  createParentLink: (payload) =>
+    api.post("/tenant-admin/student-parent-links", payload),
+
+  updateParentLink: (linkId, payload) =>
+    api.patch(`/tenant-admin/student-parent-links/${linkId}`, payload),
+
+  deleteParentLink: (linkId) =>
+    api.delete(`/tenant-admin/student-parent-links/${linkId}`),
 };

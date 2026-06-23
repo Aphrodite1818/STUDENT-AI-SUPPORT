@@ -7,7 +7,6 @@ import {
   CalendarDays,
   CheckSquare,
   ChevronDown,
-  ChevronsRight,
   ClipboardList,
   CreditCard,
   FileText,
@@ -26,6 +25,7 @@ import {
   Settings,
   Shield,
   Sun,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -34,12 +34,13 @@ import Avatar from "../ui/Avatar";
 import Dropdown from "../ui/Dropdown";
 import Modal from "../ui/Modal";
 import ProfileCompletionForm from "../shared/ProfileCompletionForm";
+import AiChatLauncher from "../ai/AiChatLauncher";
 import logoImage from "../../assets/images/favicon.png";
 import { authService } from "../../services/auth.service";
 import { authSession } from "../../services/api";
-import { userService } from "../../services/user.service";
+import { onboardingService } from "../../services/onboardingService";
 import { cn } from "../../utils/cn";
-import { getUserAvatarSrc, getUserDisplayName } from "../../utils/user";
+import { getUserAvatarSrc, schoolName as resolveSchoolName, displayName as resolveDisplayName } from "../../utils/user";
 import BottomNav from "./BottomNav";
 
 const roleLabels = {
@@ -50,12 +51,44 @@ const roleLabels = {
   superadmin: "Platform admin",
 };
 
+const onboardingModalCopy = {
+  admin: {
+    onboardingTitle: "Complete School Profile",
+    editTitle: "Edit School Profile",
+    onboardingDescription:
+      "Finish the school profile fields required for onboarding. School-managed settings stay here, not in a personal profile form.",
+    editDescription: "Update your school profile details.",
+  },
+  teacher: {
+    onboardingTitle: "Complete Teacher Profile",
+    editTitle: "Edit Teacher Profile",
+    onboardingDescription:
+      "Complete the teacher profile fields required by the backend before continuing.",
+    editDescription: "Update your teacher profile details.",
+  },
+  parent: {
+    onboardingTitle: "Complete Parent Profile",
+    editTitle: "Edit Parent Profile",
+    onboardingDescription:
+      "Complete the parent profile fields required by the backend before continuing.",
+    editDescription: "Update your parent profile details.",
+  },
+  student: {
+    onboardingTitle: "Complete Student Profile",
+    editTitle: "Edit Student Profile",
+    onboardingDescription:
+      "Complete the student profile fields required by the backend before continuing.",
+    editDescription: "Update your student profile details.",
+  },
+};
+
 const navGroups = {
   admin: [
     {
       label: "Overview",
       items: [
         { label: "Dashboard", to: "/admin/dashboard", icon: Home },
+        { label: "Create User", to: "/admin/create-user", icon: UserPlus },
         { label: "Calendar", to: "/admin/timetable", icon: CalendarDays },
       ],
     },
@@ -77,7 +110,6 @@ const navGroups = {
       items: [
         { label: "Notices", to: "/admin/announcements", icon: FileText },
         { label: "Messages", to: "/admin/messages", icon: MessageSquare, badge: "3" },
-        { label: "Users", to: "/admin/users", icon: Shield },
       ],
     },
     {
@@ -145,7 +177,7 @@ const navGroups = {
 };
 
 function getUserLabel(user) {
-  return getUserDisplayName(user);
+  return resolveDisplayName(user);
 }
 
 function getRole(user, fallback) {
@@ -190,7 +222,7 @@ function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{schoolName || "School workspace"}</p>
-              <p className="truncate text-xs text-text-muted">AY 2024-25</p>
+              <p className="truncate text-xs text-text-muted">{roleLabels[role] || "Workspace"}</p>
             </div>
             <ChevronDown className="ml-auto h-4 w-4 text-text-faint" />
           </div>
@@ -241,15 +273,15 @@ function SidebarContent({ role, collapsed, onToggleCollapsed, onNavigate, mobile
 
       {!collapsed && (
         <div className="border-t border-border p-4">
-          <Link
-            to="/help"
-            onClick={onNavigate}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-3 py-3 text-sm font-medium text-text-soft transition hover:border-primary/30 hover:bg-primary-subtle hover:text-primary"
-          >
-            <HelpCircle className="h-4 w-4" />
-            Help & Support
-            <ChevronsRight className="ml-auto h-4 w-4" />
-          </Link>
+          <div className="rounded-2xl border border-border bg-surface px-3 py-3 text-sm text-text-soft">
+            <div className="flex items-center gap-3 font-medium">
+              <HelpCircle className="h-4 w-4" />
+              Help & Support
+            </div>
+            <p className="mt-2 text-xs text-text-muted">
+              Contact your school administrator for account or school-data issues.
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -347,11 +379,8 @@ function Topbar({ role, onOpenMobileNav, schoolName, onOpenProfileModal }) {
 
           <Dropdown
             trigger={
-              <Button type="button" variant="outline" size="icon" className="relative">
+              <Button type="button" variant="outline" size="icon">
                 <Bell className="h-4 w-4" />
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1 text-[10px] font-bold text-white">
-                  8
-                </span>
               </Button>
             }
           >
@@ -413,6 +442,7 @@ function DashboardLayout({
   description,
   actions,
   children,
+  onboardingModalEnabled = true,
 }) {
   const user = authSession.getUser();
   const role = getRole(user, roleProp);
@@ -421,66 +451,79 @@ function DashboardLayout({
   const [profileUser, setProfileUser] = useState(user);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [hasAutoOpenedOnboarding, setHasAutoOpenedOnboarding] = useState(false);
-  const [profileSchemaData, setProfileSchemaData] = useState(null);
+  const [onboardingStatusData, setOnboardingStatusData] = useState(null);
   const [isLoadingOnboardingState, setIsLoadingOnboardingState] = useState(Boolean(authSession.getToken()));
 
   const pageTitle = useMemo(() => title || `${roleLabels[role] || "Workspace"} Dashboard`, [role, title]);
-  const needsOnboarding = Boolean(profileUser?.id && profileUser?.profile_completed !== true);
-  const schoolName = profileUser?.tenant?.school_name || profileSchemaData?.user?.tenant?.school_name || "School workspace";
+  const needsOnboarding =
+    onboardingModalEnabled && Boolean(onboardingStatusData?.onboarding_required);
+  const schoolName = resolveSchoolName({
+    school_name:
+      onboardingStatusData?.current_values?.school_name ||
+      profileUser?.tenant?.school_name,
+  });
 
-  const loadProfileCompletionSchema = useCallback(async () => {
-    const nextSchema = await userService.getProfileCompletionSchema();
-    setProfileSchemaData(nextSchema);
-    return nextSchema;
-  }, []);
+  const modalCopy = onboardingModalCopy[role] || onboardingModalCopy.teacher;
+
+  const loadOnboardingStatus = useCallback(async () => {
+    if (
+      !onboardingModalEnabled ||
+      !authSession.getToken() ||
+      !onboardingService.supportsRole(role)
+    ) {
+      setOnboardingStatusData(null);
+      return null;
+    }
+
+    const nextStatus = await onboardingService.getOnboardingStatus(role);
+    setOnboardingStatusData(nextStatus);
+    setProfileUser(authSession.getUser());
+    return nextStatus;
+  }, [role]);
 
   const openProfileModal = useCallback(async () => {
-    if (profileUser?.id && !profileSchemaData) {
+    if (!onboardingStatusData && onboardingService.supportsRole(role)) {
       try {
-        await loadProfileCompletionSchema();
+        await loadOnboardingStatus();
       } catch {
         // The form will surface its own load error state if this fetch fails.
       }
     }
     setProfileModalOpen(true);
-  }, [loadProfileCompletionSchema, profileSchemaData, profileUser?.id]);
+  }, [loadOnboardingStatus, onboardingStatusData, role]);
   const closeProfileModal = useCallback(() => {
     setProfileModalOpen(false);
   }, []);
-  const handleProfileSaved = useCallback((nextUser, response) => {
-    setProfileUser(nextUser);
-    setProfileSchemaData(response || null);
+  const handleProfileSaved = useCallback((nextStatus, nextUser) => {
+    setOnboardingStatusData(nextStatus || null);
+    setProfileUser(nextUser || authSession.getUser());
     setProfileModalOpen(false);
   }, []);
   const handleProfileStateResolved = useCallback((state) => {
     setIsLoadingOnboardingState(false);
-    if (state?.completed === true) {
-      setProfileUser((current) => (current ? { ...current, profile_completed: true } : current));
-    }
+    if (state?.status) setOnboardingStatusData(state.status);
+    if (state?.user) setProfileUser(state.user);
   }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    async function hydrateAuthenticatedUser() {
-      if (!authSession.getToken()) {
+    async function hydrateOnboardingState() {
+      if (
+        !onboardingModalEnabled ||
+        !authSession.getToken() ||
+        !onboardingService.supportsRole(role)
+      ) {
         setIsLoadingOnboardingState(false);
         return;
       }
 
       try {
-        const nextUser = await userService.getMe();
+        const nextStatus = await onboardingService.getOnboardingStatus(role);
         if (!mounted) return;
 
-        authSession.setUser(nextUser);
-        setProfileUser(nextUser);
-        if (nextUser?.profile_completed !== true) {
-          const nextSchema = await userService.getProfileCompletionSchema();
-          if (!mounted) return;
-          setProfileSchemaData(nextSchema);
-        } else {
-          setProfileSchemaData(null);
-        }
+        setOnboardingStatusData(nextStatus);
+        setProfileUser(authSession.getUser());
       } catch {
         if (!mounted) return;
       } finally {
@@ -488,23 +531,23 @@ function DashboardLayout({
       }
     }
 
-    hydrateAuthenticatedUser();
+    hydrateOnboardingState();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [onboardingModalEnabled, role]);
 
   useEffect(() => {
     setHasAutoOpenedOnboarding(false);
-  }, [profileUser?.id]);
+  }, [role, profileUser?.id]);
 
   useEffect(() => {
-    if (!profileUser?.id || isLoadingOnboardingState || !needsOnboarding || hasAutoOpenedOnboarding) return;
+    if (isLoadingOnboardingState || !needsOnboarding || hasAutoOpenedOnboarding) return;
 
     setHasAutoOpenedOnboarding(true);
     setProfileModalOpen(true);
-  }, [hasAutoOpenedOnboarding, isLoadingOnboardingState, needsOnboarding, profileUser?.id]);
+  }, [hasAutoOpenedOnboarding, isLoadingOnboardingState, needsOnboarding]);
 
   return (
     <div className="min-h-screen bg-background text-text">
@@ -574,24 +617,27 @@ function DashboardLayout({
         </main>
       </div>
       <BottomNav role={role} onOpenMenu={() => setMobileOpen(true)} />
-      <Modal
-        open={profileModalOpen}
-        title={needsOnboarding ? "Complete your profile" : "Update your profile"}
-        description={
-          needsOnboarding
-            ? "Add the required details we can collect right now. School-managed fields will remain read-only."
-            : "Update your personal and role-specific profile details."
-        }
-        onClose={closeProfileModal}
-      >
-        <ProfileCompletionForm
-          user={profileUser}
-          submitLabel="Save profile"
-          initialSchemaData={profileSchemaData}
-          onSaved={handleProfileSaved}
-          onProfileStateResolved={handleProfileStateResolved}
-        />
-      </Modal>
+      <AiChatLauncher />
+      {onboardingModalEnabled && (
+        <Modal
+          open={profileModalOpen}
+          title={needsOnboarding ? modalCopy.onboardingTitle : modalCopy.editTitle}
+          description={
+            needsOnboarding
+              ? modalCopy.onboardingDescription
+              : modalCopy.editDescription
+          }
+          onClose={needsOnboarding ? null : closeProfileModal}
+        >
+          <ProfileCompletionForm
+            role={role}
+            submitLabel="Save profile"
+            initialStatusData={onboardingStatusData}
+            onSaved={handleProfileSaved}
+            onProfileStateResolved={handleProfileStateResolved}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

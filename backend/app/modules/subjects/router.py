@@ -1,14 +1,14 @@
-# ========================== #
-#     subjects/router.py     #
-# ========================== #
-
 from typing import Annotated, TypeAlias
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.dependencies.db import DbSession
-from app.core.dependencies.route_guards import get_current_tenant_user
+from app.core.dependencies.route_guards import (
+    get_current_teacher,
+    get_current_tenant_admin,
+    get_current_tenant_member,
+)
 from app.modules.subjects.models import Subject
 from app.modules.subjects.schemas import (
     SubjectCreate,
@@ -17,14 +17,15 @@ from app.modules.subjects.schemas import (
     SubjectUpdate,
 )
 from app.modules.subjects.service import SubjectService
-from app.modules.users.models import User
+from app.modules.teachers.models import Teacher
+from app.modules.tenant_admins.models import TenantAdmin
 
 
-router = APIRouter(
-    tags=["Subjects"],
-)
+router = APIRouter(tags=["Subjects"])
 
-CurrentTenantUser: TypeAlias = Annotated[User, Depends(get_current_tenant_user)]
+CurrentTenantAdmin: TypeAlias = Annotated[TenantAdmin, Depends(get_current_tenant_admin)]
+CurrentTeacher: TypeAlias = Annotated[Teacher, Depends(get_current_teacher)]
+CurrentSubjectViewer: TypeAlias = Annotated[TenantAdmin | Teacher, Depends(get_current_tenant_member)]
 
 
 @router.post(
@@ -36,9 +37,10 @@ CurrentTenantUser: TypeAlias = Annotated[User, Depends(get_current_tenant_user)]
 async def create_subject(
     payload: SubjectCreate,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentTenantAdmin,
 ) -> Subject:
     """Create subject."""
+
     return await SubjectService.create_subject(
         db=db,
         actor=current_user,
@@ -53,13 +55,14 @@ async def create_subject(
 )
 async def list_subjects(
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentSubjectViewer,
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=100),
     is_active: bool | None = Query(default=None),
     search: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> SubjectListResponse:
     """List subjects."""
+
     subjects, total = await SubjectService.list_subjects(
         db=db,
         actor=current_user,
@@ -83,9 +86,10 @@ async def list_subjects(
 async def get_subject(
     subject_id: UUID,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentSubjectViewer,
 ) -> Subject:
     """Return subject."""
+
     return await SubjectService.get_subject(
         db=db,
         actor=current_user,
@@ -102,9 +106,10 @@ async def update_subject(
     subject_id: UUID,
     payload: SubjectUpdate,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentTenantAdmin,
 ) -> Subject:
     """Update subject."""
+
     return await SubjectService.update_subject(
         db=db,
         actor=current_user,
@@ -121,9 +126,10 @@ async def update_subject(
 async def activate_subject(
     subject_id: UUID,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentTenantAdmin,
 ) -> Subject:
-    """Perform activate subject."""
+    """Activate subject."""
+
     return await SubjectService.activate_subject(
         db=db,
         actor=current_user,
@@ -139,9 +145,10 @@ async def activate_subject(
 async def deactivate_subject(
     subject_id: UUID,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentTenantAdmin,
 ) -> Subject:
-    """Perform deactivate subject."""
+    """Deactivate subject."""
+
     return await SubjectService.deactivate_subject(
         db=db,
         actor=current_user,
@@ -157,9 +164,10 @@ async def deactivate_subject(
 async def delete_subject(
     subject_id: UUID,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentTenantAdmin,
 ) -> None:
     """Delete subject."""
+
     await SubjectService.delete_subject(
         db=db,
         actor=current_user,

@@ -6,7 +6,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -297,6 +297,11 @@ class TenantUpdate(InputBase):
 class TenantOnboardingUpdate(InputBase):
     """Schema for first-time tenant onboarding completion."""
 
+    admission_number_prefix: str = Field(
+        ...,
+        min_length=2,
+        max_length=20,
+    )
     phone: str | None = Field(default=None, pattern=PHONE_PATTERN)
     address: str = Field(..., min_length=3, max_length=500)
     city: str = Field(..., min_length=2, max_length=100)
@@ -313,6 +318,7 @@ class TenantOnboardingUpdate(InputBase):
 
     @field_validator(
         "phone",
+        "admission_number_prefix",
         "address",
         "city",
         "state",
@@ -327,6 +333,16 @@ class TenantOnboardingUpdate(InputBase):
         """Clean onboarding text fields."""
 
         return _clean_optional_string(value)
+
+    @field_validator("admission_number_prefix")
+    @classmethod
+    def normalize_onboarding_admission_number_prefix(
+        cls,
+        value: str,
+    ) -> str:
+        """Uppercase the onboarding admission prefix."""
+
+        return value.upper()
 
 
 class TenantStatusUpdate(InputBase):
@@ -423,3 +439,15 @@ class TenantContext(OutputBase):
         """Return whether WhatsApp bot is enabled."""
 
         return bool(self.feature_flags and self.feature_flags.get("whatsapp_bot"))
+
+
+class TenantOnboardingStatusResponse(OutputBase):
+    """Tenant-admin onboarding status response."""
+
+    actor_type: Literal["tenant_admin"]
+    tenant_id: uuid.UUID
+    onboarding_required: bool
+    onboarding_completed: bool
+    completion_target: Literal["tenant"]
+    required_fields: list[str]
+    current_values: dict[str, Any]

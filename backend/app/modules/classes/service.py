@@ -1,12 +1,8 @@
-#======================================#
-#              service.py              #
-#======================================#
-
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BadRequestException, NotFoundException
+from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from app.modules.classes.models import ClassRoom
 from app.modules.classes.repository import ClassRoomRepository
 from app.modules.classes.schemas import (
@@ -14,48 +10,80 @@ from app.modules.classes.schemas import (
     ClassRoomResponse,
     ClassRoomUpdate,
 )
-from app.modules.teachers.models import TeacherStatus
+from app.modules.parents.models import Parent
+from app.modules.students.models import Student
+from app.modules.students.repository import StudentParentLinkRepository
+from app.modules.teachers.models import Teacher, TeacherStatus
 from app.modules.teachers.repository import TeacherRepository
+from app.modules.tenant_admins.models import TenantAdmin
 
 
 class ClassRoomService:
     """Business logic for classroom management."""
 
     @staticmethod
+    def _ensure_tenant_admin(actor: TenantAdmin) -> None:
+        """Ensure actor is a tenant admin."""
+
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="Tenant admin is not attached to a tenant")
+
+    @staticmethod
+    def _ensure_tenant_actor(actor: TenantAdmin | Teacher | Student | Parent) -> None:
+        """Ensure actor is attached to a tenant."""
+
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="Actor is not attached to a tenant")
+
+    @staticmethod
+    async def _validate_teacher_assignment(
+        db: AsyncSession,
+        *,
+        tenant_id: uuid.UUID,
+        teacher_id: uuid.UUID | None,
+    ) -> None:
+        """Ensure an assigned class teacher exists and is active."""
+
+        if teacher_id is None:
+            return
+
+        teacher = await TeacherRepository.get_teacher_by_id(
+            db=db,
+            tenant_id=tenant_id,
+            teacher_id=teacher_id,
+        )
+        if teacher is None:
+            raise NotFoundException("Teacher not found")
+        if teacher.status != TeacherStatus.ACTIVE:
+            raise BadRequestException("Cannot assign an inactive teacher")
+
+    @staticmethod
     async def create_classroom(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        actor: TenantAdmin,
         payload: ClassRoomCreate,
     ) -> ClassRoomResponse:
         """Create a tenant-scoped classroom."""
 
+        ClassRoomService._ensure_tenant_admin(actor)
+
         existing_classroom = await ClassRoomRepository.get_classroom_by_name_and_arm(
             db=db,
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             class_name=payload.name,
             class_arm=payload.arm,
         )
-
         if existing_classroom is not None:
-            raise BadRequestException(
-                "Classroom with this name and arm already exists"
-            )
+            raise BadRequestException("Classroom with this name and arm already exists")
 
-        if payload.teacher_id is not None:
-            teacher = await TeacherRepository.get_teacher_by_id(
-                db=db,
-                tenant_id=tenant_id,
-                teacher_id=payload.teacher_id,
-            )
-
-            if teacher is None:
-                raise NotFoundException("Teacher not found")
-
-            if teacher.status != TeacherStatus.ACTIVE:
-                raise BadRequestException("Cannot assign an inactive teacher")
+        await ClassRoomService._validate_teacher_assignment(
+            db=db,
+            tenant_id=actor.tenant_id,
+            teacher_id=payload.teacher_id,
+        )
 
         classroom = ClassRoom(
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             name=payload.name,
             level=payload.level,
             arm=payload.arm,
@@ -67,85 +95,141 @@ class ClassRoomService:
             db=db,
             class_room=classroom,
         )
-
+        await db.commit()
+        await db.refresh(created_classroom)
         return ClassRoomResponse.model_validate(created_classroom)
 
     @staticmethod
     async def get_classroom_by_id(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        actor: TenantAdmin | Teacher | Student | Parent,
         class_id: uuid.UUID,
     ) -> ClassRoomResponse:
-        """Get classroom by ID."""
+        """Get classroom by ID with actor-based visibility rules."""
+
+        ClassRoomService._ensure_tenant_actor(actor)
 
         classroom = await ClassRoomRepository.get_classroom_by_id(
             db=db,
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             class_id=class_id,
         )
-
         if classroom is None:
             raise NotFoundException("Classroom not found")
+
+        if isinstance(actor, Teacher) and classroom.teacher_id != actor.id:
+            raise ForbiddenException("You do not have access to this classroom")
+
+        if isinstance(actor, Student) and classroom.id != actor.class_id:
+            raise ForbiddenException("You do not have access to this classroom")
+
+        if isinstance(actor, Parent):
+            links = await StudentParentLinkRepository.get_by_parent_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                parent_id=actor.id,
+            )
+            linked_class_ids = {
+                link.student.class_id
+                for link in links
+                if link.student is not None and link.student.class_id is not None
+            }
+            if classroom.id not in linked_class_ids:
+                raise ForbiddenException("You do not have access to this classroom")
 
         return ClassRoomResponse.model_validate(classroom)
 
     @staticmethod
     async def get_all_classrooms(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        actor: TenantAdmin | Teacher | Student | Parent,
         skip: int = 0,
         limit: int = 100,
     ) -> list[ClassRoomResponse]:
-        """Get all classrooms for a tenant."""
+        """Get classrooms visible to the current actor."""
 
-        classrooms = await ClassRoomRepository.get_all_classrooms(
-            db=db,
-            tenant_id=tenant_id,
-            skip=skip,
-            limit=limit,
-        )
+        ClassRoomService._ensure_tenant_actor(actor)
+        limit = min(limit, 100)
 
-        return [
-            ClassRoomResponse.model_validate(classroom)
-            for classroom in classrooms
-        ]
+        if isinstance(actor, TenantAdmin):
+            classrooms = await ClassRoomRepository.get_all_classrooms(
+                db=db,
+                tenant_id=actor.tenant_id,
+                skip=skip,
+                limit=limit,
+            )
+        elif isinstance(actor, Teacher):
+            classrooms = await ClassRoomRepository.get_classrooms_by_teacher_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                teacher_id=actor.id,
+                skip=skip,
+                limit=limit,
+            )
+        elif isinstance(actor, Student):
+            classrooms = []
+            if actor.class_id is not None:
+                classroom = await ClassRoomRepository.get_classroom_by_id(
+                    db=db,
+                    tenant_id=actor.tenant_id,
+                    class_id=actor.class_id,
+                )
+                if classroom is not None:
+                    classrooms = [classroom]
+        else:
+            links = await StudentParentLinkRepository.get_by_parent_id(
+                db=db,
+                tenant_id=actor.tenant_id,
+                parent_id=actor.id,
+            )
+            class_ids = list(
+                {
+                    link.student.class_id
+                    for link in links
+                    if link.student is not None and link.student.class_id is not None
+                }
+            )
+            classrooms = await ClassRoomRepository.get_classrooms_by_ids(
+                db=db,
+                tenant_id=actor.tenant_id,
+                class_ids=class_ids,
+            )
+
+        return [ClassRoomResponse.model_validate(classroom) for classroom in classrooms]
 
     @staticmethod
     async def get_active_classrooms(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        actor: TenantAdmin | Teacher | Student | Parent,
         skip: int = 0,
         limit: int = 100,
     ) -> list[ClassRoomResponse]:
-        """Get active classrooms for a tenant."""
+        """Get active classrooms visible to the current actor."""
 
-        classrooms = await ClassRoomRepository.get_active_classrooms(
+        classrooms = await ClassRoomService.get_all_classrooms(
             db=db,
-            tenant_id=tenant_id,
+            actor=actor,
             skip=skip,
             limit=limit,
         )
-
-        return [
-            ClassRoomResponse.model_validate(classroom)
-            for classroom in classrooms
-        ]
+        return [classroom for classroom in classrooms if classroom.is_active]
 
     @staticmethod
     async def update_classroom(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        actor: TenantAdmin,
         class_id: uuid.UUID,
         payload: ClassRoomUpdate,
     ) -> ClassRoomResponse:
         """Update classroom details."""
 
+        ClassRoomService._ensure_tenant_admin(actor)
+
         classroom = await ClassRoomRepository.get_classroom_by_id(
             db=db,
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             class_id=class_id,
         )
-
         if classroom is None:
             raise NotFoundException("Classroom not found")
 
@@ -153,35 +237,22 @@ class ClassRoomService:
 
         new_name = update_data.get("name", classroom.name)
         new_arm = update_data.get("arm", classroom.arm)
-
         if new_name != classroom.name or new_arm != classroom.arm:
             existing_classroom = await ClassRoomRepository.get_classroom_by_name_and_arm(
                 db=db,
-                tenant_id=tenant_id,
+                tenant_id=actor.tenant_id,
                 class_name=new_name,
                 class_arm=new_arm,
             )
+            if existing_classroom is not None and existing_classroom.id != classroom.id:
+                raise BadRequestException("Classroom with this name and arm already exists")
 
-            if (
-                existing_classroom is not None
-                and existing_classroom.id != classroom.id
-            ):
-                raise BadRequestException(
-                    "Classroom with this name and arm already exists"
-                )
-
-        if "teacher_id" in update_data and update_data["teacher_id"] is not None:
-            teacher = await TeacherRepository.get_teacher_by_id(
+        if "teacher_id" in update_data:
+            await ClassRoomService._validate_teacher_assignment(
                 db=db,
-                tenant_id=tenant_id,
+                tenant_id=actor.tenant_id,
                 teacher_id=update_data["teacher_id"],
             )
-
-            if teacher is None:
-                raise NotFoundException("Teacher not found")
-
-            if teacher.status != TeacherStatus.ACTIVE:
-                raise BadRequestException("Cannot assign an inactive teacher")
 
         for field, value in update_data.items():
             setattr(classroom, field, value)
@@ -190,24 +261,28 @@ class ClassRoomService:
             db=db,
             classroom=classroom,
         )
-
+        await db.commit()
+        await db.refresh(updated_classroom)
         return ClassRoomResponse.model_validate(updated_classroom)
 
     @staticmethod
     async def deactivate_classroom(
         db: AsyncSession,
-        tenant_id: uuid.UUID,
+        actor: TenantAdmin,
         class_id: uuid.UUID,
     ) -> ClassRoomResponse:
         """Soft-delete classroom."""
 
+        ClassRoomService._ensure_tenant_admin(actor)
+
         classroom = await ClassRoomRepository.deactivate_classroom(
             db=db,
-            tenant_id=tenant_id,
+            tenant_id=actor.tenant_id,
             class_id=class_id,
         )
-
         if classroom is None:
             raise NotFoundException("Classroom not found")
 
+        await db.commit()
+        await db.refresh(classroom)
         return ClassRoomResponse.model_validate(classroom)

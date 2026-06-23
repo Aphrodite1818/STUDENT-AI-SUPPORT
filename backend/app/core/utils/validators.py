@@ -20,3 +20,16 @@ def generate_slug(school_name: str) -> str:
     slug = re.sub(r"-+", "-", slug)         # collapse multiple hyphens
 
     return slug.strip("-")
+
+
+def validate_password_strength(password: str) -> None:
+    """Enforce a minimum password baseline for first-login password changes."""
+
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+
+    if password.lower() == password or password.upper() == password:
+        raise ValueError("Password must include both uppercase and lowercase letters")
+
+    if not re.search(r"\d", password):
+        raise ValueError("Password must include at least one number")

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import BackgroundTasks
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.logging import get_logger
@@ -13,11 +14,16 @@ from app.core.exceptions import BadRequestException, ConflictException, NotFound
 from app.core.utils.email import send_email
 from app.core.utils.email_templates import get_tenant_invite_email_html, get_user_invite_email_html
 from app.modules.auth.models import AuthPurpose, AuthRecord
+from app.modules.auth_identity.models import ActorType, IdentifierType
+from app.modules.auth_identity.schemas import AuthIdentityCreate
+from app.modules.auth_identity.service import AuthIdentityService
+from app.modules.parents.repository import ParentRepository
 from app.modules.superadmin.models import SuperAdmin, SuperAdminInvite
 from app.modules.superadmin.repository import SuperAdminRepository
 from app.modules.superadmin.schemas import SuperadminInviteCreate
-from app.modules.users.models import AccountStatus, User, UserRole
-from app.modules.users.repository import UserRepository
+from app.modules.teachers.repository import TeacherRepository
+from app.modules.tenant_admins.models import TenantAdmin, TenantAdminStatus
+from app.modules.tenant_admins.repository import TenantAdminRepository
 from app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
 from app.tenant_management.repository import TenantRepository
 from app.tenant_management.schemas import TenantCreate, TenantStatusUpdate
@@ -29,6 +35,7 @@ logger = get_logger(__name__)
 
 def _normalize_email(email: str) -> str:
     """Normalize the email address."""
+
     return email.strip().lower()
 
 
@@ -38,6 +45,7 @@ class SuperadminService:
     @staticmethod
     def _build_invite_link(raw_token: str, frontend_app_url: str | None = None) -> str:
         """Build invite link."""
+
         base_url = (frontend_app_url or settings.FRONTEND_APP_URL).strip().rstrip("/")
         return f"{base_url}/invite?token={quote(raw_token, safe='')}"
 
@@ -45,13 +53,18 @@ class SuperadminService:
     async def get_email_conflicts(
         db: AsyncSession,
         email: str,
-    ) -> tuple[User | None, Tenant | None, SuperAdmin | None]:
-        """Return email conflicts."""
+    ) -> tuple[TenantAdmin | object | None, Tenant | None, SuperAdmin | None]:
+        """Return email conflicts across tenant actors, tenants, and superadmins."""
+
         normalized_email = _normalize_email(email)
-        existing_user = await UserRepository.get_user_by_email(db, normalized_email)
+        existing_admin = await TenantAdminRepository.get_by_email(db, normalized_email)
+        existing_teacher = await TeacherRepository.get_by_email(db, normalized_email)
+        existing_parent = await ParentRepository.get_by_email(db, normalized_email)
         existing_tenant = await TenantRepository.get_by_email_including_deleted(db, normalized_email)
         existing_superadmin = await SuperAdminRepository.get_by_email(db, normalized_email)
-        return existing_user, existing_tenant, existing_superadmin
+
+        existing_actor = existing_admin or existing_teacher or existing_parent
+        return existing_actor, existing_tenant, existing_superadmin
 
     @staticmethod
     async def authenticate_superadmin(
@@ -61,6 +74,7 @@ class SuperadminService:
         password: str,
     ) -> SuperAdmin | None:
         """Perform authenticate superadmin."""
+
         superadmin = await SuperAdminRepository.get_by_email(db, email)
         if superadmin is None:
             return None
@@ -82,6 +96,7 @@ class SuperadminService:
         limit: int = 100,
     ) -> list[SuperAdmin]:
         """List superadmins."""
+
         return await SuperAdminRepository.list(db, skip=skip, limit=limit)
 
     @staticmethod
@@ -91,14 +106,15 @@ class SuperadminService:
         background_tasks: BackgroundTasks | None = None,
         frontend_app_url: str | None = None,
     ) -> Tenant:
-        """Create tenant."""
+        """Create tenant and a pending tenant admin actor."""
+
         normalized_email = _normalize_email(payload.email)
-        existing_user, existing_tenant, existing_superadmin = await SuperadminService.get_email_conflicts(
+        existing_actor, existing_tenant, existing_superadmin = await SuperadminService.get_email_conflicts(
             db,
             normalized_email,
         )
 
-        if existing_user or existing_superadmin or existing_tenant:
+        if existing_actor or existing_superadmin or existing_tenant:
             raise ConflictException("A school or account with this email already exists")
 
         if payload.school_bot_whatssap_number:
@@ -131,16 +147,27 @@ class SuperadminService:
             db.add(tenant)
             await db.flush()
 
-            admin_user = User(
+            admin = TenantAdmin(
                 email=normalized_email,
                 password_hash=hash_password(secrets.token_urlsafe(32)),
-                role=UserRole.ADMIN,
-                account_status=AccountStatus.PENDING,
+                account_status=TenantAdminStatus.PENDING,
                 tenant_id=tenant.id,
                 is_verified=False,
+                is_active=True,
             )
-            await UserRepository.create_user(db, admin_user)
-            await db.flush()
+            await TenantAdminRepository.create(db, admin)
+
+            await AuthIdentityService.create_for_actor(
+                db=db,
+                tenant_id=tenant.id,
+                payload=AuthIdentityCreate(
+                    identifier=normalized_email,
+                    identifier_type=IdentifierType.EMAIL,
+                    actor_type=ActorType.TENANT_ADMIN,
+                    actor_id=admin.id,
+                    is_active=True,
+                ),
+            )
 
             raw_token = secrets.token_urlsafe(32)
             expires_at = datetime.now(timezone.utc) + timedelta(
@@ -148,7 +175,7 @@ class SuperadminService:
             )
             db.add(
                 AuthRecord(
-                    email=admin_user.email,
+                    email=admin.email,
                     hashed_value=hash_auth_secret(raw_token),
                     purpose=AuthPurpose.TENANT_ACTIVATION,
                     expires_at=expires_at,
@@ -198,6 +225,7 @@ class SuperadminService:
         include_deleted: bool = True,
     ) -> list[Tenant]:
         """List tenants."""
+
         return await TenantRepository.get_all(
             db,
             skip=skip,
@@ -213,6 +241,7 @@ class SuperadminService:
         include_deleted: bool = True,
     ) -> Tenant:
         """Return tenant."""
+
         tenant = (
             await TenantRepository.get_by_id_including_deleted(db, tenant_id)
             if include_deleted
@@ -229,6 +258,7 @@ class SuperadminService:
         payload: TenantStatusUpdate,
     ) -> Tenant:
         """Update tenant status."""
+
         tenant = await TenantRepository.get_by_id_including_deleted(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
@@ -245,6 +275,7 @@ class SuperadminService:
     @staticmethod
     async def restore_tenant(db: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
         """Perform restore tenant."""
+
         tenant = await TenantRepository.get_by_id_including_deleted(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
@@ -262,6 +293,7 @@ class SuperadminService:
     @staticmethod
     async def delete_tenant(db: AsyncSession, tenant_id: uuid.UUID) -> dict[str, str]:
         """Delete tenant."""
+
         tenant = await TenantRepository.get_by_id(db, tenant_id)
         if not tenant:
             raise NotFoundException("Tenant not found")
@@ -281,13 +313,14 @@ class SuperadminService:
         frontend_app_url: str | None = None,
     ) -> dict[str, str]:
         """Perform invite superadmin."""
+
         normalized_email = _normalize_email(payload.email)
-        existing_user, existing_tenant, existing_superadmin = await SuperadminService.get_email_conflicts(
+        existing_actor, existing_tenant, existing_superadmin = await SuperadminService.get_email_conflicts(
             db,
             normalized_email,
         )
 
-        if existing_user or existing_tenant:
+        if existing_actor or existing_tenant:
             raise ConflictException("A school or account with this email already exists")
         if existing_superadmin is not None:
             raise ConflictException("A superadmin account with this email already exists")
@@ -338,3 +371,90 @@ class SuperadminService:
                 raise BadRequestException("Unable to send invite email. Please try again.")
 
         return {"detail": "Superadmin invite created and emailed successfully."}
+
+    @staticmethod
+    async def get_analytics_overview(
+        db: AsyncSession,
+    ) -> dict[str, object]:
+        """Return platform analytics for the superadmin dashboard."""
+
+        total_tenants = (
+            await db.execute(select(func.count()).select_from(Tenant))
+        ).scalar_one()
+        active_tenants = (
+            await db.execute(
+                select(func.count()).select_from(Tenant).where(
+                    Tenant.is_deleted.is_(False),
+                    Tenant.verification_status == TenantVerificationStatus.ACTIVE,
+                    Tenant.status == TenantStatus.ACTIVE,
+                )
+            )
+        ).scalar_one()
+        pending_verification = (
+            await db.execute(
+                select(func.count()).select_from(Tenant).where(
+                    Tenant.is_deleted.is_(False),
+                    Tenant.verification_status == TenantVerificationStatus.PENDING_VERIFICATION,
+                )
+            )
+        ).scalar_one()
+        rejected_verification = (
+            await db.execute(
+                select(func.count()).select_from(Tenant).where(
+                    Tenant.is_deleted.is_(False),
+                    Tenant.verification_status == TenantVerificationStatus.REJECTED,
+                )
+            )
+        ).scalar_one()
+        total_tenant_admins = (
+            await db.execute(select(func.count()).select_from(TenantAdmin))
+        ).scalar_one()
+
+        growth_period = func.date_trunc("month", Tenant.created_at)
+        growth_rows = (
+            await db.execute(
+                select(
+                    growth_period.label("period"),
+                    func.count(Tenant.id).label("value"),
+                )
+                .group_by(growth_period)
+                .order_by(growth_period)
+            )
+        ).all()
+
+        status_breakdown = []
+        for status in TenantStatus:
+            value = (
+                await db.execute(
+                    select(func.count()).select_from(Tenant).where(
+                        Tenant.is_deleted.is_(False),
+                        Tenant.status == status,
+                    )
+                )
+            ).scalar_one()
+            status_breakdown.append({"label": status.value, "value": value})
+
+        return {
+            "stats": {
+                "total_tenants": total_tenants,
+                "active_tenants": active_tenants,
+                "pending_verification": pending_verification,
+                "rejected_verification": rejected_verification,
+                "total_tenant_admins": total_tenant_admins,
+            },
+            "charts": {
+                "tenant_growth": [
+                    {
+                        "label": row.period.strftime("%Y-%m") if row.period else "",
+                        "value": row.value,
+                    }
+                    for row in growth_rows
+                ],
+                "verification_breakdown": [
+                    {"label": "active", "value": active_tenants},
+                    {"label": "pending_verification", "value": pending_verification},
+                    {"label": "rejected", "value": rejected_verification},
+                ],
+                "status_breakdown": status_breakdown,
+            },
+        }

@@ -104,6 +104,16 @@ async def list_superadmins(
     return await SuperadminService.list_superadmins(db, skip=skip, limit=limit)
 
 
+@router.get("/analytics/overview", status_code=status.HTTP_200_OK)
+async def get_superadmin_analytics_overview(
+    db: DbSession,
+    current_superadmin: SuperadminActor,
+) -> dict[str, object]:
+    """Return analytics data for the superadmin dashboard."""
+
+    return await SuperadminService.get_analytics_overview(db)
+
+
 @router.post("/superadmins/invite", status_code=status.HTTP_201_CREATED)
 async def invite_superadmin(
     payload: SuperadminInviteCreate,

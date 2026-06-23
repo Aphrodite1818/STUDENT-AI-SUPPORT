@@ -1,7 +1,3 @@
-#======================================#
-#              models.py               #
-#======================================#
-
 from __future__ import annotations
 
 import uuid
@@ -16,10 +12,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
-
 if TYPE_CHECKING:
     from app.modules.parents.models import Parent
-    from app.modules.users.models import User
 
 
 class Gender(str, PyEnum):
@@ -46,20 +40,85 @@ class StudentProfileStatus(str, PyEnum):
     COMPLETE = "complete"
 
 
+class StudentAccountStatus(str, PyEnum):
+    """Student account lifecycle status."""
+
+    PENDING = "pending"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class StudentParentLinkRequestStatus(str, PyEnum):
+    """Lifecycle states for parent-student link approval requests."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
 class Student(BaseModel):
-    """student academic profile linked to a user account"""
+    """Student actor account and academic profile."""
 
     __tablename__ = "students"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+    admission_number: Mapped[str] = mapped_column(
+        String(50),
         nullable=False,
-        unique=True,
-        index=True,
     )
 
-    admission_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    first_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    last_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    account_status: Mapped[StudentAccountStatus] = mapped_column(
+        SQLEnum(
+            StudentAccountStatus,
+            name="student_account_status",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=StudentAccountStatus.PENDING,
+        server_default=StudentAccountStatus.PENDING.value,
+    )
+
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+
+    password_reset_required: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -113,12 +172,6 @@ class Student(BaseModel):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship(
-        "User",
-        back_populates="student_profile",
-        lazy="joined",
-    )
-
     parent_links: Mapped[list["StudentParentLink"]] = relationship(
         "StudentParentLink",
         back_populates="student",
@@ -131,20 +184,16 @@ class Student(BaseModel):
         cascade="all, delete-orphan",
     )
 
-    @property
-    def firstname(self) -> str | None:
-        return self.user.firstname if self.user else None
-
-    @property
-    def lastname(self) -> str | None:
-        return self.user.lastname if self.user else None
-
-    @property
-    def email(self) -> str | None:
-        return self.user.email if self.user else None
+    parent_link_requests: Mapped[list["StudentParentLinkRequest"]] = relationship(
+        "StudentParentLinkRequest",
+        back_populates="student",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def parents(self) -> list["Parent"]:
+        """Return linked parents."""
+
         return [link.parent for link in self.parent_links if link.parent is not None]
 
     __table_args__ = (
@@ -153,14 +202,15 @@ class Student(BaseModel):
             "admission_number",
             name="uq_students_tenant_admission_number",
         ),
-        Index("ix_students_tenant_user", "tenant_id", "user_id"),
+        Index("ix_students_tenant_admission_number", "tenant_id", "admission_number"),
         Index("ix_students_tenant_class", "tenant_id", "class_id"),
         Index("ix_students_tenant_status", "tenant_id", "status"),
+        Index("ix_students_tenant_account_status", "tenant_id", "account_status"),
     )
 
 
 class StudentParentLink(BaseModel):
-    """Many-to-many link between students and parents"""
+    """Many-to-many link between students and parents."""
 
     __tablename__ = "student_parent_links"
 
@@ -215,8 +265,79 @@ class StudentParentLink(BaseModel):
     )
 
 
+class StudentParentLinkRequest(BaseModel):
+    """Pending parent request that requires student approval before linking."""
+
+    __tablename__ = "student_parent_link_requests"
+
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    parent_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("parents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    admission_number_snapshot: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    status: Mapped[StudentParentLinkRequestStatus] = mapped_column(
+        SQLEnum(
+            StudentParentLinkRequestStatus,
+            name="student_parent_link_request_status",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=StudentParentLinkRequestStatus.PENDING,
+        server_default=StudentParentLinkRequestStatus.PENDING.value,
+    )
+
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    student: Mapped["Student"] = relationship(
+        "Student",
+        back_populates="parent_link_requests",
+    )
+
+    parent: Mapped["Parent"] = relationship(
+        "Parent",
+        back_populates="student_link_requests",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_student_parent_link_requests_tenant_student",
+            "tenant_id",
+            "student_id",
+        ),
+        Index(
+            "ix_student_parent_link_requests_tenant_parent",
+            "tenant_id",
+            "parent_id",
+        ),
+        Index(
+            "ix_student_parent_link_requests_tenant_status",
+            "tenant_id",
+            "status",
+        ),
+    )
+
+
 class StudentLinkCode(BaseModel):
-    """Code used by parents to link themselves to student"""
+    """Code used by parents to link themselves to a student."""
 
     __tablename__ = "student_link_codes"
 

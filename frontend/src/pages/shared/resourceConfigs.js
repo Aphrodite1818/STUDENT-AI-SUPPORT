@@ -6,7 +6,7 @@ import { parentService } from "../../services/parentService";
 import { studentService } from "../../services/studentService";
 import { subjectService } from "../../services/subject.service";
 import { teacherService } from "../../services/teacherService";
-import { userService } from "../../services/user.service";
+import { displayName, fullName as actorFullName } from "../../utils/user";
 
 const studentStatuses = ["active", "withdrawn", "suspended", "graduated"];
 const attendanceStatuses = ["present", "absent", "late", "excused"];
@@ -23,14 +23,13 @@ const optionsFrom = (items, labelFn) =>
     label: labelFn(item),
   }));
 
+const listItems = (result) =>
+  Array.isArray(result) ? result : Array.isArray(result?.items) ? result.items : [];
+
 const enumOptions = (values) =>
   values.map((value) => ({ value, label: titleCase(value) }));
 
-const fullName = (item) =>
-  [item?.firstname, item?.lastname].filter(Boolean).join(" ") ||
-  item?.email ||
-  item?.id ||
-  "Unknown";
+const fullName = (item) => actorFullName(item) || item?.id || "Unknown";
 
 const className = (item) =>
   [item?.name, item?.arm].filter(Boolean).join(" ") || item?.id || "Unknown class";
@@ -82,34 +81,30 @@ const compactPayload = (payload) =>
     return nextPayload;
   }, {});
 
-const loadAcademicContext = async ({ includeUsers = false, includeFees = false } = {}) => {
-  const [classes, subjects, students, exams, users, fees] = await Promise.all([
+const loadAcademicContext = async ({
+  includeExams = false,
+  includeFees = false,
+} = {}) => {
+  const [classes, subjects, students, exams, fees] = await Promise.all([
     classService.getClasses({ limit: 100 }),
     subjectService.getSubjects({ limit: 100, isActive: true }),
-    studentService.getStudents({ limit: 100 }),
-    examService.getExams({ limit: 100 }),
-    includeUsers ? userService.getUsers(0, 500) : Promise.resolve([]),
+    studentService.getAdminStudents({ limit: 100 }),
+    includeExams ? examService.getExams({ limit: 100 }) : Promise.resolve({ items: [] }),
     includeFees ? financeService.getFees({ limit: 100 }) : Promise.resolve({ items: [] }),
   ]);
 
-  const classItems = classes?.items || [];
-  const subjectItems = subjects?.items || [];
-  const studentItems = students?.items || [];
-  const examItems = exams?.items || [];
-  const userItems = Array.isArray(users) ? users : [];
-  const feeItems = fees?.items || [];
+  const classItems = listItems(classes);
+  const subjectItems = listItems(subjects);
+  const studentItems = listItems(students);
+  const examItems = listItems(exams);
+  const feeItems = listItems(fees);
 
   return {
     classes: classItems,
     subjects: subjectItems,
     students: studentItems,
     exams: examItems,
-    users: userItems,
-    parents: userItems.filter((user) => user.role === "parent"),
-    studentUsers: userItems.filter((user) => user.role === "student"),
-    teacherUsers: userItems.filter((user) => user.role === "teacher"),
     fees: feeItems,
-    userById: byId(userItems),
     classById: byId(classItems),
     subjectById: byId(subjectItems),
     studentById: byId(studentItems),
@@ -129,20 +124,14 @@ const loadClassContext = async () => {
 };
 
 const loadSubjectContext = async () => {
-  const [teachers, users] = await Promise.all([
-    teacherService.getTeachers({ limit: 100 }),
-    userService.getUsers(0, 500),
-  ]);
+  const teachers = await teacherService.getTeachers({ limit: 100 });
 
-  const userItems = Array.isArray(users) ? users : [];
-  const userByIdMap = byId(userItems);
   const teacherItems = (teachers?.items || []).filter(
     (teacher) => teacher.status === "active"
   );
 
   return {
     teachers: teacherItems,
-    userById: userByIdMap,
     teacherById: byId(teacherItems),
   };
 };
@@ -156,14 +145,13 @@ const classColumns = [
 const classFields = (context) => [
   { name: "name", label: "Class name", required: true },
   { name: "level", label: "Level", placeholder: "Junior Secondary 1" },
-  { name: "arm", label: "Arm", placeholder: "A" },
+  { name: "arm", label: "Arm", placeholder: "A", required: true },
   {
     name: "teacher_id",
     label: "Class teacher",
     type: "select",
-    options: optionsFrom(context.teachers, (teacher) => fullName(teacher.user)),
+    options: optionsFrom(context.teachers, (teacher) => displayName(teacher)),
   },
-  { name: "description", label: "Description", type: "textarea" },
 ];
 
 export const getClassResourceConfig = ({ role, writable }) => ({
@@ -174,7 +162,7 @@ export const getClassResourceConfig = ({ role, writable }) => ({
   canUpdate: writable,
   canDelete: writable,
   loadContext: writable ? loadClassContext : undefined,
-  initialForm: { name: "", level: "", arm: "", teacher_id: "", description: "" },
+  initialForm: { name: "", level: "", arm: "", teacher_id: "" },
   fields: classFields,
   filters: [{ name: "search", label: "Search", placeholder: "Class name" }],
   columns: (context) => [
@@ -185,7 +173,7 @@ export const getClassResourceConfig = ({ role, writable }) => ({
       render: (item) => {
         if (!item.teacher_id) return "Unassigned";
         const teacher = context.teacherById?.[item.teacher_id];
-        return teacher ? fullName(teacher.user) : item.teacher_id;
+        return teacher ? displayName(teacher) : item.teacher_id;
       },
     },
   ],
@@ -198,7 +186,6 @@ export const getClassResourceConfig = ({ role, writable }) => ({
     level: item.level || "",
     arm: item.arm || "",
     teacher_id: item.teacher_id || "",
-    description: item.description || "",
   }),
   getItemLabel: (item) => className(item),
   role,
@@ -289,9 +276,8 @@ export const subjectResourceConfig = {
       placeholder: "Search teachers by name, email, or staff ID",
       searchPlaceholder: "Search by name, email, or staff ID",
       options: optionsFrom(context.teachers, (teacher) => {
-        const user = context.userById?.[teacher.user_id] || teacher.user;
-        const primaryLabel = fullName(user) || teacher.staff_id || teacher.id;
-        const secondaryLabel = [teacher.staff_id, user?.email]
+        const primaryLabel = displayName(teacher) || teacher.staff_id || teacher.id;
+        const secondaryLabel = [teacher.staff_id, teacher?.email]
           .filter(Boolean)
           .join(" | ");
         return secondaryLabel
@@ -362,11 +348,11 @@ export const subjectResourceConfig = {
 export const teacherResourceConfig = {
   singularLabel: "Teacher profile",
   pluralLabel: "Teacher profiles",
-  formHelp: "Teacher profiles are created automatically when a teacher user is invited. Edit staff details and assigned subjects here.",
+  formHelp: "Review teacher records, update staff details, and maintain subject assignments created through the tenant admin flow.",
   canCreate: false,
   canUpdate: true,
   canDelete: true,
-  loadContext: () => loadAcademicContext({ includeUsers: true }),
+  loadContext: () => loadAcademicContext(),
   initialForm: {
     staff_id: "",
     qualification: "",
@@ -385,15 +371,21 @@ export const teacherResourceConfig = {
       options: optionsFrom(context.subjects, subjectName),
     },
   ],
-  columns: (context) => [
+  columns: () => [
     {
-      key: "user_id",
+      key: "teacher",
       label: "Teacher",
-      render: (item) => fullName(context.userById?.[item.user_id]) || item.user_id,
+      render: (item) => displayName(item),
     },
+    { key: "email", label: "Email", render: (item) => optionalValue(item.email) },
     { key: "staff_id", label: "Staff ID", render: (item) => item.staff_id || "N/A" },
     { key: "qualification", label: "Qualification", render: (item) => item.qualification || "N/A" },
     { key: "specialization", label: "Specialization", render: (item) => item.specialization || "N/A" },
+    {
+      key: "subjects",
+      label: "Subjects",
+      render: (item) => summarizeLabels(item.subjects, subjectName),
+    },
   ],
   fetchItems: () => teacherService.getTeachers({ limit: 100 }),
   updateItem: (id, payload) => teacherService.updateTeacher(id, payload),
@@ -411,18 +403,18 @@ export const teacherResourceConfig = {
     specialization: item.specialization || "",
     subject_ids: selectedIds(item.subjects),
   }),
-  getItemLabel: (item, context) => fullName(context.userById?.[item.user_id]) || item.user_id,
+  getItemLabel: (item) => displayName(item),
 };
 
 export const getStudentResourceConfig = ({ writable }) => ({
   singularLabel: "Student",
   pluralLabel: "Students",
   formHelp:
-    "Student profiles are created automatically from user invites. Complete academic details here when they become available.",
+    "Review student records created by tenant admins, update academic details, and manage first-login readiness safely.",
   canCreate: false,
   canUpdate: writable,
   canDelete: writable,
-  loadContext: () => loadAcademicContext({ includeUsers: writable }),
+  loadContext: () => loadAcademicContext(),
   initialForm: {
     gender: "",
     date_of_birth: "",
@@ -445,10 +437,18 @@ export const getStudentResourceConfig = ({ writable }) => ({
     { name: "status", label: "Status", type: "select", options: enumOptions(studentStatuses) },
   ],
   columns: () => [
-    { key: "name", label: "Full Name", render: (item) => fullName(item) },
-    { key: "email", label: "Email", render: (item) => optionalValue(item.email) },
+    { key: "name", label: "Full Name", render: (item) => displayName(item) },
     { key: "admission_number", label: "Admission Number", render: (item) => optionalValue(item.admission_number, "Pending") },
     { key: "admission_date", label: "Admission Date", render: (item) => formatDateValue(item.admission_date) },
+    {
+      key: "password_reset_required",
+      label: "Password Reset",
+      render: (item) =>
+        statusBadge(
+          item.password_reset_required ? "required" : "completed",
+          item.password_reset_required ? "warning" : "success"
+        ),
+    },
     {
       key: "profile_status",
       label: "Profile Status",
@@ -465,13 +465,13 @@ export const getStudentResourceConfig = ({ writable }) => ({
     },
   ],
   fetchItems: (filters) =>
-    studentService.getStudents({
+    studentService.getAdminStudents({
       search: filters.search,
       classId: filters.classId,
       status: filters.status,
     }),
   createItem: undefined,
-  updateItem: (id, payload) => studentService.updateStudent(id, payload),
+  updateItem: (id, payload) => studentService.updateAdminStudent(id, payload),
   deleteItem: (id) => studentService.deleteStudent(id),
   buildPayload: (formData) => compactPayload(formData),
   mapItemToForm: (item) => ({
@@ -482,14 +482,14 @@ export const getStudentResourceConfig = ({ writable }) => ({
     status: item.status || "active",
     graduation_date: item.graduation_date || "",
   }),
-  getItemLabel: (item) => fullName(item),
+  getItemLabel: (item) => displayName(item),
 });
 
 export const parentResourceConfig = {
   singularLabel: "Parent profile",
   pluralLabel: "Parent profiles",
   formHelp:
-    "Parent profiles are created automatically from user invites. Optional contact details can be completed here later.",
+    "Review parent records created by tenant admins and maintain optional contact details after invite acceptance.",
   canCreate: false,
   canUpdate: true,
   canDelete: true,
@@ -504,10 +504,9 @@ export const parentResourceConfig = {
     { name: "emergency_phone", label: "Emergency phone", placeholder: "+2348012345678" },
   ],
   columns: [
-    { key: "name", label: "Full Name", render: (item) => fullName(item) },
+    { key: "name", label: "Full Name", render: (item) => displayName(item) },
     { key: "email", label: "Email", render: (item) => optionalValue(item.email) },
     { key: "phone_number", label: "Phone Number", render: (item) => optionalValue(item.phone_number) },
-    { key: "whatsapp_id", label: "WhatsApp", render: (item) => optionalValue(item.whatsapp_id) },
     { key: "occupation", label: "Occupation", render: (item) => optionalValue(item.occupation) },
     { key: "emergency_phone", label: "Emergency Phone", render: (item) => optionalValue(item.emergency_phone) },
   ],
@@ -520,13 +519,16 @@ export const parentResourceConfig = {
     address: item.address || "",
     emergency_phone: item.emergency_phone || "",
   }),
-  getItemLabel: (item) => fullName(item),
+  getItemLabel: (item) => displayName(item),
 };
 
 export const getAttendanceResourceConfig = ({ writable, canDelete }) => ({
   singularLabel: "Attendance record",
   pluralLabel: "Attendance records",
   formHelp: "Teachers can create and update attendance; only admins can delete records.",
+  allowUnavailable: true,
+  unavailableMessage:
+    "Attendance is not available yet because the backend attendance router has no live endpoints.",
   canCreate: writable,
   canUpdate: writable,
   canDelete,
@@ -583,6 +585,9 @@ export const getExamResourceConfig = ({ canDelete }) => ({
   singularLabel: "Exam",
   pluralLabel: "Exams",
   formHelp: "Teachers can schedule and update exams. Deleting exams is reserved for admins.",
+  allowUnavailable: true,
+  unavailableMessage:
+    "Exams are not available yet because the backend exams router has no live endpoints.",
   canCreate: true,
   canUpdate: true,
   canDelete,
@@ -639,7 +644,10 @@ export const getResultResourceConfig = ({ canDelete }) => ({
   canCreate: true,
   canUpdate: true,
   canDelete,
-  loadContext: () => loadAcademicContext(),
+  allowUnavailable: true,
+  unavailableMessage:
+    "Results are not available yet because the backend results router has no live endpoints.",
+  loadContext: () => loadAcademicContext({ includeExams: true }),
   initialForm: {
     student_id: "",
     subject_id: "",
@@ -713,6 +721,9 @@ export const feeResourceConfig = {
   singularLabel: "Fee",
   pluralLabel: "Fees",
   formHelp: "Fees can be global or tied to a specific class.",
+  allowUnavailable: true,
+  unavailableMessage:
+    "Fees are not available yet because the backend finance router has no live fee endpoints.",
   canCreate: true,
   canUpdate: true,
   canDelete: true,
@@ -752,6 +763,9 @@ export const paymentResourceConfig = {
   singularLabel: "Payment",
   pluralLabel: "Payments",
   formHelp: "Record manual payments against a student and fee.",
+  allowUnavailable: true,
+  unavailableMessage:
+    "Payments are not available yet because the backend finance router has no live payment endpoints.",
   canCreate: true,
   canUpdate: true,
   canDelete: true,

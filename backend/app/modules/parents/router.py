@@ -1,70 +1,33 @@
 from typing import Annotated, TypeAlias
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 
 from app.core.dependencies.db import DbSession
-from app.core.dependencies.route_guards import get_current_tenant_user, require_tenant_role
+from app.core.dependencies.route_guards import get_current_parent
+from app.modules.parents.models import Parent
 from app.modules.parents.schemas import (
-    ParentCreate,
     ParentLinkedStudentListResponse,
-    ParentListResponse,
+    ParentOnboardingStatusResponse,
+    ParentOnboardingUpdate,
     ParentResponse,
-    ParentUpdate,
 )
+from app.modules.students.schemas import (
+    StudentParentLinkRequestCreate,
+    StudentParentLinkRequestListResponse,
+    StudentParentLinkRequestResponse,
+)
+from app.modules.students.service import StudentParentLinkRequestService
 from app.modules.parents.service import ParentService
-from app.modules.users.models import User, UserRole
 
 
 router = APIRouter(
     prefix="/parents",
     tags=["Parents"],
 )
-CurrentTenantUser: TypeAlias = Annotated[User, Depends(get_current_tenant_user)]
-TenantAdminUser: TypeAlias = Annotated[
-    User,
-    Depends(require_tenant_role([UserRole.ADMIN])),
-]
+CurrentParent: TypeAlias = Annotated[Parent, Depends(get_current_parent)]
 
 
-@router.post(
-    "",
-    response_model=ParentResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a parent profile",
-)
-async def create_parent_profile(
-    payload: ParentCreate,
-    db: DbSession,
-    current_user: TenantAdminUser,
-) -> ParentResponse:
-    """Create a parent profile."""
-    return await ParentService.create_parent_profile(
-        db=db,
-        actor=current_user,
-        payload=payload,
-    )
 
-
-@router.get(
-    "",
-    response_model=ParentListResponse,
-    summary="List parent profiles",
-)
-async def get_all_parents(
-    db: DbSession,
-    current_user: TenantAdminUser,
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=50, ge=1, le=100),
-) -> ParentListResponse:
-    """Get all parent profiles for the current tenant."""
-    parents, total = await ParentService.get_all_parents(
-        db=db,
-        actor=current_user,
-        skip=skip,
-        limit=limit,
-    )
-    return ParentListResponse(items=parents, total=total)
 
 
 @router.get(
@@ -74,13 +37,13 @@ async def get_all_parents(
 )
 async def get_my_parent_profile(
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentParent,
 ) -> ParentResponse:
     """Get the logged-in parent's profile."""
-    return await ParentService.get_parent_by_user_id(
+
+    return await ParentService.get_my_parent_profile(
         db=db,
         actor=current_user,
-        user_id=current_user.id,
     )
 
 
@@ -90,15 +53,33 @@ async def get_my_parent_profile(
     summary="Update my parent profile",
 )
 async def update_my_parent_profile(
-    payload: ParentUpdate,
+    payload: ParentOnboardingUpdate,
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentParent,
 ) -> ParentResponse:
     """Allow the logged-in parent to update their own profile."""
+
     return await ParentService.update_my_parent_profile(
         db=db,
         actor=current_user,
         payload=payload,
+    )
+
+
+@router.get(
+    "/me/onboarding-status",
+    response_model=ParentOnboardingStatusResponse,
+    summary="Get my parent onboarding status",
+)
+async def get_my_parent_onboarding_status(
+    db: DbSession,
+    current_user: CurrentParent,
+) -> ParentOnboardingStatusResponse:
+    """Return the current parent onboarding status."""
+
+    return await ParentService.get_my_onboarding_status(
+        db=db,
+        actor=current_user,
     )
 
 
@@ -109,9 +90,10 @@ async def update_my_parent_profile(
 )
 async def get_my_linked_students(
     db: DbSession,
-    current_user: CurrentTenantUser,
+    current_user: CurrentParent,
 ) -> ParentLinkedStudentListResponse:
     """Get students linked to the logged-in parent."""
+
     students, total = await ParentService.get_my_linked_students(
         db=db,
         actor=current_user,
@@ -119,57 +101,40 @@ async def get_my_linked_students(
     return ParentLinkedStudentListResponse(items=students, total=total)
 
 
-@router.get(
-    "/{parent_id}",
-    response_model=ParentResponse,
-    summary="Get a parent profile",
+@router.post(
+    "/me/student-link-requests",
+    response_model=StudentParentLinkRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Request to link a student by admission number",
 )
-async def get_parent_profile(
-    parent_id: UUID,
+async def create_student_link_request(
+    payload: StudentParentLinkRequestCreate,
     db: DbSession,
-    current_user: CurrentTenantUser,
-) -> ParentResponse:
-    """Get a parent profile by id."""
-    return await ParentService.get_parent_profile(
+    current_user: CurrentParent,
+) -> StudentParentLinkRequestResponse:
+    """Create a pending student-link request for the logged-in parent."""
+
+    return await StudentParentLinkRequestService.create_request(
         db=db,
         actor=current_user,
-        parent_id=parent_id,
-    )
-
-
-@router.patch(
-    "/{parent_id}",
-    response_model=ParentResponse,
-    summary="Update a parent profile",
-)
-async def update_parent_profile(
-    parent_id: UUID,
-    payload: ParentUpdate,
-    db: DbSession,
-    current_user: TenantAdminUser,
-) -> ParentResponse:
-    """Update a parent profile."""
-    return await ParentService.update_parent_profile(
-        db=db,
-        actor=current_user,
-        parent_id=parent_id,
         payload=payload,
     )
 
 
-@router.delete(
-    "/{parent_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a parent profile",
+@router.get(
+    "/me/student-link-requests",
+    response_model=StudentParentLinkRequestListResponse,
+    summary="Get my student link requests",
 )
-async def delete_parent_profile(
-    parent_id: UUID,
+async def get_my_student_link_requests(
     db: DbSession,
-    current_user: TenantAdminUser,
-) -> None:
-    """Delete a parent profile."""
-    await ParentService.delete_parent_profile(
+    current_user: CurrentParent,
+) -> StudentParentLinkRequestListResponse:
+    """Return student link requests submitted by the logged-in parent."""
+
+    requests, total = await StudentParentLinkRequestService.list_parent_requests(
         db=db,
         actor=current_user,
-        parent_id=parent_id,
     )
+    return StudentParentLinkRequestListResponse(items=requests, total=total)
+

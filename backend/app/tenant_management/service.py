@@ -32,7 +32,12 @@ from app.tenant_management.models import (
     TenantVerificationStatus,
 )
 from app.tenant_management.repository import TenantRepository
-from app.tenant_management.schemas import TenantRegisterRequest, TenantUpdate
+from app.tenant_management.schemas import (
+    TenantOnboardingStatusResponse,
+    TenantOnboardingUpdate,
+    TenantRegisterRequest,
+    TenantUpdate,
+)
 
 logger = get_logger(__name__)
 
@@ -69,6 +74,9 @@ def _is_tenant_onboarding_complete(
     school_name: str | None,
     email: str | None,
     admission_number_prefix: str | None,
+    address: str | None,
+    city: str | None,
+    state: str | None,
 ) -> bool:
     """Return whether the tenant has enough data to complete school onboarding."""
     return bool(
@@ -78,11 +86,24 @@ def _is_tenant_onboarding_complete(
         and email.strip()
         and admission_number_prefix
         and admission_number_prefix.strip()
+        and address
+        and address.strip()
+        and city
+        and city.strip()
+        and state
+        and state.strip()
     )
 
 
 class TenantService:
     """Business logic for the tenant management domain."""
+
+    ONBOARDING_REQUIRED_FIELDS = [
+        "admission_number_prefix",
+        "address",
+        "city",
+        "state",
+    ]
 
     @staticmethod
     def get_email_registration_state(
@@ -481,6 +502,9 @@ class TenantService:
                 "admission_number_prefix",
                 tenant.admission_number_prefix,
             ),
+            address=update_data.get("address", tenant.address),
+            city=update_data.get("city", tenant.city),
+            state=update_data.get("state", tenant.state),
         )
 
         for field, value in update_data.items():
@@ -492,3 +516,52 @@ class TenantService:
         await db.refresh(updated_tenant)
 
         return updated_tenant
+
+    @staticmethod
+    async def update_tenant_onboarding(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        payload: TenantOnboardingUpdate,
+    ) -> Tenant:
+        """Update the tenant onboarding fields."""
+
+        return await TenantService.update_tenant_profile(
+            db=db,
+            tenant_id=tenant_id,
+            payload=TenantUpdate(**payload.model_dump(mode="json")),
+        )
+
+    @staticmethod
+    async def get_tenant_onboarding_status(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+    ) -> TenantOnboardingStatusResponse:
+        """Return tenant-admin onboarding status for the attached tenant."""
+
+        tenant = await TenantService.get_tenant_by_id(
+            db=db,
+            tenant_id=tenant_id,
+        )
+
+        return TenantOnboardingStatusResponse(
+            actor_type="tenant_admin",
+            tenant_id=tenant.id,
+            onboarding_required=not tenant.onboarding_completed,
+            onboarding_completed=tenant.onboarding_completed,
+            completion_target="tenant",
+            required_fields=TenantService.ONBOARDING_REQUIRED_FIELDS,
+            current_values={
+                "school_name": tenant.school_name,
+                "email": tenant.email,
+                "admission_number_prefix": tenant.admission_number_prefix,
+                "phone": tenant.phone,
+                "address": tenant.address,
+                "city": tenant.city,
+                "state": tenant.state,
+                "country": tenant.country,
+                "logo_url": tenant.logo_url,
+                "timezone": tenant.timezone,
+                "language": tenant.language,
+                "school_bot_whatssap_number": tenant.school_bot_whatssap_number,
+            },
+        )

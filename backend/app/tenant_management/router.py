@@ -5,7 +5,7 @@
 import uuid
 from typing import Annotated, TypeAlias
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
@@ -15,8 +15,10 @@ from app.core.dependencies.route_guards import (
     get_current_tenant_member,
 )
 from app.core.exceptions import ForbiddenException
+from app.modules.parents.models import Parent
+from app.modules.students.models import Student
+from app.modules.teachers.models import Teacher
 from app.modules.tenant_admins.models import TenantAdmin
-from app.modules.users.models import User, UserRole
 from app.tenant_management.models import Tenant
 from app.tenant_management.schemas import (
     TenantManagementResponse,
@@ -29,9 +31,19 @@ from app.tenant_management.service import TenantService
 router = APIRouter(tags=["Tenants"])
 CurrentTenantAdmin: TypeAlias = Annotated[TenantAdmin, Depends(get_current_tenant_admin)]
 CurrentTenantMember: TypeAlias = Annotated[
-    User | TenantAdmin,
+    TenantAdmin | Teacher | Student | Parent,
     Depends(get_current_tenant_member),
 ]
+
+
+def verify_tenant_admin_owns_tenant(
+    current_admin: TenantAdmin,
+    tenant_id: uuid.UUID,
+) -> None:
+    """Ensure a tenant admin can only manage actors in their own tenant."""
+
+    if current_admin.tenant_id != tenant_id:
+        raise ForbiddenException("You do not have access to this tenant's resources")
 
 
 @router.post(
@@ -56,6 +68,7 @@ async def register_tenant(
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content=jsonable_encoder(result),
+            background=background_tasks,
         )
 
     return result
@@ -75,10 +88,7 @@ async def get_tenant(
     """Return tenant."""
     if current_actor.tenant_id != tenant_id:
         raise ForbiddenException("You do not have access to this tenant's resources")
-    if isinstance(current_actor, User) and current_actor.role not in (
-        UserRole.ADMIN,
-        UserRole.TEACHER,
-    ):
+    if not isinstance(current_actor, (TenantAdmin, Teacher)):
         raise ForbiddenException("Operation not permitted. Required roles: admin, teacher")
 
     return await TenantService.get_tenant_by_id(db, tenant_id)
@@ -97,11 +107,13 @@ async def update_tenant(
     current_admin: CurrentTenantAdmin,
 ) -> Tenant:
     """Update tenant."""
-    if current_admin.tenant_id != tenant_id:
-        raise ForbiddenException("You do not have access to this tenant's resources")
+    verify_tenant_admin_owns_tenant(current_admin, tenant_id)
 
     return await TenantService.update_tenant_profile(
         db,
         tenant_id,
         payload,
     )
+
+
+

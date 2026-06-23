@@ -1,84 +1,132 @@
-#==========================#
-#        models.py         #
-#==========================#
-
 from __future__ import annotations
-import uuid
+
+from datetime import datetime
+from enum import Enum as PyEnum
 from typing import TYPE_CHECKING
-from sqlalchemy import ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped , mapped_column , relationship
-from sqlalchemy import String , Index
-from app.shared.base_model import BaseModel
+
+from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, Index, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
 
 if TYPE_CHECKING:
-    from app.modules.students.models import Student , StudentParentLink
-    from app.modules.users.models import User
+    from app.modules.students.models import Student, StudentParentLink, StudentParentLinkRequest
 
 
+class ParentAccountStatus(str, PyEnum):
+    """Parent account lifecycle status."""
 
+    PENDING = "pending"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
 
 
 class Parent(BaseModel):
-    """parent or guardian profile linked to a user account"""
+    """Parent or guardian actor account and profile."""
+
     __tablename__ = "parents"
 
-
-    user_id : Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id" , ondelete="CASCADE"),
-        nullable = False ,
-        unique=True ,
-        index = True
-
+    email: Mapped[str] = mapped_column(
+        String(300),
+        nullable=False,
     )
 
-    occupation : Mapped[str | None] = mapped_column(String(100), nullable = True)
-
-    address : Mapped[str | None] = mapped_column(String(500) , nullable = True)
-
-
-    emergency_phone : Mapped[str | None] = mapped_column(String(20), nullable = True)
-
-    user: Mapped["User"] = relationship(
-        "User",
-        back_populates="parent_profile",
-        lazy = "joined"
+    password_hash: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
     )
 
-    student_links : Mapped[list["StudentParentLink"]] = relationship(
+    first_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    last_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    phone_number: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    occupation: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    address: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    emergency_phone: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    account_status: Mapped[ParentAccountStatus] = mapped_column(
+        SQLEnum(
+            ParentAccountStatus,
+            name="parent_account_status",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=ParentAccountStatus.PENDING,
+        server_default=ParentAccountStatus.PENDING.value,
+    )
+
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    student_links: Mapped[list["StudentParentLink"]] = relationship(
         "StudentParentLink",
         back_populates="parent",
-        cascade="all , delete-orphan"
+        cascade="all, delete-orphan",
     )
 
-
-
-    @property
-    def firstname(self) -> str | None:
-        return self.user.firstname if self.user else None
-
-    @property
-    def lastname(self) -> str | None:
-        return self.user.lastname if self.user else None
-
-    @property
-    def email(self) -> str | None:
-        return self.user.email if self.user else None
-
-    @property
-    def phone_number(self) -> str | None:
-        return self.user.phone_number if self.user else None
-
-    @property
-    def whatsapp_id(self) -> str | None:
-        return self.user.whatsapp_id if self.user else None
+    student_link_requests: Mapped[list["StudentParentLinkRequest"]] = relationship(
+        "StudentParentLinkRequest",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def students(self) -> list["Student"]:
+        """Return linked students."""
+
         return [link.student for link in self.student_links if link.student is not None]
 
     __table_args__ = (
-        Index("ix_parents_tenant_user", "tenant_id", "user_id"),
+        Index("ix_parents_tenant_email", "tenant_id", "email"),
+        Index("ix_parents_tenant_account_status", "tenant_id", "account_status"),
     )
 
+    @property
+    def profile_completed(self) -> bool:
+        """Return whether the parent completed the required self-service fields."""
+
+        return bool(
+            self.first_name
+            and self.first_name.strip()
+            and self.last_name
+            and self.last_name.strip()
+        )

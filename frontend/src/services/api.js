@@ -107,6 +107,24 @@ const isTechnicalMessage = (message) =>
 
 const normalizeBoolean = (value) => value === true || value === "true";
 
+const normalizeSessionUser = (user) => {
+  if (!user || typeof user !== "object") return user;
+
+  const normalizedUser = { ...user };
+
+  if (normalizedUser.first_name && !normalizedUser.firstname) {
+    normalizedUser.firstname = normalizedUser.first_name;
+  }
+  if (normalizedUser.last_name && !normalizedUser.lastname) {
+    normalizedUser.lastname = normalizedUser.last_name;
+  }
+  if (normalizedUser.actor_type === "tenant_admin" && !normalizedUser.role) {
+    normalizedUser.role = "admin";
+  }
+
+  return normalizedUser;
+};
+
 const getVerificationMetadata = (data = {}, headers = {}) => ({
   verificationRequired: normalizeBoolean(
     data?.verification_required ??
@@ -187,10 +205,12 @@ export const authSession = {
       return;
     }
 
-    setStoredValue(USER_KEY, JSON.stringify(user), { remember });
+    const normalizedUser = normalizeSessionUser(user);
 
-    if (user.role) {
-      authSession.setRole(user.role, { remember });
+    setStoredValue(USER_KEY, JSON.stringify(normalizedUser), { remember });
+
+    if (normalizedUser.role) {
+      authSession.setRole(normalizedUser.role, { remember });
     }
   },
 

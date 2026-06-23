@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     TENANT_ACTIVATION_EXPIRATION_HOURS: int = 48
 
     FRONTEND_APP_URL: str = "http://localhost:5173"
+    DEFAULT_STUDENT_PASSWORD: str = "default"
 
     APP_SCRIPT_URL : str = Field(...,)
 

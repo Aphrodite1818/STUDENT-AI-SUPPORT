@@ -1,7 +1,3 @@
-#======================================#
-#            repository.py             #
-#======================================#
-
 import uuid
 
 from sqlalchemy import select
@@ -71,6 +67,7 @@ class ClassRoomRepository:
         result = await db.execute(
             select(ClassRoom)
             .where(ClassRoom.tenant_id == tenant_id)
+            .order_by(ClassRoom.name.asc(), ClassRoom.arm.asc())
             .offset(skip)
             .limit(limit)
         )
@@ -91,8 +88,51 @@ class ClassRoomRepository:
                 ClassRoom.tenant_id == tenant_id,
                 ClassRoom.is_active.is_(True),
             )
+            .order_by(ClassRoom.name.asc(), ClassRoom.arm.asc())
             .offset(skip)
             .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_classrooms_by_teacher_id(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        *,
+        limit: int = 100,
+        skip: int = 0,
+    ) -> list[ClassRoom]:
+        """Get classrooms assigned to a specific teacher."""
+
+        result = await db.execute(
+            select(ClassRoom)
+            .where(
+                ClassRoom.tenant_id == tenant_id,
+                ClassRoom.teacher_id == teacher_id,
+            )
+            .order_by(ClassRoom.name.asc(), ClassRoom.arm.asc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_classrooms_by_ids(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        class_ids: list[uuid.UUID],
+    ) -> list[ClassRoom]:
+        """Get classrooms by IDs within tenant scope."""
+
+        if not class_ids:
+            return []
+
+        result = await db.execute(
+            select(ClassRoom).where(
+                ClassRoom.tenant_id == tenant_id,
+                ClassRoom.id.in_(class_ids),
+            )
         )
         return list(result.scalars().all())
 
@@ -103,6 +143,7 @@ class ClassRoomRepository:
     ) -> ClassRoom:
         """Persist classroom updates."""
 
+        db.add(classroom)
         await db.flush()
         await db.refresh(classroom)
         return classroom
@@ -120,15 +161,12 @@ class ClassRoomRepository:
             tenant_id=tenant_id,
             class_id=class_id,
         )
-
         if classroom is None:
             return None
 
         classroom.is_active = False
-
         await db.flush()
         await db.refresh(classroom)
-
         return classroom
 
     @staticmethod

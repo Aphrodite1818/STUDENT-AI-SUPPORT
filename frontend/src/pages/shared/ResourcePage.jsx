@@ -3,6 +3,7 @@ import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Input from "../../components/ui/Input";
 import MultiSelect from "../../components/ui/MultiSelect";
+import EmptyState from "../../components/shared/EmptyState";
 import { getErrorMessage, parseApiError } from "../../services/api";
 
 const emptyContext = {};
@@ -118,6 +119,7 @@ function ResourcePage({ config }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [isUnavailable, setIsUnavailable] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState(null);
   const contextRef = useRef(context);
@@ -174,13 +176,25 @@ function ResourcePage({ config }) {
     ) => {
       setIsLoading(true);
       setError(null);
+      setIsUnavailable(false);
 
       try {
         const result = await config.fetchItems(activeFilters, activeContext);
         setItems(asItems(result));
         setTotal(asTotal(result));
       } catch (err) {
-        setError(getErrorMessage(err, `Failed to load ${config.pluralLabel}.`));
+        const parsed = parseApiError(
+          err,
+          `Failed to load ${config.pluralLabel}.`
+        );
+
+        if (config.allowUnavailable && parsed.status === 404) {
+          setItems([]);
+          setTotal(0);
+          setIsUnavailable(true);
+        } else {
+          setError(parsed.message);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -199,7 +213,15 @@ function ResourcePage({ config }) {
         }
       } catch (err) {
         if (isMounted) {
-          setError(getErrorMessage(err, "Failed to load page data."));
+          const parsed = parseApiError(err, "Failed to load page data.");
+
+          if (config.allowUnavailable && parsed.status === 404) {
+            setItems([]);
+            setTotal(0);
+            setIsUnavailable(true);
+          } else {
+            setError(parsed.message);
+          }
           setIsLoading(false);
         }
       }
@@ -245,11 +267,30 @@ function ResourcePage({ config }) {
         : cleanPayload(formData);
 
       if (editingItem) {
-        await config.updateItem(editingItem.id, payload);
-        setSuccessMessage(`${config.singularLabel} updated successfully.`);
+        const result = await config.updateItem(editingItem.id, payload);
+        setSuccessMessage(
+          config.buildSuccessMessage
+            ? config.buildSuccessMessage({
+                action: "update",
+                result,
+                payload,
+                item: editingItem,
+                context,
+              })
+            : `${config.singularLabel} updated successfully.`
+        );
       } else {
-        await config.createItem(payload);
-        setSuccessMessage(`${config.singularLabel} created successfully.`);
+        const result = await config.createItem(payload);
+        setSuccessMessage(
+          config.buildSuccessMessage
+            ? config.buildSuccessMessage({
+                action: "create",
+                result,
+                payload,
+                context,
+              })
+            : `${config.singularLabel} created successfully.`
+        );
       }
 
       resetForm();
@@ -300,15 +341,33 @@ function ResourcePage({ config }) {
   };
 
   const handleRefresh = async () => {
-    const nextContext = await loadContext();
-    await loadItems(filters, nextContext);
+    setError(null);
+
+    try {
+      const nextContext = await loadContext();
+      await loadItems(filters, nextContext);
+    } catch (err) {
+      const parsed = parseApiError(err, "Failed to refresh page data.");
+
+      if (config.allowUnavailable && parsed.status === 404) {
+        setItems([]);
+        setTotal(0);
+        setIsUnavailable(true);
+      } else {
+        setError(parsed.message);
+      }
+    }
   };
 
   const clearFilters = () => {
     setFilters(resolveConfig(config.initialFilters, context) || {});
   };
 
-  const showForm = config.canCreate || (config.canUpdate && editingItem);
+  const showForm =
+    !isUnavailable && (config.canCreate || (config.canUpdate && editingItem));
+  const unavailableMessage =
+    config.unavailableMessage ||
+    `${config.pluralLabel} are not available yet.`;
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -375,7 +434,14 @@ function ResourcePage({ config }) {
             </Button>
           </div>
 
-          {filterFields.length > 0 && (
+          {isUnavailable ? (
+            <div className="mt-5">
+              <EmptyState
+                title="Not available"
+                description={unavailableMessage}
+              />
+            </div>
+          ) : filterFields.length > 0 && (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -403,6 +469,7 @@ function ResourcePage({ config }) {
             </form>
           )}
 
+          {!isUnavailable && (
           <div className="mt-5 table-wrap">
             <table className="data-table">
               <thead>
@@ -480,6 +547,7 @@ function ResourcePage({ config }) {
               </tbody>
             </table>
           </div>
+          )}
         </Card>
       </div>
     </div>

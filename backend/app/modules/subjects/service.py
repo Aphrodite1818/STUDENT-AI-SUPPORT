@@ -1,7 +1,3 @@
-#==========================#
-#    subjects/service.py   #
-#==========================#
-
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -11,38 +7,43 @@ from app.core.exceptions import BadRequestException, ForbiddenException, NotFoun
 from app.modules.subjects.models import Subject
 from app.modules.subjects.repository import SubjectRepository
 from app.modules.subjects.schemas import SubjectCreate, SubjectUpdate
-from app.modules.teachers.models import TeacherStatus
+from app.modules.teachers.models import Teacher, TeacherStatus
 from app.modules.teachers.repository import TeacherRepository
-from app.modules.users.models import User, UserRole
+from app.modules.tenant_admins.models import TenantAdmin
 
 
 class SubjectService:
     """Business logic for tenant-configured subjects."""
 
     @staticmethod
-    def _ensure_admin(actor: User) -> None:
-        """Internal helper for ensure admin."""
-        if actor.role != UserRole.ADMIN:
-            raise ForbiddenException(detail="Only tenant admins can perform this action.")
+    def _ensure_tenant_admin(actor: TenantAdmin) -> None:
+        """Ensure the actor is a tenant admin."""
 
         if not actor.tenant_id:
-            raise ForbiddenException(detail="User is not attached to a tenant.")
+            raise ForbiddenException(detail="Tenant admin is not attached to a tenant.")
+
+    @staticmethod
+    def _ensure_tenant_actor(actor: TenantAdmin | Teacher) -> None:
+        """Ensure the actor is tenant-scoped."""
+
+        if not actor.tenant_id:
+            raise ForbiddenException(detail="Actor is not attached to a tenant.")
 
     @staticmethod
     async def create_subject(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin,
         subject_data: SubjectCreate,
     ) -> Subject:
         """Create subject."""
-        SubjectService._ensure_admin(actor)
+
+        SubjectService._ensure_tenant_admin(actor)
 
         existing_name = await SubjectRepository.get_subject_by_name(
             db=db,
             tenant_id=actor.tenant_id,
             subject_name=subject_data.name,
         )
-
         if existing_name:
             raise BadRequestException(detail="A subject with this name already exists.")
 
@@ -52,12 +53,10 @@ class SubjectService:
                 tenant_id=actor.tenant_id,
                 subject_code=subject_data.code,
             )
-
             if existing_code:
                 raise BadRequestException(detail="A subject with this code already exists.")
 
         unique_teacher_ids = list(dict.fromkeys(subject_data.teacher_ids))
-
         if unique_teacher_ids:
             teachers = await TeacherRepository.get_teachers_by_ids(
                 db=db,
@@ -65,7 +64,6 @@ class SubjectService:
                 teacher_ids=unique_teacher_ids,
                 status=TeacherStatus.ACTIVE,
             )
-
             if len(teachers) != len(unique_teacher_ids):
                 raise BadRequestException(
                     detail="One or more selected teachers are not active in this school."
@@ -79,11 +77,7 @@ class SubjectService:
         )
 
         try:
-            created_subject = await SubjectRepository.create_subject(
-                db=db,
-                subject=subject,
-            )
-
+            created_subject = await SubjectRepository.create_subject(db=db, subject=subject)
             if unique_teacher_ids:
                 await SubjectRepository.create_teacher_subject_links(
                     db=db,
@@ -93,19 +87,14 @@ class SubjectService:
                 )
 
             await db.commit()
-            await db.refresh(created_subject)
-
             subject_with_teachers = await SubjectRepository.get_subject_by_id(
                 db=db,
                 tenant_id=actor.tenant_id,
                 subject_id=created_subject.id,
             )
-
             if not subject_with_teachers:
                 raise NotFoundException(detail="Subject not found after creation.")
-
             return subject_with_teachers
-
         except IntegrityError as exc:
             await db.rollback()
             raise BadRequestException(
@@ -115,44 +104,49 @@ class SubjectService:
     @staticmethod
     async def get_subject(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin | Teacher,
         subject_id: UUID,
     ) -> Subject:
         """Return subject."""
-        if actor.role not in (UserRole.ADMIN, UserRole.TEACHER):
+
+        if not isinstance(actor, (TenantAdmin, Teacher)):
             raise ForbiddenException(detail="You are not allowed to view subjects.")
-
-        if not actor.tenant_id:
-            raise ForbiddenException(detail="User is not attached to a tenant.")
-
+        SubjectService._ensure_tenant_actor(actor)
         subject = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
             subject_id=subject_id,
         )
-
         if not subject:
             raise NotFoundException(detail="Subject not found.")
-
         return subject
 
     @staticmethod
     async def list_subjects(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin | Teacher,
         skip: int = 0,
         limit: int = 100,
         is_active: bool | None = None,
         search: str | None = None,
     ) -> tuple[list[Subject], int]:
         """List subjects."""
-        if actor.role not in (UserRole.ADMIN, UserRole.TEACHER):
+
+        if not isinstance(actor, (TenantAdmin, Teacher)):
             raise ForbiddenException(detail="You are not allowed to view subjects.")
-
-        if not actor.tenant_id:
-            raise ForbiddenException(detail="User is not attached to a tenant.")
-
+        SubjectService._ensure_tenant_actor(actor)
         limit = min(limit, 100)
+
+        if isinstance(actor, Teacher):
+            return await SubjectRepository.list_subjects_for_teacher(
+                db=db,
+                tenant_id=actor.tenant_id,
+                teacher_id=actor.id,
+                skip=skip,
+                limit=limit,
+                is_active=is_active,
+                search=search,
+            )
 
         return await SubjectRepository.list_all_subjects(
             db=db,
@@ -166,35 +160,29 @@ class SubjectService:
     @staticmethod
     async def update_subject(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin,
         subject_id: UUID,
         subject_data: SubjectUpdate,
     ) -> Subject:
         """Update subject."""
-        SubjectService._ensure_admin(actor)
+
+        SubjectService._ensure_tenant_admin(actor)
 
         subject = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
             subject_id=subject_id,
         )
-
         if not subject:
             raise NotFoundException(detail="Subject not found.")
 
         update_data = subject_data.model_dump(exclude_unset=True)
-
         if not update_data:
             raise BadRequestException(detail="No update data provided.")
 
-        if "name" in update_data and update_data["name"] is None:
-            raise BadRequestException(detail="Subject name cannot be empty.")
-
         teacher_ids = update_data.pop("teacher_ids", None)
-
         if teacher_ids is not None:
             unique_teacher_ids = list(dict.fromkeys(teacher_ids))
-
             if unique_teacher_ids:
                 teachers = await TeacherRepository.get_teachers_by_ids(
                     db=db,
@@ -202,7 +190,6 @@ class SubjectService:
                     teacher_ids=unique_teacher_ids,
                     status=TeacherStatus.ACTIVE,
                 )
-
                 if len(teachers) != len(unique_teacher_ids):
                     raise BadRequestException(
                         detail="One or more selected teachers are not active in this school."
@@ -216,7 +203,6 @@ class SubjectService:
                 tenant_id=actor.tenant_id,
                 subject_name=update_data["name"],
             )
-
             if existing_name:
                 raise BadRequestException(detail="A subject with this name already exists.")
 
@@ -230,7 +216,6 @@ class SubjectService:
                 tenant_id=actor.tenant_id,
                 subject_code=update_data["code"],
             )
-
             if existing_code:
                 raise BadRequestException(detail="A subject with this code already exists.")
 
@@ -238,10 +223,7 @@ class SubjectService:
             for field, value in update_data.items():
                 setattr(subject, field, value)
 
-            updated_subject = await SubjectRepository.update_subject(
-                db=db,
-                subject=subject,
-            )
+            updated_subject = await SubjectRepository.update_subject(db=db, subject=subject)
 
             if teacher_ids is not None:
                 existing_teacher_ids = await SubjectRepository.get_subject_teacher_ids(
@@ -249,16 +231,11 @@ class SubjectService:
                     tenant_id=actor.tenant_id,
                     subject_id=subject.id,
                 )
-
                 existing_teacher_id_set = set(existing_teacher_ids)
                 incoming_teacher_id_set = set(unique_teacher_ids)
 
-                teacher_ids_to_add = list(
-                    incoming_teacher_id_set - existing_teacher_id_set
-                )
-                teacher_ids_to_remove = list(
-                    existing_teacher_id_set - incoming_teacher_id_set
-                )
+                teacher_ids_to_add = list(incoming_teacher_id_set - existing_teacher_id_set)
+                teacher_ids_to_remove = list(existing_teacher_id_set - incoming_teacher_id_set)
 
                 if teacher_ids_to_add:
                     await SubjectRepository.create_teacher_subject_links(
@@ -277,19 +254,14 @@ class SubjectService:
                     )
 
             await db.commit()
-            await db.refresh(updated_subject)
-
             subject_with_teachers = await SubjectRepository.get_subject_by_id(
                 db=db,
                 tenant_id=actor.tenant_id,
                 subject_id=updated_subject.id,
             )
-
             if not subject_with_teachers:
                 raise NotFoundException(detail="Subject not found after update.")
-
             return subject_with_teachers
-
         except IntegrityError as exc:
             await db.rollback()
             raise BadRequestException(
@@ -299,18 +271,17 @@ class SubjectService:
     @staticmethod
     async def activate_subject(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin,
         subject_id: UUID,
     ) -> Subject:
-        """Perform activate subject."""
-        SubjectService._ensure_admin(actor)
+        """Activate subject."""
 
+        SubjectService._ensure_tenant_admin(actor)
         subject = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
             subject_id=subject_id,
         )
-
         if not subject:
             raise NotFoundException(detail="Subject not found.")
 
@@ -318,37 +289,32 @@ class SubjectService:
             return subject
 
         subject.is_active = True
-        updated_subject = await SubjectRepository.update_subject(db=db, subject=subject)
-
+        await SubjectRepository.update_subject(db=db, subject=subject)
         await db.commit()
-        await db.refresh(updated_subject)
 
         subject_with_teachers = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
-            subject_id=updated_subject.id,
+            subject_id=subject.id,
         )
-
         if not subject_with_teachers:
             raise NotFoundException(detail="Subject not found after activation.")
-
         return subject_with_teachers
 
     @staticmethod
     async def deactivate_subject(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin,
         subject_id: UUID,
     ) -> Subject:
-        """Perform deactivate subject."""
-        SubjectService._ensure_admin(actor)
+        """Deactivate subject."""
 
+        SubjectService._ensure_tenant_admin(actor)
         subject = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
             subject_id=subject_id,
         )
-
         if not subject:
             raise NotFoundException(detail="Subject not found.")
 
@@ -356,37 +322,32 @@ class SubjectService:
             return subject
 
         subject.is_active = False
-        updated_subject = await SubjectRepository.update_subject(db=db, subject=subject)
-
+        await SubjectRepository.update_subject(db=db, subject=subject)
         await db.commit()
-        await db.refresh(updated_subject)
 
         subject_with_teachers = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
-            subject_id=updated_subject.id,
+            subject_id=subject.id,
         )
-
         if not subject_with_teachers:
             raise NotFoundException(detail="Subject not found after deactivation.")
-
         return subject_with_teachers
 
     @staticmethod
     async def delete_subject(
         db: AsyncSession,
-        actor: User,
+        actor: TenantAdmin,
         subject_id: UUID,
     ) -> None:
         """Delete subject."""
-        SubjectService._ensure_admin(actor)
 
+        SubjectService._ensure_tenant_admin(actor)
         subject = await SubjectRepository.get_subject_by_id(
             db=db,
             tenant_id=actor.tenant_id,
             subject_id=subject_id,
         )
-
         if not subject:
             raise NotFoundException(detail="Subject not found.")
 

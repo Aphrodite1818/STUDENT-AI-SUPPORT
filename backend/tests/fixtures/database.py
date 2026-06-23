@@ -12,16 +12,18 @@ from app.shared.base_model import Base
 
 # Import models so SQLAlchemy registers all tables before create_all() runs.
 from app.modules.auth import models as _auth_models  # noqa: F401
+from app.modules.auth_identity import models as _auth_identity_models  # noqa: F401
 from app.modules.attendance import models as _attendance_models  # noqa: F401
 from app.modules.classes import models as _classes_models  # noqa: F401
 from app.modules.exams import models as _exams_models  # noqa: F401
 from app.modules.finance import models as _finance_models  # noqa: F401
+from app.modules.parents import models as _parent_models  # noqa: F401
 from app.modules.results import models as _results_models  # noqa: F401
 from app.modules.students import models as _students_models  # noqa: F401
 from app.modules.subjects import models as _subjects_models  # noqa: F401
 from app.modules.superadmin import models as _superadmin_models  # noqa: F401
 from app.modules.teachers import models as _teachers_models  # noqa: F401
-from app.modules.users import models as _users_models  # noqa: F401
+from app.modules.tenant_admins import models as _tenant_admin_models  # noqa: F401
 from app.tenant_management import models as _tenant_models  # noqa: F401
 
 
@@ -40,7 +42,7 @@ def _resolve_test_database_url() -> str:
     return settings.DATABASE_URL
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a dedicated async engine for tests."""
     engine = create_async_engine(
@@ -52,10 +54,11 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     await engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def _create_test_tables(test_engine: AsyncEngine) -> AsyncGenerator[None, None]:
     """Create all ORM tables once for the test session."""
     async with test_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
     yield
 

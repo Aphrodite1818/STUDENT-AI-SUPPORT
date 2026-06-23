@@ -1,6 +1,4 @@
 import { api } from "./api";
-import { mockTeachers, page } from "./mockData";
-import { filterItems, withMockFallback } from "./serviceFallback";
 
 const buildTeacherQuery = ({ skip = 0, limit = 100, search } = {}) => {
   const params = new URLSearchParams();
@@ -12,51 +10,35 @@ const buildTeacherQuery = ({ skip = 0, limit = 100, search } = {}) => {
 
 export const teacherService = {
   getTeachers: (options = {}) =>
-    withMockFallback(
-      () => api.get(`/teachers?${buildTeacherQuery(options)}`),
-      () => page(filterItems(mockTeachers, options.search, ["staff_id", "qualification", "specialization"]))
-    ),
+    api.get(`/tenant-admin/teachers?${buildTeacherQuery(options)}`),
+
+  createTeacher: (payload) =>
+    api.post("/tenant-admin/teachers", payload),
 
   getMyTeacher: () =>
-    withMockFallback(
-      () => api.get("/teachers/me"),
-      () => mockTeachers[0] || null
-    ),
+    api.get("/teachers/me"),
 
   getMySubjects: (options = {}) =>
-    withMockFallback(
-      () => api.get(`/teachers/me/subjects?${new URLSearchParams({
+    api.get(
+      `/teachers/me/subjects?${new URLSearchParams({
         skip: String(options.skip ?? 0),
         limit: String(options.limit ?? 100),
         ...(options.search ? { search: options.search } : {}),
         ...(typeof options.isActive === "boolean"
           ? { is_active: String(options.isActive) }
           : {}),
-      }).toString()}`),
-      () => page(mockTeachers[0]?.subjects || [])
+      }).toString()}`
     ),
 
   getTeacher: (teacherId) =>
-    withMockFallback(
-      () => api.get(`/teachers/${teacherId}`),
-      () => mockTeachers.find((teacher) => teacher.id === teacherId) || null
-    ),
+    api.get(`/tenant-admin/teachers/${teacherId}`),
 
   updateTeacher: (teacherId, payload) =>
-    withMockFallback(
-      () => api.patch(`/teachers/${teacherId}`, payload),
-      () => ({ id: teacherId, ...payload })
-    ),
+    api.patch(`/tenant-admin/teachers/${teacherId}`, payload),
 
   updateMyTeacherProfile: (payload) =>
-    withMockFallback(
-      () => api.patch("/teachers/me/profile", payload),
-      () => ({ ...mockTeachers[0], ...payload })
-    ),
+    api.patch("/teachers/me/profile", payload),
 
   deleteTeacher: (teacherId) =>
-    withMockFallback(
-      () => api.delete(`/teachers/${teacherId}`),
-      () => ({ detail: `Teacher ${teacherId} archived in demo mode.` })
-    ),
+    api.delete(`/tenant-admin/teachers/${teacherId}`),
 };

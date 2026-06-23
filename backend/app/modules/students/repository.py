@@ -4,19 +4,26 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.modules.students.models import AcademicStatus, Student, StudentLinkCode, StudentParentLink
-from app.modules.users.models import User
+from app.modules.students.models import (
+    AcademicStatus,
+    Student,
+    StudentLinkCode,
+    StudentParentLink,
+    StudentParentLinkRequest,
+    StudentParentLinkRequestStatus,
+)
 
 
 class StudentRepository:
-    """Database operations for student profiles."""
+    """Database operations for student actors."""
 
     @staticmethod
     async def create_student(
         db: AsyncSession,
         student: Student,
     ) -> Student:
-        """Create a student profile."""
+        """Create a student record."""
+
         db.add(student)
         await db.flush()
         await db.refresh(student)
@@ -28,7 +35,8 @@ class StudentRepository:
         tenant_id: UUID,
         student_id: UUID,
     ) -> Student | None:
-        """Get a student profile by id within a tenant."""
+        """Get a student by ID within a tenant."""
+
         result = await db.execute(
             select(Student).where(
                 Student.id == student_id,
@@ -38,16 +46,28 @@ class StudentRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_user_id(
+    async def get_by_id(
         db: AsyncSession,
-        tenant_id: UUID,
-        user_id: UUID,
+        student_id: UUID,
     ) -> Student | None:
-        """Get a student profile by user id within a tenant."""
+        """Get a student by global ID."""
+
+        result = await db.execute(
+            select(Student).where(Student.id == student_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_active_by_id(
+        db: AsyncSession,
+        student_id: UUID,
+    ) -> Student | None:
+        """Get an active student by global ID."""
+
         result = await db.execute(
             select(Student).where(
-                Student.tenant_id == tenant_id,
-                Student.user_id == user_id,
+                Student.id == student_id,
+                Student.is_active.is_(True),
             )
         )
         return result.scalar_one_or_none()
@@ -58,14 +78,52 @@ class StudentRepository:
         tenant_id: UUID,
         admission_number: str,
     ) -> Student | None:
-        """Get a student profile by admission number within a tenant."""
+        """Get a student by admission number within a tenant."""
+
         result = await db.execute(
             select(Student).where(
                 Student.tenant_id == tenant_id,
-                Student.admission_number == admission_number,
+                func.lower(Student.admission_number) == admission_number.strip().lower(),
             )
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_active_by_admission_number(
+        db: AsyncSession,
+        tenant_id: UUID,
+        admission_number: str,
+    ) -> Student | None:
+        """Get an active student by admission number within a tenant."""
+
+        result = await db.execute(
+            select(Student).where(
+                Student.tenant_id == tenant_id,
+                func.lower(Student.admission_number) == admission_number.strip().lower(),
+                Student.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def admission_number_exists(
+        db: AsyncSession,
+        tenant_id: UUID,
+        admission_number: str,
+        exclude_student_id: UUID | None = None,
+    ) -> bool:
+        """Return True if an admission number already exists."""
+
+        query = select(Student.id).where(
+            Student.tenant_id == tenant_id,
+            func.lower(Student.admission_number) == admission_number.strip().lower(),
+        )
+
+        if exclude_student_id is not None:
+            query = query.where(Student.id != exclude_student_id)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none() is not None
 
     @staticmethod
     def _build_student_list_query(
@@ -75,6 +133,7 @@ class StudentRepository:
         status: AcademicStatus | None = None,
     ) -> tuple:
         """Build the base query for filtered student listing."""
+
         conditions = [Student.tenant_id == tenant_id]
 
         if class_id is not None:
@@ -87,27 +146,28 @@ class StudentRepository:
             search_term = f"%{search.strip()}%"
             conditions.append(
                 or_(
-                    User.firstname.ilike(search_term),
-                    User.lastname.ilike(search_term),
-                    User.email.ilike(search_term),
+                    Student.first_name.ilike(search_term),
+                    Student.last_name.ilike(search_term),
                     Student.admission_number.ilike(search_term),
                 )
             )
 
-        query = select(Student).join(User, User.id == Student.user_id).where(*conditions)
+        query = select(Student).where(*conditions)
         return query, conditions
 
     @staticmethod
-    async def list_students(
+    async def list_all_students(
         db: AsyncSession,
         tenant_id: UUID,
+        *,
         skip: int = 0,
         limit: int = 50,
         search: str | None = None,
         class_id: UUID | None = None,
         status: AcademicStatus | None = None,
     ) -> tuple[list[Student], int]:
-        """List student profiles with filters."""
+        """List students with optional filters."""
+
         base_query, conditions = StudentRepository._build_student_list_query(
             tenant_id=tenant_id,
             search=search,
@@ -121,17 +181,36 @@ class StudentRepository:
             .offset(skip)
             .limit(limit)
         )
-        students = list(result.scalars().unique().all())
+        students = list(result.scalars().all())
 
         total_result = await db.execute(
-            select(func.count())
-            .select_from(Student)
-            .join(User, User.id == Student.user_id)
-            .where(*conditions)
+            select(func.count()).select_from(Student).where(*conditions)
         )
         total = total_result.scalar_one()
 
         return students, total
+
+    @staticmethod
+    async def list_students(
+        db: AsyncSession,
+        tenant_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        search: str | None = None,
+        class_id: UUID | None = None,
+        status: AcademicStatus | None = None,
+    ) -> tuple[list[Student], int]:
+        """Compatibility wrapper for listing students."""
+
+        return await StudentRepository.list_all_students(
+            db=db,
+            tenant_id=tenant_id,
+            skip=skip,
+            limit=limit,
+            search=search,
+            class_id=class_id,
+            status=status,
+        )
 
     @staticmethod
     async def get_all_students_by_class_id(
@@ -142,6 +221,7 @@ class StudentRepository:
         skip: int = 0,
     ) -> list[Student]:
         """Get all students by class id within a tenant."""
+
         result = await db.execute(
             select(Student)
             .where(
@@ -155,14 +235,25 @@ class StudentRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def save(
+        db: AsyncSession,
+        student: Student,
+    ) -> Student:
+        """Persist student changes."""
+
+        db.add(student)
+        await db.flush()
+        await db.refresh(student)
+        return student
+
+    @staticmethod
     async def update_student(
         db: AsyncSession,
         student: Student,
     ) -> Student:
-        """Persist student profile updates."""
-        await db.flush()
-        await db.refresh(student)
-        return student
+        """Compatibility wrapper for persisting student changes."""
+
+        return await StudentRepository.save(db=db, student=student)
 
     @staticmethod
     async def delete_student(
@@ -170,6 +261,7 @@ class StudentRepository:
         student: Student,
     ) -> None:
         """Delete a student profile."""
+
         await db.delete(student)
         await db.flush()
 
@@ -183,6 +275,7 @@ class StudentParentLinkRepository:
         link: StudentParentLink,
     ) -> StudentParentLink:
         """Create a student-parent link."""
+
         db.add(link)
         await db.flush()
         await db.refresh(link)
@@ -195,6 +288,7 @@ class StudentParentLinkRepository:
         link_id: UUID,
     ) -> StudentParentLink | None:
         """Get a student-parent link by id within a tenant."""
+
         result = await db.execute(
             select(StudentParentLink).where(
                 StudentParentLink.id == link_id,
@@ -211,6 +305,7 @@ class StudentParentLinkRepository:
         parent_id: UUID,
     ) -> StudentParentLink | None:
         """Get a student-parent link by student and parent."""
+
         result = await db.execute(
             select(StudentParentLink).where(
                 StudentParentLink.tenant_id == tenant_id,
@@ -227,6 +322,7 @@ class StudentParentLinkRepository:
         tenant_id: UUID,
     ) -> list[StudentParentLink]:
         """Get all parent links for a student."""
+
         result = await db.execute(
             select(StudentParentLink)
             .options(selectinload(StudentParentLink.parent))
@@ -244,10 +340,11 @@ class StudentParentLinkRepository:
         parent_id: UUID,
     ) -> list[StudentParentLink]:
         """Get all student links for a parent."""
+
         result = await db.execute(
             select(StudentParentLink)
             .options(
-                selectinload(StudentParentLink.student).joinedload(Student.user),
+                selectinload(StudentParentLink.student),
                 joinedload(StudentParentLink.parent),
             )
             .where(
@@ -263,6 +360,7 @@ class StudentParentLinkRepository:
         link: StudentParentLink,
     ) -> StudentParentLink:
         """Persist student-parent link updates."""
+
         await db.flush()
         await db.refresh(link)
         return link
@@ -273,6 +371,7 @@ class StudentParentLinkRepository:
         link: StudentParentLink,
     ) -> None:
         """Delete a student-parent link."""
+
         await db.delete(link)
         await db.flush()
 
@@ -286,6 +385,7 @@ class StudentLinkCodeRepository:
         link_code: StudentLinkCode,
     ) -> StudentLinkCode:
         """Create a student link code."""
+
         db.add(link_code)
         await db.flush()
         await db.refresh(link_code)
@@ -298,6 +398,7 @@ class StudentLinkCodeRepository:
         link_code_id: UUID,
     ) -> StudentLinkCode | None:
         """Get a student link code by id within a tenant."""
+
         result = await db.execute(
             select(StudentLinkCode).where(
                 StudentLinkCode.tenant_id == tenant_id,
@@ -313,6 +414,7 @@ class StudentLinkCodeRepository:
         code: str,
     ) -> StudentLinkCode | None:
         """Get a student link code by code within a tenant."""
+
         result = await db.execute(
             select(StudentLinkCode).where(
                 StudentLinkCode.tenant_id == tenant_id,
@@ -328,6 +430,7 @@ class StudentLinkCodeRepository:
         student_id: UUID,
     ) -> list[StudentLinkCode]:
         """Get all link codes generated for a student."""
+
         result = await db.execute(
             select(StudentLinkCode)
             .where(
@@ -344,6 +447,7 @@ class StudentLinkCodeRepository:
         link_code: StudentLinkCode,
     ) -> StudentLinkCode:
         """Persist student link code updates."""
+
         await db.flush()
         await db.refresh(link_code)
         return link_code
@@ -354,5 +458,126 @@ class StudentLinkCodeRepository:
         link_code: StudentLinkCode,
     ) -> None:
         """Delete a student link code."""
+
         await db.delete(link_code)
         await db.flush()
+
+
+class StudentParentLinkRequestRepository:
+    """Database operations for parent-student link requests."""
+
+    @staticmethod
+    async def create(
+        db: AsyncSession,
+        link_request: StudentParentLinkRequest,
+    ) -> StudentParentLinkRequest:
+        """Create a parent-student link request."""
+
+        db.add(link_request)
+        await db.flush()
+        await db.refresh(link_request)
+        return link_request
+
+    @staticmethod
+    async def get_by_id(
+        db: AsyncSession,
+        *,
+        tenant_id: UUID,
+        request_id: UUID,
+        lock: bool = False,
+    ) -> StudentParentLinkRequest | None:
+        """Return a link request by ID within a tenant."""
+
+        query = select(StudentParentLinkRequest).where(
+            StudentParentLinkRequest.tenant_id == tenant_id,
+            StudentParentLinkRequest.id == request_id,
+        )
+
+        if lock:
+            query = query.with_for_update()
+        else:
+            query = query.options(
+                joinedload(StudentParentLinkRequest.parent),
+                joinedload(StudentParentLinkRequest.student),
+            )
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_pending_by_parent_and_student(
+        db: AsyncSession,
+        *,
+        tenant_id: UUID,
+        parent_id: UUID,
+        student_id: UUID,
+    ) -> StudentParentLinkRequest | None:
+        """Return an existing pending request for the parent/student pair."""
+
+        result = await db.execute(
+            select(StudentParentLinkRequest).where(
+                StudentParentLinkRequest.tenant_id == tenant_id,
+                StudentParentLinkRequest.parent_id == parent_id,
+                StudentParentLinkRequest.student_id == student_id,
+                StudentParentLinkRequest.status == StudentParentLinkRequestStatus.PENDING,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_by_parent_id(
+        db: AsyncSession,
+        *,
+        tenant_id: UUID,
+        parent_id: UUID,
+    ) -> list[StudentParentLinkRequest]:
+        """Return link requests submitted by a parent."""
+
+        result = await db.execute(
+            select(StudentParentLinkRequest)
+            .options(joinedload(StudentParentLinkRequest.student))
+            .where(
+                StudentParentLinkRequest.tenant_id == tenant_id,
+                StudentParentLinkRequest.parent_id == parent_id,
+            )
+            .order_by(StudentParentLinkRequest.requested_at.desc())
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_by_student_id(
+        db: AsyncSession,
+        *,
+        tenant_id: UUID,
+        student_id: UUID,
+        status: StudentParentLinkRequestStatus | None = None,
+    ) -> list[StudentParentLinkRequest]:
+        """Return link requests addressed to a student."""
+
+        query = (
+            select(StudentParentLinkRequest)
+            .options(joinedload(StudentParentLinkRequest.parent))
+            .where(
+                StudentParentLinkRequest.tenant_id == tenant_id,
+                StudentParentLinkRequest.student_id == student_id,
+            )
+            .order_by(StudentParentLinkRequest.requested_at.desc())
+        )
+
+        if status is not None:
+            query = query.where(StudentParentLinkRequest.status == status)
+
+        result = await db.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def save(
+        db: AsyncSession,
+        link_request: StudentParentLinkRequest,
+    ) -> StudentParentLinkRequest:
+        """Persist a link request update."""
+
+        db.add(link_request)
+        await db.flush()
+        await db.refresh(link_request)
+        return link_request

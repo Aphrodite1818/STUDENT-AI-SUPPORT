@@ -1,6 +1,8 @@
-#======================================#
-#            repository.py             #
-#======================================#
+# ====================================== #
+#          teachers/repository.py        #
+# ====================================== #
+
+"""Teacher data access layer."""
 
 from uuid import UUID
 
@@ -12,14 +14,15 @@ from app.modules.teachers.models import Teacher, TeacherStatus, TeacherSubject
 
 
 class TeacherRepository:
-    """Low level database queries for the teachers table"""
+    """Low-level database queries for teachers."""
 
     @staticmethod
     async def create_teacher(
         db: AsyncSession,
         teacher: Teacher,
     ) -> Teacher:
-        """Create teacher."""
+        """Create a teacher record."""
+
         db.add(teacher)
         await db.flush()
         await db.refresh(teacher)
@@ -31,13 +34,15 @@ class TeacherRepository:
         tenant_id: UUID,
         teacher_id: UUID,
     ) -> Teacher | None:
-        """used to retrieve the entire details of a teacher in the database"""
+        """Fetch teacher by ID within a tenant."""
+
         result = await db.execute(
             select(Teacher)
             .options(
+                selectinload(Teacher.subjects),
                 selectinload(Teacher.subject_links).selectinload(
                     TeacherSubject.subject
-                )
+                ),
             )
             .where(
                 Teacher.tenant_id == tenant_id,
@@ -47,19 +52,92 @@ class TeacherRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_teacher_by_user_id(
+    async def get_by_id(
         db: AsyncSession,
-        tenant_id: UUID,
-        user_id: UUID,
+        teacher_id: UUID,
     ) -> Teacher | None:
-        """used to check if a teacher exists for a user in the database"""
+        """Fetch teacher by ID globally."""
+
         result = await db.execute(
-            select(Teacher).where(
-                Teacher.tenant_id == tenant_id,
-                Teacher.user_id == user_id,
+            select(Teacher)
+            .options(
+                selectinload(Teacher.subjects),
+                selectinload(Teacher.subject_links).selectinload(
+                    TeacherSubject.subject
+                ),
+            )
+            .where(Teacher.id == teacher_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_active_by_id(
+        db: AsyncSession,
+        teacher_id: UUID,
+    ) -> Teacher | None:
+        """Fetch active teacher by ID globally."""
+
+        result = await db.execute(
+            select(Teacher)
+            .options(
+                selectinload(Teacher.subjects),
+                selectinload(Teacher.subject_links).selectinload(
+                    TeacherSubject.subject
+                ),
+            )
+            .where(
+                Teacher.id == teacher_id,
+                Teacher.is_active.is_(True),
             )
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_email(
+        db: AsyncSession,
+        email: str,
+    ) -> Teacher | None:
+        """Fetch teacher by globally unique email."""
+
+        result = await db.execute(
+            select(Teacher).where(
+                func.lower(Teacher.email) == email.strip().lower(),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_active_by_email(
+        db: AsyncSession,
+        email: str,
+    ) -> Teacher | None:
+        """Fetch active teacher by globally unique email."""
+
+        result = await db.execute(
+            select(Teacher).where(
+                func.lower(Teacher.email) == email.strip().lower(),
+                Teacher.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def email_exists(
+        db: AsyncSession,
+        email: str,
+        exclude_teacher_id: UUID | None = None,
+    ) -> bool:
+        """Return True if a teacher email already exists."""
+
+        query = select(Teacher.id).where(
+            func.lower(Teacher.email) == email.strip().lower(),
+        )
+
+        if exclude_teacher_id is not None:
+            query = query.where(Teacher.id != exclude_teacher_id)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none() is not None
 
     @staticmethod
     async def get_teacher_by_staff_id(
@@ -67,7 +145,8 @@ class TeacherRepository:
         tenant_id: UUID,
         staff_id: str,
     ) -> Teacher | None:
-        """used to check if a teacher exists for a user in the database"""
+        """Fetch teacher by staff ID within a tenant."""
+
         result = await db.execute(
             select(Teacher).where(
                 Teacher.tenant_id == tenant_id,
@@ -77,21 +156,55 @@ class TeacherRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def staff_id_exists(
+        db: AsyncSession,
+        tenant_id: UUID,
+        staff_id: str,
+        exclude_teacher_id: UUID | None = None,
+    ) -> bool:
+        """Return True if staff ID already exists within tenant."""
+
+        query = select(Teacher.id).where(
+            Teacher.tenant_id == tenant_id,
+            func.lower(Teacher.staff_id) == staff_id.strip().lower(),
+        )
+
+        if exclude_teacher_id is not None:
+            query = query.where(Teacher.id != exclude_teacher_id)
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none() is not None
+
+    @staticmethod
     async def get_teachers_by_ids(
         db: AsyncSession,
         teacher_ids: list[UUID],
         tenant_id: UUID,
         status: TeacherStatus | None = None,
     ) -> list[Teacher]:
-        """returns a list of multiple teachers based on their ids"""
+        """Return multiple teachers by IDs within a tenant."""
+
+        if not teacher_ids:
+            return []
+
         filters = [
             Teacher.tenant_id == tenant_id,
             Teacher.id.in_(teacher_ids),
         ]
+
         if status is not None:
             filters.append(Teacher.status == status)
 
-        result = await db.execute(select(Teacher).where(*filters))
+        result = await db.execute(
+            select(Teacher)
+            .options(
+                selectinload(Teacher.subjects),
+                selectinload(Teacher.subject_links).selectinload(
+                    TeacherSubject.subject
+                ),
+            )
+            .where(*filters)
+        )
         return list(result.scalars().all())
 
     @staticmethod
@@ -103,44 +216,52 @@ class TeacherRepository:
         limit: int = 50,
         search: str | None = None,
     ) -> tuple[list[Teacher], int]:
-        """returns a paginated list of all teachers available to tenant"""
+        """Return paginated teachers for a tenant."""
+
         filters = [Teacher.tenant_id == tenant_id]
 
         if search:
+            search_pattern = f"%{search.strip()}%"
             filters.append(
                 or_(
-                    Teacher.staff_id.ilike(f"%{search}%"),
-                    Teacher.qualification.ilike(f"%{search}%"),
-                    Teacher.specialization.ilike(f"%{search}%"),
+                    Teacher.email.ilike(search_pattern),
+                    Teacher.first_name.ilike(search_pattern),
+                    Teacher.last_name.ilike(search_pattern),
+                    Teacher.staff_id.ilike(search_pattern),
+                    Teacher.qualification.ilike(search_pattern),
+                    Teacher.specialization.ilike(search_pattern),
                 )
             )
 
         total_result = await db.execute(
             select(func.count()).select_from(Teacher).where(*filters)
         )
-
         total = total_result.scalar_one()
 
         result = await db.execute(
             select(Teacher)
             .options(
+                selectinload(Teacher.subjects),
                 selectinload(Teacher.subject_links).selectinload(
                     TeacherSubject.subject
-                )
+                ),
             )
             .where(*filters)
             .order_by(Teacher.created_at.desc())
             .offset(skip)
             .limit(limit)
         )
+
         return list(result.scalars().all()), total
 
     @staticmethod
-    async def update_teacher(
+    async def save(
         db: AsyncSession,
         teacher: Teacher,
     ) -> Teacher:
         """Persist teacher changes."""
+
+        db.add(teacher)
         await db.flush()
         await db.refresh(teacher)
         return teacher
@@ -152,7 +273,11 @@ class TeacherRepository:
         teacher_id: UUID,
         subject_ids: list[UUID],
     ) -> list[TeacherSubject]:
-        """Create teacher subject links."""
+        """Create teacher-subject links."""
+
+        if not subject_ids:
+            return []
+
         teacher_subject_links = [
             TeacherSubject(
                 tenant_id=tenant_id,
@@ -173,7 +298,11 @@ class TeacherRepository:
         teacher_id: UUID,
         subject_ids: list[UUID],
     ) -> None:
-        """Delete teacher subject links."""
+        """Delete selected teacher-subject links."""
+
+        if not subject_ids:
+            return
+
         await db.execute(
             delete(TeacherSubject).where(
                 TeacherSubject.tenant_id == tenant_id,
@@ -189,7 +318,8 @@ class TeacherRepository:
         tenant_id: UUID,
         teacher_id: UUID,
     ) -> None:
-        """Delete all teacher subject links."""
+        """Delete all subject links for a teacher."""
+
         await db.execute(
             delete(TeacherSubject).where(
                 TeacherSubject.tenant_id == tenant_id,
@@ -204,7 +334,8 @@ class TeacherRepository:
         tenant_id: UUID,
         teacher_id: UUID,
     ) -> list[UUID]:
-        """Return teacher subject ids."""
+        """Return subject IDs assigned to a teacher."""
+
         result = await db.execute(
             select(TeacherSubject.subject_id).where(
                 TeacherSubject.tenant_id == tenant_id,

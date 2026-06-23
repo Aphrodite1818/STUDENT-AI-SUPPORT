@@ -6,6 +6,8 @@ import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import Badge from "../../components/ui/Badge";
 import StatCard from "../../components/shared/StatCard";
+import AnalyticsBarChart from "../../components/charts/AnalyticsBarChart";
+import AnalyticsDonutChart from "../../components/charts/AnalyticsDonutChart";
 import { getErrorMessage, parseApiError } from "../../services/api";
 import { superadminService } from "../../services/superadmin.service";
 
@@ -37,6 +39,7 @@ const statusVariant = (status) => {
 };
 
 function SuperadminDashboardPage() {
+  const [analytics, setAnalytics] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [superadmins, setSuperadmins] = useState([]);
   const [tenantFormData, setTenantFormData] = useState(INITIAL_TENANT_FORM);
@@ -56,11 +59,13 @@ function SuperadminDashboardPage() {
     setError(null);
 
     try {
-      const [tenantResult, superadminResult] = await Promise.all([
+      const [analyticsResult, tenantResult, superadminResult] = await Promise.all([
+        superadminService.getAnalyticsOverview(),
         superadminService.getTenants(),
         superadminService.getSuperadmins(),
       ]);
 
+      setAnalytics(analyticsResult);
       setTenants(Array.isArray(tenantResult) ? tenantResult : []);
       setSuperadmins(Array.isArray(superadminResult) ? superadminResult : []);
     } catch (err) {
@@ -207,11 +212,14 @@ function SuperadminDashboardPage() {
     }
   };
 
-  const activeTenants = tenants.filter((tenant) => tenant.status === "active" && !tenant.is_deleted).length;
-  const pendingTenants = tenants.filter((tenant) => tenant.verification_status === "pending_verification").length;
-  const suspendedTenants = tenants.filter((tenant) => tenant.status === "suspended").length;
+  const activeTenants = analytics?.stats?.active_tenants ?? tenants.filter((tenant) => tenant.status === "active" && !tenant.is_deleted).length;
+  const pendingTenants = analytics?.stats?.pending_verification ?? tenants.filter((tenant) => tenant.verification_status === "pending_verification").length;
+  const suspendedTenants = (analytics?.charts?.status_breakdown || []).find((item) => item.label === "suspended")?.value ?? tenants.filter((tenant) => tenant.status === "suspended").length;
   const deletedTenants = tenants.filter((tenant) => tenant.is_deleted).length;
   const trialTenants = tenants.filter((tenant) => tenant.status === "trial" && !tenant.is_deleted).length;
+  const totalTenants = analytics?.stats?.total_tenants ?? tenants.length;
+  const totalTenantAdmins = analytics?.stats?.total_tenant_admins ?? 0;
+  const rejectedVerification = analytics?.stats?.rejected_verification ?? 0;
 
   return (
     <DashboardLayout
@@ -237,10 +245,25 @@ function SuperadminDashboardPage() {
       )}
 
       <section className="stat-grid">
-        <StatCard label="Total Schools" value={tenants.length} icon={Building2} tone="primary" description="registered tenants" compact />
+        <StatCard label="Total Schools" value={totalTenants} icon={Building2} tone="primary" description="registered tenants" compact />
         <StatCard label="Active Schools" value={activeTenants} icon={CheckCircle2} tone="success" description="currently active" compact />
         <StatCard label="Pending Schools" value={pendingTenants} icon={Clock3} tone="warning" description="awaiting verification" compact />
         <StatCard label="Suspended Schools" value={suspendedTenants} icon={Shield} tone="error" description="restricted tenants" compact />
+      </section>
+
+      <section className="dashboard-grid xl:grid-cols-2">
+        <AnalyticsBarChart
+          title="Tenant Growth"
+          description="Growth over time from tenant creation records."
+          data={analytics?.charts?.tenant_growth || []}
+          labelKey="period"
+        />
+        <AnalyticsDonutChart
+          title="Verification Breakdown"
+          description="Current verification-state counts across tenants."
+          data={analytics?.charts?.verification_breakdown || []}
+          emptyMessage="No verification analytics available yet."
+        />
       </section>
 
       <section className="dashboard-grid xl:grid-cols-[minmax(0,1fr)_min(100%,440px)]">
@@ -268,14 +291,14 @@ function SuperadminDashboardPage() {
                 <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Schools waiting for review.</p>
               </div>
               <div className="rounded-2xl border border-border bg-surface p-3 sm:p-4 md:p-5">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Platform admins</p>
-                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{superadmins.length}</p>
-                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Platform-level accounts.</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Tenant admins</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{totalTenantAdmins}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Tenant-admin accounts across schools.</p>
               </div>
               <div className="col-span-2 rounded-2xl border border-border bg-surface p-3 sm:col-span-1 sm:p-4 md:p-5">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Restricted tenants</p>
-                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{suspendedTenants}</p>
-                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Suspended schools.</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Rejected verification</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{rejectedVerification}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Tenants rejected in verification.</p>
               </div>
             </div>
           </Card>

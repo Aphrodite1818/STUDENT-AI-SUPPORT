@@ -29,7 +29,6 @@ function ProfileSettingsPage() {
 
         <div className="mt-6">
           <ProfileCompletionForm
-            user={user}
             role={role}
             submitLabel="Save changes"
           />

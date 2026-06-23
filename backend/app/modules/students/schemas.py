@@ -1,18 +1,18 @@
-#==========================#
-#    students/schemas.py   #
-#==========================#
-
 import uuid
 from datetime import date, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.modules.students.models import AcademicStatus, Gender, ParentRelationship, StudentProfileStatus
+from app.modules.students.models import (
+    AcademicStatus,
+    Gender,
+    ParentRelationship,
+    StudentAccountStatus,
+    StudentParentLinkRequestStatus,
+    StudentProfileStatus,
+)
 
-
-# ──────────────────────────────────────────────
-# SHARED BASE CONFIGS
-# ──────────────────────────────────────────────
 
 class InputBase(BaseModel):
     """Base for all request/input schemas."""
@@ -21,6 +21,7 @@ class InputBase(BaseModel):
         str_strip_whitespace=True,
         str_to_lower=False,
         extra="forbid",
+        use_enum_values=True,
     )
 
 
@@ -36,6 +37,7 @@ class OutputBase(BaseModel):
 
 def _clean_optional_string(value: str | None) -> str | None:
     """Normalize optional string input."""
+
     if value is None:
         return None
 
@@ -43,15 +45,46 @@ def _clean_optional_string(value: str | None) -> str | None:
     return cleaned_value or None
 
 
-# ──────────────────────────────────────────────
-# STUDENT SCHEMAS
-# ──────────────────────────────────────────────
-
 class StudentInputBase(InputBase):
-    """Base input schema for student academic profile data."""
+    """Base input schema for student actor data."""
 
-    user_id: uuid.UUID
     admission_number: str | None = Field(default=None, min_length=1, max_length=50)
+    password: str | None = Field(default=None, min_length=8, max_length=64)
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    date_of_birth: date | None = None
+    gender: Gender | None = None
+    passport_photo_url: str | None = Field(default=None, max_length=500)
+    graduation_date: date | None = None
+    class_id: uuid.UUID | None = None
+    arm: str | None = Field(default=None, max_length=20)
+    status: AcademicStatus = AcademicStatus.ACTIVE
+    account_status: StudentAccountStatus = StudentAccountStatus.PENDING
+    is_verified: bool = False
+    is_active: bool = True
+    last_login_at: datetime | None = None
+
+    @field_validator(
+        "admission_number",
+        "first_name",
+        "last_name",
+        "passport_photo_url",
+        "arm",
+        mode="before",
+    )
+    @classmethod
+    def clean_optional_fields(cls, value: str | None) -> str | None:
+        """Normalize optional text fields."""
+
+        return _clean_optional_string(value)
+
+
+class StudentCreate(InputBase):
+    """Schema for creating a student actor."""
+
+    admission_number: str | None = Field(default=None, min_length=1, max_length=50)
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
     date_of_birth: date | None = None
     gender: Gender | None = None
     passport_photo_url: str | None = Field(default=None, max_length=500)
@@ -60,17 +93,19 @@ class StudentInputBase(InputBase):
     arm: str | None = Field(default=None, max_length=20)
     status: AcademicStatus = AcademicStatus.ACTIVE
 
-    @field_validator("admission_number", "passport_photo_url", "arm", mode="before")
+    @field_validator(
+        "admission_number",
+        "first_name",
+        "last_name",
+        "passport_photo_url",
+        "arm",
+        mode="before",
+    )
     @classmethod
-    def clean_optional_fields(cls, value: str | None) -> str | None:
-        """Normalize optional text fields."""
+    def clean_create_fields(cls, value: str | None) -> str | None:
+        """Normalize optional student creation fields."""
+
         return _clean_optional_string(value)
-
-
-class StudentCreate(StudentInputBase):
-    """Schema for creating a student profile."""
-
-    pass
 
 
 class StudentProfileComplete(InputBase):
@@ -86,13 +121,17 @@ class StudentProfileComplete(InputBase):
     @classmethod
     def clean_optional_fields(cls, value: str | None) -> str | None:
         """Normalize optional text fields."""
+
         return _clean_optional_string(value)
 
 
 class StudentUpdate(InputBase):
-    """Schema for updating a student profile."""
+    """Schema for admin updating a student actor."""
 
     admission_number: str | None = Field(default=None, min_length=1, max_length=50)
+    password: str | None = Field(default=None, min_length=8, max_length=64)
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
     date_of_birth: date | None = None
     gender: Gender | None = None
     passport_photo_url: str | None = Field(default=None, max_length=500)
@@ -101,40 +140,75 @@ class StudentUpdate(InputBase):
     arm: str | None = Field(default=None, max_length=20)
     status: AcademicStatus | None = None
     profile_status: StudentProfileStatus | None = None
+    account_status: StudentAccountStatus | None = None
+    is_verified: bool | None = None
+    is_active: bool | None = None
+    password_reset_required: bool | None = None
+    last_login_at: datetime | None = None
 
-    @field_validator("admission_number", "passport_photo_url", "arm", mode="before")
+    @field_validator(
+        "admission_number",
+        "first_name",
+        "last_name",
+        "passport_photo_url",
+        "arm",
+        mode="before",
+    )
     @classmethod
     def clean_optional_fields(cls, value: str | None) -> str | None:
         """Normalize optional text fields."""
+
         return _clean_optional_string(value)
 
 
 class StudentSelfUpdate(InputBase):
     """Schema for a student updating their own profile fields."""
 
+    first_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
     date_of_birth: date | None = None
     gender: Gender | None = None
     passport_photo_url: str | None = Field(default=None, max_length=500)
+    password: str | None = Field(default=None, min_length=8, max_length=64)
 
-    @field_validator("passport_photo_url", mode="before")
+    @field_validator("first_name", "last_name", "passport_photo_url", mode="before")
     @classmethod
     def clean_self_service_fields(cls, value: str | None) -> str | None:
         """Normalize optional text fields."""
+
+        return _clean_optional_string(value)
+
+
+class StudentOnboardingUpdate(InputBase):
+    """Schema for student onboarding and self-service profile completion."""
+
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    date_of_birth: date
+    gender: Gender
+    passport_photo_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("first_name", "last_name", "passport_photo_url", mode="before")
+    @classmethod
+    def clean_onboarding_fields(cls, value: str | None) -> str | None:
+        """Normalize student onboarding fields."""
+
         return _clean_optional_string(value)
 
 
 class StudentOutputBase(OutputBase):
-    """Base output schema for student academic profile data."""
+    """Base output schema for student actor data."""
 
     id: uuid.UUID
     tenant_id: uuid.UUID
-    user_id: uuid.UUID
-
-    firstname: str | None = None
-    lastname: str | None = None
-    email: str | None = None
-
-    admission_number: str | None = None
+    admission_number: str
+    first_name: str | None = None
+    last_name: str | None = None
+    account_status: StudentAccountStatus
+    is_verified: bool
+    is_active: bool
+    password_reset_required: bool
+    last_login_at: datetime | None = None
     date_of_birth: date | None = None
     gender: Gender | None = None
     passport_photo_url: str | None = None
@@ -144,7 +218,6 @@ class StudentOutputBase(OutputBase):
     arm: str | None = None
     status: AcademicStatus
     profile_status: StudentProfileStatus
-
     created_at: datetime
     updated_at: datetime
 
@@ -152,7 +225,22 @@ class StudentOutputBase(OutputBase):
 class StudentResponse(StudentOutputBase):
     """Schema returned for student profile data."""
 
-    pass
+    temporary_password: str | None = None
+    default_password: str | None = None
+
+
+class StudentLoginProfile(OutputBase):
+    """Compact student profile used after authentication."""
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    admission_number: str
+    first_name: str | None = None
+    last_name: str | None = None
+    account_status: StudentAccountStatus
+    is_verified: bool
+    is_active: bool
+    password_reset_required: bool
 
 
 class StudentListResponse(OutputBase):
@@ -161,10 +249,6 @@ class StudentListResponse(OutputBase):
     items: list[StudentResponse]
     total: int
 
-
-# ──────────────────────────────────────────────
-# STUDENT-PARENT LINK SCHEMAS
-# ──────────────────────────────────────────────
 
 class StudentParentLinkInputBase(InputBase):
     """Base input schema for linking a student to a parent."""
@@ -180,8 +264,6 @@ class StudentParentLinkInputBase(InputBase):
 class StudentParentLinkCreate(StudentParentLinkInputBase):
     """Schema for creating a student-parent link."""
 
-    pass
-
 
 class StudentParentLinkUpdate(InputBase):
     """Schema for updating a student-parent link."""
@@ -190,6 +272,15 @@ class StudentParentLinkUpdate(InputBase):
     is_primary_contact: bool | None = None
     receives_academic_updates: bool | None = None
     receives_fee_updates: bool | None = None
+
+
+class StudentParentLinkParentSummary(OutputBase):
+    """Compact parent summary attached to student-parent links."""
+
+    id: uuid.UUID
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
 
 
 class StudentParentLinkOutputBase(OutputBase):
@@ -210,7 +301,7 @@ class StudentParentLinkOutputBase(OutputBase):
 class StudentParentLinkResponse(StudentParentLinkOutputBase):
     """Schema returned for a student-parent relationship."""
 
-    pass
+    parent: StudentParentLinkParentSummary | None = None
 
 
 class StudentParentLinkListResponse(OutputBase):
@@ -220,9 +311,66 @@ class StudentParentLinkListResponse(OutputBase):
     total: int
 
 
-# ──────────────────────────────────────────────
-# STUDENT LINK CODE SCHEMAS
-# ──────────────────────────────────────────────
+class ParentLinkRequestParentSummary(OutputBase):
+    """Compact parent summary attached to student link requests."""
+
+    id: uuid.UUID
+    email: str
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class ParentLinkRequestStudentSummary(OutputBase):
+    """Compact student summary attached to parent link requests."""
+
+    id: uuid.UUID
+    admission_number: str
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+class StudentParentLinkRequestCreate(InputBase):
+    """Parent request payload for linking a student by admission number."""
+
+    admission_number: str = Field(..., min_length=1, max_length=50)
+
+    @field_validator("admission_number", mode="before")
+    @classmethod
+    def clean_admission_number(cls, value: str) -> str:
+        """Normalize an admission number before lookup."""
+
+        if not isinstance(value, str):
+            return value
+        return value.strip().upper()
+
+
+class StudentParentLinkRequestRespond(InputBase):
+    """Student response payload for a pending parent link request."""
+
+    action: Literal["approve", "reject"]
+
+
+class StudentParentLinkRequestResponse(OutputBase):
+    """Pending or completed parent-student link request."""
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    student_id: uuid.UUID
+    parent_id: uuid.UUID
+    admission_number_snapshot: str
+    status: StudentParentLinkRequestStatus
+    requested_at: datetime
+    responded_at: datetime | None = None
+    parent: ParentLinkRequestParentSummary | None = None
+    student: ParentLinkRequestStudentSummary | None = None
+
+
+class StudentParentLinkRequestListResponse(OutputBase):
+    """Paginated-style response container for parent link requests."""
+
+    items: list[StudentParentLinkRequestResponse]
+    total: int
+
 
 class StudentLinkCodeInputBase(InputBase):
     """Base input schema for creating a student link code."""
@@ -233,8 +381,6 @@ class StudentLinkCodeInputBase(InputBase):
 
 class StudentLinkCodeCreate(StudentLinkCodeInputBase):
     """Schema for generating a student link code."""
-
-    pass
 
 
 class StudentLinkCodeRedeem(InputBase):
@@ -250,6 +396,7 @@ class StudentLinkCodeRedeem(InputBase):
     @classmethod
     def clean_code(cls, value: str) -> str:
         """Normalize a pairing code before lookup."""
+
         if not isinstance(value, str):
             return value
         return value.strip().upper()
@@ -274,4 +421,22 @@ class StudentLinkCodeOutputBase(OutputBase):
 class StudentLinkCodeResponse(StudentLinkCodeOutputBase):
     """Schema returned after generating a student link code."""
 
-    pass
+
+class StudentOnboardingStatusResponse(OutputBase):
+    """Student onboarding status response."""
+
+    actor_type: Literal["student"]
+    student_id: uuid.UUID
+    onboarding_required: bool
+    profile_status: StudentProfileStatus
+    completion_target: Literal["student"]
+    required_fields: list[str]
+    current_values: dict[str, Any]
+
+
+class StudentChangePasswordRequest(InputBase):
+    """Student password change payload."""
+
+    current_password: str = Field(..., min_length=1, max_length=64)
+    new_password: str = Field(..., min_length=8, max_length=64)
+    confirm_password: str = Field(..., min_length=8, max_length=64)

@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.security import (
+    create_access_token,
     hash_auth_secret,
     hash_otp,
     hash_password,
@@ -37,6 +38,7 @@ from app.core.utils.email_templates import (
 from app.config.settings import settings
 from app.modules.auth.models import AuthPurpose, AuthRecord
 from app.modules.auth.schemas import (
+    LoginSessionUser,
     LoginRequest,
     RequestOTP,
     TenantActivationRequest,
@@ -46,29 +48,51 @@ from app.modules.auth.schemas import (
 )
 from app.modules.auth_identity.models import ActorType, IdentifierType
 from app.modules.auth_identity.service import AuthIdentityService
+from app.modules.parents.models import Parent, ParentAccountStatus
+from app.modules.parents.repository import ParentRepository
+from app.modules.students.models import Student, StudentAccountStatus
+from app.modules.students.repository import StudentRepository
 from app.modules.superadmin.models import SuperAdmin
 from app.modules.superadmin.repository import SuperAdminRepository
+from app.modules.teachers.models import Teacher, TeacherAccountStatus, TeacherStatus
+from app.modules.teachers.repository import TeacherRepository
 from app.modules.tenant_admins.models import TenantAdmin, TenantAdminStatus
 from app.modules.tenant_admins.repository import TenantAdminRepository
-from app.modules.users.models import AccountStatus, User, UserRole
-from app.modules.users.repository import UserRepository
 from app.tenant_management.models import Tenant, TenantStatus, TenantVerificationStatus
 from app.tenant_management.repository import TenantRepository
 from app.core.utils.otp_rate_limiter import OTPRateLimiter
 
-"""AUTH SERVICE LARGLEY DEPENDS ON USER AND TENANT REPOSITORIES AND MODELS"""
+EmailActor = TenantAdmin | Teacher | Parent
+
+
 def _normalize_email(email: str) -> str:
     """Normalize the email address."""
     return email.strip().lower()
 
 
+def _enum_value(value: str | object | None) -> str | None:
+    """Return a stable string representation for enum-like values."""
+
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        return value
+
+    return getattr(value, "value", str(value))
+
+
 async def _get_platform_email_conflicts(
     db: AsyncSession,
     email: str,
-) -> tuple[User | None, Tenant | None, SuperAdmin | None]:
+) -> tuple[object | None, Tenant | None, SuperAdmin | None]:
     """Internal helper for get platform email conflicts."""
     normalized_email = _normalize_email(email)
-    existing_user = await UserRepository.get_user_by_email(db, normalized_email)
+    existing_user = await TenantAdminRepository.get_by_email(db, normalized_email)
+    if existing_user is None:
+        existing_user = await TeacherRepository.get_by_email(db, normalized_email)
+    if existing_user is None:
+        existing_user = await ParentRepository.get_by_email(db, normalized_email)
     existing_tenant = await TenantRepository.get_by_email_including_deleted(db, normalized_email)
     existing_superadmin = await SuperAdminRepository.get_by_email(db, normalized_email)
     return existing_user, existing_tenant, existing_superadmin
@@ -197,13 +221,268 @@ def _tenant_allows_otp_verification(tenant: Tenant | None) -> bool:
     )
 
 
-def _user_can_reset_password(user: User | None, tenant: Tenant | None) -> bool:
-    """Internal helper for user can reset password."""
+def _resolve_identifier_type(identifier: str) -> IdentifierType:
+    """Infer the identifier type from the login payload."""
+
+    return IdentifierType.EMAIL if "@" in identifier else IdentifierType.ADMISSION_NUMBER
+
+
+async def _authenticate_tenant_actor(
+    db: AsyncSession,
+    *,
+    identifier: str,
+    password: str,
+    identifier_type: IdentifierType,
+    background_tasks: BackgroundTasks | None = None,
+) -> "AuthenticatedActor | None":
+    """Authenticate a non-superadmin actor via AuthIdentity."""
+
+    try:
+        resolution = await AuthIdentityService.resolve_identifier(
+            db=db,
+            identifier=identifier,
+            identifier_type=identifier_type,
+        )
+    except NotFoundException:
+        return None
+
+    tenant = await TenantRepository.get_by_id(db, resolution.tenant_id)
+    if tenant is None:
+        raise UnauthorizedException("Account not found")
+
+    if resolution.actor_type == ActorType.TENANT_ADMIN:
+        tenant_admin = await _authenticate_tenant_admin(
+            db,
+            email=identifier,
+            password=password,
+            background_tasks=background_tasks,
+        )
+        if tenant_admin is None:
+            return None
+        return AuthenticatedActor(
+            actor_type=ActorType.TENANT_ADMIN.value,
+            account_type=ActorType.TENANT_ADMIN.value,
+            actor_id=tenant_admin.id,
+            email=tenant_admin.email,
+            role="admin",
+            tenant_id=tenant_admin.tenant_id,
+            user=LoginSessionUser(
+                id=str(tenant_admin.id),
+                tenant_id=str(tenant_admin.tenant_id),
+                email=tenant_admin.email,
+                actor_type=ActorType.TENANT_ADMIN.value,
+                account_type=ActorType.TENANT_ADMIN.value,
+                role="admin",
+            ),
+        )
+
+    if tenant.verification_status == TenantVerificationStatus.PENDING_VERIFICATION:
+        if tenant.status == TenantStatus.INACTIVE:
+            raise AccountNotVerifiedException(
+                detail="Account not activated. Please use the activation link sent to your email.",
+            )
+        if identifier_type == IdentifierType.EMAIL:
+            await AuthService._raise_verification_required(
+                db,
+                email=identifier,
+                background_tasks=background_tasks,
+            )
+
+    if tenant.verification_status == TenantVerificationStatus.REJECTED:
+        raise UnauthorizedException("Account has been rejected. Please contact support.")
+
+    if not _tenant_allows_login(tenant):
+        raise UnauthorizedException("Account is not active")
+
+    if resolution.actor_type == ActorType.TEACHER:
+        teacher = await TeacherRepository.get_by_id(db, resolution.actor_id)
+        if teacher is None:
+            raise UnauthorizedException("Account not found")
+        if not verify_password(password, teacher.password_hash):
+            raise UnauthorizedException("Invalid credentials")
+        if (
+            not teacher.is_active
+            or not teacher.is_verified
+            or teacher.account_status != TeacherAccountStatus.ACTIVE
+            or teacher.status != TeacherStatus.ACTIVE
+        ):
+            raise UnauthorizedException("Account is not active")
+        teacher.last_login_at = datetime.now(timezone.utc)
+        await TeacherRepository.save(db, teacher)
+        await db.commit()
+        return AuthenticatedActor(
+            actor_type=ActorType.TEACHER.value,
+            account_type=ActorType.TEACHER.value,
+            actor_id=teacher.id,
+            email=teacher.email,
+            role="teacher",
+            tenant_id=teacher.tenant_id,
+            user=LoginSessionUser(
+                id=str(teacher.id),
+                tenant_id=str(teacher.tenant_id),
+                email=teacher.email,
+                first_name=teacher.first_name,
+                last_name=teacher.last_name,
+                actor_type=ActorType.TEACHER.value,
+                account_type=ActorType.TEACHER.value,
+                role="teacher",
+            ),
+        )
+
+    if resolution.actor_type == ActorType.PARENT:
+        parent = await ParentRepository.get_by_id(db, resolution.actor_id)
+        if parent is None:
+            raise UnauthorizedException("Account not found")
+        if not verify_password(password, parent.password_hash):
+            raise UnauthorizedException("Invalid credentials")
+        if (
+            not parent.is_active
+            or not parent.is_verified
+            or parent.account_status != ParentAccountStatus.ACTIVE
+        ):
+            raise UnauthorizedException("Account is not active")
+        parent.last_login_at = datetime.now(timezone.utc)
+        await ParentRepository.save(db, parent)
+        await db.commit()
+        return AuthenticatedActor(
+            actor_type=ActorType.PARENT.value,
+            account_type=ActorType.PARENT.value,
+            actor_id=parent.id,
+            email=parent.email,
+            role="parent",
+            tenant_id=parent.tenant_id,
+            user=LoginSessionUser(
+                id=str(parent.id),
+                tenant_id=str(parent.tenant_id),
+                email=parent.email,
+                first_name=parent.first_name,
+                last_name=parent.last_name,
+                actor_type=ActorType.PARENT.value,
+                account_type=ActorType.PARENT.value,
+                role="parent",
+            ),
+        )
+
+    if resolution.actor_type == ActorType.STUDENT:
+        student = await StudentRepository.get_by_id(db, resolution.actor_id)
+        if student is None or student.password_hash is None:
+            raise UnauthorizedException("Account not found")
+        if not verify_password(password, student.password_hash):
+            raise UnauthorizedException("Invalid credentials")
+        if (
+            not student.is_active
+            or not student.is_verified
+            or student.account_status != StudentAccountStatus.ACTIVE
+        ):
+            raise UnauthorizedException("Account is not active")
+        student.last_login_at = datetime.now(timezone.utc)
+        await StudentRepository.save(db, student)
+        await db.commit()
+        return AuthenticatedActor(
+            actor_type=ActorType.STUDENT.value,
+            account_type=ActorType.STUDENT.value,
+            actor_id=student.id,
+            email=student.admission_number,
+            role="student",
+            tenant_id=student.tenant_id,
+            password_reset_required=student.password_reset_required,
+            user=LoginSessionUser(
+                id=str(student.id),
+                tenant_id=str(student.tenant_id),
+                email=student.admission_number,
+                admission_number=student.admission_number,
+                first_name=student.first_name,
+                last_name=student.last_name,
+                actor_type=ActorType.STUDENT.value,
+                account_type=ActorType.STUDENT.value,
+                role="student",
+                password_reset_required=student.password_reset_required,
+                profile_status=_enum_value(student.profile_status),
+            ),
+        )
+
+    return None
+
+
+async def _get_email_actor_with_tenant(
+    db: AsyncSession,
+    email: str,
+    *,
+    lock: bool = False,
+) -> tuple[EmailActor, Tenant, ActorType]:
+    """Resolve an email identity to an actor record and its tenant."""
+
+    normalized_email = _normalize_email(email)
+
+    try:
+        resolution = await AuthIdentityService.resolve_identifier(
+            db=db,
+            identifier=normalized_email,
+            identifier_type=IdentifierType.EMAIL,
+        )
+    except NotFoundException as exc:
+        raise NotFoundException("Account with this email not found.") from exc
+
+    actor_query = None
+    if resolution.actor_type == ActorType.TENANT_ADMIN:
+        actor_query = select(TenantAdmin).where(TenantAdmin.id == resolution.actor_id)
+    elif resolution.actor_type == ActorType.TEACHER:
+        actor_query = select(Teacher).where(Teacher.id == resolution.actor_id)
+    elif resolution.actor_type == ActorType.PARENT:
+        actor_query = select(Parent).where(Parent.id == resolution.actor_id)
+    else:
+        raise BadRequestException(
+            "This email address is not eligible for this authentication flow."
+        )
+
+    tenant_query = select(Tenant).where(Tenant.id == resolution.tenant_id)
+
+    if lock:
+        actor_query = actor_query.with_for_update()
+        tenant_query = tenant_query.with_for_update()
+
+    actor_result = await db.execute(actor_query)
+    actor = actor_result.scalar_one_or_none()
+    if actor is None:
+        raise NotFoundException("Account not found.")
+
+    tenant_result = await db.execute(tenant_query)
+    tenant = tenant_result.scalar_one_or_none()
+    if tenant is None:
+        raise NotFoundException("Tenant not found.")
+
+    if actor.tenant_id != tenant.id:
+        raise BadRequestException("This account is not linked to the resolved tenant.")
+
+    return actor, tenant, resolution.actor_type
+
+
+def _email_actor_can_reset_password(
+    actor: EmailActor | None,
+    tenant: Tenant | None,
+) -> bool:
+    """Return whether an email-based actor can reset password."""
+
     return (
-        user is not None
-        and user.account_status == AccountStatus.ACTIVE
-        and user.is_verified
+        actor is not None
+        and actor.is_active
+        and actor.is_verified
         and _tenant_allows_login(tenant)
+        and (
+            (
+                isinstance(actor, TenantAdmin)
+                and actor.account_status == TenantAdminStatus.ACTIVE
+            )
+            or (
+                isinstance(actor, Teacher)
+                and actor.account_status == TeacherAccountStatus.ACTIVE
+                and actor.status == TeacherStatus.ACTIVE
+            )
+            or (
+                isinstance(actor, Parent)
+                and actor.account_status == ParentAccountStatus.ACTIVE
+            )
+        )
     )
 
 
@@ -216,6 +495,8 @@ class AuthenticatedActor:
     email: str
     role: str | None = None
     tenant_id: uuid.UUID | None = None
+    password_reset_required: bool | None = None
+    user: LoginSessionUser | None = None
 
 
 class AuthService:
@@ -275,7 +556,6 @@ class AuthService:
                     email=normalized_email,
                     purpose=AuthPurpose.VERIFICATION.value,
                 ),
-                background_tasks=background_tasks,
             )
         except TooManyRequestsException as exc:
             resend_otp_available = False
@@ -310,9 +590,11 @@ class AuthService:
         background_tasks: BackgroundTasks | None = None,
     ) -> AuthenticatedActor:
         """Perform authenticate actor."""
+        normalized_identifier = payload.identifier.strip()
+
         superadmin = await _authenticate_superadmin(
             db,
-            email=payload.email,
+            email=normalized_identifier,
             password=payload.password,
         )
         if superadmin is not None:
@@ -322,76 +604,27 @@ class AuthService:
                 actor_id=superadmin.id,
                 email=superadmin.email,
                 role="superadmin",
+                user=LoginSessionUser(
+                    id=str(superadmin.id),
+                    email=superadmin.email,
+                    actor_type="superadmin",
+                    account_type="superadmin",
+                    role="superadmin",
+                ),
             )
 
-        tenant_admin = await _authenticate_tenant_admin(
+        identifier_type = _resolve_identifier_type(normalized_identifier)
+        tenant_actor = await _authenticate_tenant_actor(
             db,
-            email=payload.email,
+            identifier=normalized_identifier,
             password=payload.password,
+            identifier_type=identifier_type,
             background_tasks=background_tasks,
         )
-        if tenant_admin is not None:
-            return AuthenticatedActor(
-                actor_type=ActorType.TENANT_ADMIN.value,
-                account_type=ActorType.TENANT_ADMIN.value,
-                actor_id=tenant_admin.id,
-                email=tenant_admin.email,
-                tenant_id=tenant_admin.tenant_id,
-            )
+        if tenant_actor is not None:
+            return tenant_actor
 
-        user = await UserRepository.get_user_by_email(db, payload.email)
-
-        if not user:
-            raise UnauthorizedException("Invalid email or password")
-
-        if not verify_password(payload.password, user.password_hash):
-            raise UnauthorizedException("Invalid email or password")
-
-        tenant = await TenantRepository.get_by_id(db, user.tenant_id)
-        if tenant is None:
-            raise UnauthorizedException("Account not found")
-
-        if tenant.verification_status == TenantVerificationStatus.PENDING_VERIFICATION:
-            if tenant.status == TenantStatus.INACTIVE:
-                raise AccountNotVerifiedException(
-                    detail="Account not activated. Please use the activation link sent to your email.",
-                )
-            await AuthService._raise_verification_required(
-                db,
-                email=payload.email,
-                background_tasks=background_tasks,
-            )
-
-        if tenant.verification_status == TenantVerificationStatus.REJECTED:
-            raise UnauthorizedException("Account has been rejected. Please contact support.")
-
-        if tenant.is_deleted or tenant.status not in (TenantStatus.ACTIVE, TenantStatus.TRIAL):
-            raise UnauthorizedException("Account is not active")
-
-        if user.account_status != AccountStatus.ACTIVE:
-            if user.account_status == AccountStatus.PENDING:
-                if user.role == UserRole.ADMIN and tenant.email.strip().lower() == user.email.strip().lower():
-                    await AuthService._raise_verification_required(
-                        db,
-                        email=payload.email,
-                        background_tasks=background_tasks,
-                    )
-                raise AccountNotVerifiedException(
-                    detail=(
-                        "Your account setup is not complete yet. "
-                        "Please use the invite link sent to your email or request a new invite from your school admin."
-                    ),
-                )
-            raise UnauthorizedException("Account is not active")
-
-        return AuthenticatedActor(
-            actor_type="tenant_user",
-            account_type="tenant_user",
-            actor_id=user.id,
-            email=user.email,
-            role=user.role.value,
-            tenant_id=user.tenant_id,
-        )
+        raise UnauthorizedException("Invalid email or password")
 
     @staticmethod
     async def reset_password(db: AsyncSession, payload: UpdatePassword) -> None:
@@ -418,21 +651,17 @@ class AuthService:
             await db.commit()
             raise UnauthorizedException("Invalid or expired reset token")
 
-        user_result = await db.execute(
-            select(User).where(func.lower(User.email) == normalized_email).with_for_update()
+        actor, tenant, _actor_type = await _get_email_actor_with_tenant(
+            db,
+            normalized_email,
+            lock=True,
         )
-        user = user_result.scalar_one_or_none()
-
-        if not user:
-            raise NotFoundException("User email does not exist")
-
-        tenant = await TenantRepository.get_by_id(db, user.tenant_id)
-        if not _user_can_reset_password(user, tenant):
+        if not _email_actor_can_reset_password(actor, tenant):
             raise UnauthorizedException("Password reset is not available for this account")
 
         hashed_pw = hash_password(payload.new_password)
 
-        user.password_hash = hashed_pw
+        actor.password_hash = hashed_pw
         await db.delete(reset_record)
         await db.commit()
 
@@ -454,7 +683,7 @@ class TenantActivationService:
         db: AsyncSession,
         *,
         tenant: Tenant,
-        admin_user: User,
+        admin_user: TenantAdmin,
         frontend_app_url: str | None = None,
     ) -> str:
         """Create activation record."""
@@ -552,24 +781,24 @@ class TenantActivationService:
                 "Activation link does not match this email address."
             )
 
-        user_result = await db.execute(
-            select(User).where(
-                func.lower(User.email) == _normalize_email(activation_record.email)
+        admin_result = await db.execute(
+            select(TenantAdmin).where(
+                func.lower(TenantAdmin.email) == _normalize_email(activation_record.email)
             ).with_for_update()
         )
-        user = user_result.scalar_one_or_none()
+        admin = admin_result.scalar_one_or_none()
 
         tenant_result = await db.execute(
             select(Tenant).where(Tenant.id == activation_record.tenant_id).with_for_update()
         )
         tenant = tenant_result.scalar_one_or_none()
 
-        if user is None or tenant is None:
+        if admin is None or tenant is None:
             await db.delete(activation_record)
             await db.commit()
             raise BadRequestException("Activation link is no longer valid.")
 
-        if user.tenant_id != tenant.id or user.role != UserRole.ADMIN:
+        if admin.tenant_id != tenant.id:
             await db.delete(activation_record)
             await db.commit()
             raise BadRequestException("Activation link is no longer valid.")
@@ -578,9 +807,10 @@ class TenantActivationService:
             await db.rollback()
             raise BadRequestException("Activation link is no longer valid.")
 
-        user.password_hash = hash_password(payload.password)
-        user.account_status = AccountStatus.ACTIVE
-        user.is_verified = True
+        admin.password_hash = hash_password(payload.password)
+        admin.account_status = TenantAdminStatus.ACTIVE
+        admin.is_verified = True
+        admin.is_active = True
 
         tenant.verification_status = TenantVerificationStatus.ACTIVE
         if tenant.status == TenantStatus.INACTIVE:
@@ -608,7 +838,8 @@ class UserInviteService:
     async def create_invite_record(
         db: AsyncSession,
         *,
-        user: User,
+        email: str,
+        tenant_id: uuid.UUID,
         frontend_app_url: str | None = None,
     ) -> str:
         """Create invite record."""
@@ -619,7 +850,7 @@ class UserInviteService:
 
         await db.execute(
             delete(AuthRecord).where(
-                func.lower(AuthRecord.email) == _normalize_email(user.email),
+                func.lower(AuthRecord.email) == _normalize_email(email),
                 AuthRecord.purpose == AuthPurpose.USER_INVITE,
                 AuthRecord.is_used == False,
             )
@@ -627,11 +858,11 @@ class UserInviteService:
 
         db.add(
             AuthRecord(
-                email=user.email,
+                email=_normalize_email(email),
                 hashed_value=hash_auth_secret(raw_token),
                 purpose=AuthPurpose.USER_INVITE,
                 expires_at=expires_at,
-                tenant_id=user.tenant_id,
+                tenant_id=tenant_id,
             )
         )
         await db.flush()
@@ -776,19 +1007,14 @@ class UserInviteService:
                 "Invite link does not match this email address."
             )
 
-        user_result = await db.execute(
-            select(User).where(
-                func.lower(User.email) == _normalize_email(invite_record.email)
-            ).with_for_update()
+        actor, tenant, actor_type = await _get_email_actor_with_tenant(
+            db,
+            invite_record.email,
+            lock=True,
         )
-        user = user_result.scalar_one_or_none()
+        normalized_actor_type = _enum_value(actor_type)
 
-        tenant_result = await db.execute(
-            select(Tenant).where(Tenant.id == invite_record.tenant_id).with_for_update()
-        )
-        tenant = tenant_result.scalar_one_or_none()
-
-        if user is None or tenant is None or user.tenant_id != tenant.id:
+        if tenant.id != invite_record.tenant_id:
             raise BadRequestException(
                 "This invite link is invalid or has expired. Please request a new invite from your school admin."
             )
@@ -798,32 +1024,75 @@ class UserInviteService:
                 "This invite link is invalid or has expired. Please request a new invite from your school admin."
             )
 
-        if user.role == UserRole.ADMIN:
+        if normalized_actor_type == ActorType.TENANT_ADMIN.value:
             raise BadRequestException("This invite link is not valid for administrator setup.")
 
-        if user.account_status != AccountStatus.PENDING or user.is_verified:
+        if normalized_actor_type == ActorType.STUDENT.value:
+            raise BadRequestException("This invite link is not valid for student setup.")
+
+        if actor.account_status != TeacherAccountStatus.PENDING and isinstance(actor, Teacher):
             invite_record.is_used = True
             await db.commit()
             raise BadRequestException(
                 "This invite link has already been used. Please log in instead."
             )
 
-        user.password_hash = hash_password(payload.password)
-        user.account_status = AccountStatus.ACTIVE
-        user.is_verified = True
+        if actor.account_status != ParentAccountStatus.PENDING and isinstance(actor, Parent):
+            invite_record.is_used = True
+            await db.commit()
+            raise BadRequestException(
+                "This invite link has already been used. Please log in instead."
+            )
+
+        if actor.is_verified:
+            invite_record.is_used = True
+            await db.commit()
+            raise BadRequestException(
+                "This invite link has already been used. Please log in instead."
+            )
+
+        actor.password_hash = hash_password(payload.password)
+        actor.is_verified = True
+        actor.is_active = True
+        actor.last_login_at = now
+        if isinstance(actor, Teacher):
+            actor.account_status = TeacherAccountStatus.ACTIVE
+            actor_role = "teacher"
+        elif isinstance(actor, Parent):
+            actor.account_status = ParentAccountStatus.ACTIVE
+            actor_role = "parent"
+        else:
+            raise BadRequestException("Unsupported invite actor type.")
         invite_record.is_used = True
 
         await db.execute(
             delete(AuthRecord).where(
-                func.lower(AuthRecord.email) == _normalize_email(user.email),
+                func.lower(AuthRecord.email) == _normalize_email(invite_record.email),
                 AuthRecord.purpose == AuthPurpose.USER_INVITE,
                 AuthRecord.id != invite_record.id,
                 AuthRecord.is_used == False,
             )
         )
         await db.commit()
+        access_token = create_access_token(
+            data={
+                "sub": str(actor.id),
+                "email": actor.email,
+                "actor_type": normalized_actor_type,
+                "role": actor_role,
+                "account_type": normalized_actor_type,
+                "tenant_id": str(actor.tenant_id),
+            }
+        )
 
-        return {"detail": "Account setup completed successfully. You may now log in."}
+        return {
+            "detail": "Account setup completed successfully.",
+            "access_token": access_token,
+            "token_type": "bearer",
+            "actor_type": normalized_actor_type,
+            "role": actor_role,
+            "account_type": normalized_actor_type,
+        }
 
     @staticmethod
     async def accept_superadmin_invite(
@@ -981,18 +1250,13 @@ class OTPService:
             record_email = admin.email
             tenant_id = admin.tenant_id
         elif payload.purpose == AuthPurpose.PASSWORD_RESET:
-            result = await db.execute(
-                select(User).where(
-                    func.lower(User.email) == normalized_email
-                ).with_for_update()
+            actor, _tenant, _actor_type = await _get_email_actor_with_tenant(
+                db,
+                normalized_email,
+                lock=True,
             )
-            user = result.scalar_one_or_none()
-
-            if not user:
-                raise NotFoundException("User with this email not found.")
-
-            record_email = user.email
-            tenant_id = user.tenant_id
+            record_email = actor.email
+            tenant_id = actor.tenant_id
         else:
             raise BadRequestException(f"Unhandled OTP purpose : {payload.purpose}")
 
@@ -1032,16 +1296,12 @@ class OTPService:
             )
             OTPService._ensure_verification_target_allowed(admin, tenant)
         elif payload.purpose == AuthPurpose.PASSWORD_RESET:
-            # Password reset remains on the legacy User flow for now.
-            existing_user = await UserRepository.get_user_by_email(db, normalized_email)
-            if not existing_user:
-                raise NotFoundException("User with this email not found.")
+            actor, tenant, _actor_type = await _get_email_actor_with_tenant(
+                db,
+                normalized_email,
+            )
 
-            tenant = await TenantRepository.get_by_id(db, existing_user.tenant_id)
-            if tenant is None:
-                raise NotFoundException("Tenant not found.")
-
-            if not _user_can_reset_password(existing_user, tenant):
+            if not _email_actor_can_reset_password(actor, tenant):
                 raise BadRequestException(
                     "Password reset is not available for this account."
                 )
@@ -1138,15 +1398,13 @@ class OTPService:
             otp_record.is_used = True
 
         elif payload.purpose == AuthPurpose.PASSWORD_RESET:
-            user = await UserRepository.get_user_by_email(db, payload.email)
-            if not user:
-                raise NotFoundException("User not found")
+            actor, tenant, _actor_type = await _get_email_actor_with_tenant(
+                db,
+                payload.email,
+                lock=True,
+            )
 
-            tenant = await TenantRepository.get_by_id(db, user.tenant_id)
-            if not tenant:
-                raise NotFoundException("Tenant not found")
-
-            if not _user_can_reset_password(user, tenant):
+            if not _email_actor_can_reset_password(actor, tenant):
                 raise BadRequestException("Password reset is not available for this account.")
 
             reset_token = secrets.token_urlsafe(32)
@@ -1155,17 +1413,17 @@ class OTPService:
             # Replace any previous reset token so only the latest one remains valid.
             await db.execute(
                 delete(AuthRecord).where(
-                    func.lower(AuthRecord.email) == _normalize_email(user.email),
+                    func.lower(AuthRecord.email) == _normalize_email(actor.email),
                     AuthRecord.purpose == AuthPurpose.PASSWORD_RESET,
                 )
             )
             db.add(
                 AuthRecord(
-                    email=user.email,
+                    email=actor.email,
                     hashed_value=hash_auth_secret(reset_token),
                     purpose=AuthPurpose.PASSWORD_RESET,
                     expires_at=reset_token_expires_at,
-                    tenant_id=user.tenant_id,
+                    tenant_id=actor.tenant_id,
                 )
             )
             response_data["reset_token"] = reset_token

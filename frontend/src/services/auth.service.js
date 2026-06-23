@@ -1,5 +1,5 @@
 import { api, authSession } from "./api";
-import { userService } from "./user.service";
+import { onboardingService } from "./onboardingService";
 
 const PENDING_VERIFICATION_EMAIL_KEY = "pendingVerificationEmail";
 
@@ -15,19 +15,21 @@ export const authService = {
             authSession.setToken(response.access_token, { remember });
         }
 
-        let currentUser = response.user || null;
-        let role = response.role || currentUser?.role || null;
+        const role =
+            onboardingService.normalizeRole(
+                response.role || response.user?.role || onboardingService.roleFromActorType(response.actor_type)
+            ) || null;
 
-        if (response.access_token) {
-            try {
-                currentUser = await userService.getMe();
-                role = currentUser?.role || null;
-            } catch (error) {
-                console.error("Failed to fetch authenticated user after login:", error);
-            }
-        }
+        const currentUser = {
+            ...(response.user || {}),
+            email: response.email || response.user?.email || null,
+            role,
+            actor_type: response.actor_type || response.user?.actor_type || null,
+            password_reset_required:
+                response.user?.password_reset_required ?? response.password_reset_required ?? false,
+        };
 
-        if (currentUser) {
+        if (currentUser.email || currentUser.role || currentUser.actor_type) {
             authSession.setUser(currentUser, { remember });
         } else if (role) {
             authSession.setRole(role, { remember });

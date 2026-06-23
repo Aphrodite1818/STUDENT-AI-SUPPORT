@@ -17,9 +17,9 @@ async def test_update_tenant_profile_marks_onboarding_complete_when_prefix_exist
         admission_number_prefix=None,
         onboarding_completed=False,
         phone=None,
-        address=None,
-        city=None,
-        state=None,
+        address="1 School Road",
+        city="Lagos",
+        state="Lagos",
         country="Nigeria",
         logo_url=None,
         timezone="Africa/Lagos",
@@ -41,7 +41,12 @@ async def test_update_tenant_profile_marks_onboarding_complete_when_prefix_exist
         updated = await TenantService.update_tenant_profile(
             db=db,
             tenant_id=tenant.id,
-            payload=TenantUpdate(admission_number_prefix="nhs"),
+            payload=TenantUpdate(
+                admission_number_prefix="nhs",
+                address="1 School Road",
+                city="Lagos",
+                state="Lagos",
+            ),
         )
 
     assert updated.admission_number_prefix == "NHS"
@@ -59,9 +64,9 @@ async def test_update_tenant_profile_marks_onboarding_incomplete_when_prefix_rem
         admission_number_prefix="NHS",
         onboarding_completed=True,
         phone=None,
-        address=None,
-        city=None,
-        state=None,
+        address="1 School Road",
+        city="Lagos",
+        state="Lagos",
         country="Nigeria",
         logo_url=None,
         timezone="Africa/Lagos",

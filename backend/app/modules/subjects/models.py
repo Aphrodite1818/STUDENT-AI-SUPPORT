@@ -1,19 +1,21 @@
-#==========================#
-#    subject/models.py     #
-#==========================#
-
 """Tenant-scoped subject catalog for each school."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.base_model import BaseModel
 
+if TYPE_CHECKING:
+    from app.modules.teachers.models import Teacher, TeacherSubject
+
 
 class Subject(BaseModel):
-    """Represent the Subject type."""
+    """Represent a school subject and its teacher assignments."""
+
     __tablename__ = "subjects"
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -21,16 +23,18 @@ class Subject(BaseModel):
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    teacher_links = relationship(
+    teacher_links: Mapped[list["TeacherSubject"]] = relationship(
         "TeacherSubject",
         back_populates="subject",
         cascade="all, delete-orphan",
+        overlaps="teachers,subjects",
     )
 
-    @property
-    def teachers(self) -> list[Any]:
-        """Perform teachers."""
-        return [link.teacher for link in self.teacher_links if link.teacher is not None]
+    teachers: Mapped[list["Teacher"]] = relationship(
+        secondary="public.teacher_subjects",
+        back_populates="subjects",
+        overlaps="teacher_links,subject_links,teacher,subject",
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_subject_tenant_name"),

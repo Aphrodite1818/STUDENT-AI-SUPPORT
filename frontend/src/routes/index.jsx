@@ -7,7 +7,7 @@ import OTPValidationPage from "../pages/public/otp_validationPage";
 import InvitePage from "../pages/public/InvitePage";
 import ForgotPasswordPage from "../pages/public/ForgotPasswordPage";
 import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
-import UserManagementPage from "../pages/admin/UserManagementPage";
+import CreateUserPage from "../pages/admin/CreateUserPage";
 import TeachersPage from "../pages/admin/TeachersPage";
 import StudentsPage from "../pages/admin/StudentsPage";
 import ParentsPage from "../pages/admin/ParentsPage";
@@ -25,6 +25,7 @@ import TeacherSubjectsPage from "../pages/teacher/SubjectsPage";
 import TeacherAttendancePage from "../pages/teacher/AttendancePage";
 import TeacherExamsPage from "../pages/teacher/ExamsPage";
 import TeacherResultsPage from "../pages/teacher/ResultsPage";
+import StudentChangePasswordPage from "../pages/student/StudentChangePasswordPage";
 import StudentDashboardPage from "../pages/student/StudentDashboardPage";
 import ParentDashboardPage from "../pages/parent/ParentDashboardPage";
 import SuperadminDashboardPage from "../pages/superadmin/SuperadminDashboardPage";
@@ -49,7 +50,7 @@ function AppRoutes() {
 
           <Route element={<RoleGuard allowedRoles={["ADMIN"]} />}>
             <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-            <Route path="/admin/users" element={<UserManagementPage />} />
+            <Route path="/admin/create-user" element={<CreateUserPage />} />
             <Route path="/admin/teachers" element={<TeachersPage />} />
             <Route path="/admin/students" element={<StudentsPage />} />
             <Route path="/admin/parents" element={<ParentsPage />} />
@@ -80,6 +81,7 @@ function AppRoutes() {
           </Route>
 
           <Route element={<RoleGuard allowedRoles={["STUDENT"]} />}>
+            <Route path="/student/change-password" element={<StudentChangePasswordPage />} />
             <Route path="/student/dashboard" element={<StudentDashboardPage />} />
             <Route path="/student/timetable" element={<StaticModulePage role="student" title="Timetable" description="Your class schedule and upcoming periods." type="timetable" />} />
             <Route path="/student/assignments" element={<StaticModulePage role="student" title="Assignments" description="Track assigned work and due dates." />} />
