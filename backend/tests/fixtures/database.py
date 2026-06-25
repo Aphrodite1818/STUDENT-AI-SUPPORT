@@ -16,7 +16,7 @@ from app.modules.announcements import models as _announcement_models  # noqa: F4
 from app.modules.auth_identity import models as _auth_identity_models  # noqa: F401
 from app.modules.attendance import models as _attendance_models  # noqa: F401
 from app.modules.classes import models as _classes_models  # noqa: F401
-from app.modules.exams import models as _exams_models  # noqa: F401
+from app.modules.student_academics import models as _exams_models  # noqa: F401
 from app.modules.finance import models as _finance_models  # noqa: F401
 from app.modules.parents import models as _parent_models  # noqa: F401
 from app.modules.results import models as _results_models  # noqa: F401
