@@ -7,7 +7,7 @@ function ExamsPage() {
       role="teacher"
       title="Exams"
       description="Schedule and update assessments for your assigned subjects."
-      config={getExamResourceConfig({ canDelete: false })}
+      config={getExamResourceConfig({ canDelete: false, role: "teacher" })}
     />
   );
 }

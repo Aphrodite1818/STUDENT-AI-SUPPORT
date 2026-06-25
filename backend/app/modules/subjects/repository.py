@@ -87,8 +87,8 @@ class SubjectRepository:
         result = await db.execute(
             select(Subject)
             .options(
-                selectinload(Subject.teacher_links)
-                .selectinload(TeacherSubject.teacher)
+                selectinload(Subject.teachers),
+                selectinload(Subject.teacher_links).selectinload(TeacherSubject.teacher),
             )
             .where(
                 Subject.tenant_id == tenant_id,
@@ -177,8 +177,8 @@ class SubjectRepository:
         result = await db.execute(
             select(Subject)
             .options(
-                selectinload(Subject.teacher_links)
-                .selectinload(TeacherSubject.teacher)
+                selectinload(Subject.teachers),
+                selectinload(Subject.teacher_links).selectinload(TeacherSubject.teacher),
             )
             .where(*filters)
             .order_by(Subject.name.asc())
@@ -225,8 +225,8 @@ class SubjectRepository:
             select(Subject)
             .join(TeacherSubject, TeacherSubject.subject_id == Subject.id)
             .options(
-                selectinload(Subject.teacher_links)
-                .selectinload(TeacherSubject.teacher)
+                selectinload(Subject.teachers),
+                selectinload(Subject.teacher_links).selectinload(TeacherSubject.teacher),
             )
             .where(*filters)
             .order_by(Subject.name.asc())

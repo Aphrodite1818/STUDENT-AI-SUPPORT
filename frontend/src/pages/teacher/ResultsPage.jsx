@@ -7,7 +7,7 @@ function ResultsPage() {
       role="teacher"
       title="Results"
       description="Enter scores and review performance for your assigned classes."
-      config={getResultResourceConfig({ canDelete: false })}
+      config={getResultResourceConfig({ canDelete: false, role: "teacher" })}
     />
   );
 }

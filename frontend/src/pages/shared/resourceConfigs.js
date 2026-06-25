@@ -55,7 +55,7 @@ const byId = (items) =>
 const selectedIds = (items = []) =>
   items.map((item) => item.id).filter(Boolean);
 
-const labelFromMap = (map, id, fallback = "N/A") =>
+const labelFromMap = (map, id, fallback = "-") =>
   id && map[id] ? fullName(map[id]) || className(map[id]) || subjectName(map[id]) : fallback;
 
 const optionalValue = (value, fallback = "Not provided") => value || fallback;
@@ -84,11 +84,17 @@ const compactPayload = (payload) =>
 const loadAcademicContext = async ({
   includeExams = false,
   includeFees = false,
+  role = "admin",
 } = {}) => {
+  const isTeacher = role === "teacher";
   const [classes, subjects, students, exams, fees] = await Promise.all([
     classService.getClasses({ limit: 100 }),
-    subjectService.getSubjects({ limit: 100, isActive: true }),
-    studentService.getAdminStudents({ limit: 100 }),
+    isTeacher
+      ? teacherService.getMySubjects({ limit: 100, isActive: true })
+      : subjectService.getSubjects({ limit: 100, isActive: true }),
+    isTeacher
+      ? studentService.getStudents({ limit: 100 })
+      : studentService.getAdminStudents({ limit: 100 }),
     includeExams ? examService.getExams({ limit: 100 }) : Promise.resolve({ items: [] }),
     includeFees ? financeService.getFees({ limit: 100 }) : Promise.resolve({ items: [] }),
   ]);
@@ -138,8 +144,8 @@ const loadSubjectContext = async () => {
 
 const classColumns = [
   { key: "name", label: "Class" },
-  { key: "level", label: "Level", render: (item) => item.level || "N/A" },
-  { key: "arm", label: "Arm", render: (item) => item.arm || "N/A" },
+  { key: "level", label: "Level", render: (item) => item.level || "-" },
+  { key: "arm", label: "Arm", render: (item) => item.arm || "-" },
 ];
 
 const classFields = (context) => [
@@ -173,7 +179,7 @@ export const getClassResourceConfig = ({ role, writable }) => ({
       render: (item) => {
         if (!item.teacher_id) return "Unassigned";
         const teacher = context.teacherById?.[item.teacher_id];
-        return teacher ? displayName(teacher) : item.teacher_id;
+        return teacher ? displayName(teacher) : "Assigned";
       },
     },
   ],
@@ -211,7 +217,7 @@ export const subjectReadOnlyResourceConfig = {
   ],
   columns: [
     { key: "name", label: "Subject" },
-    { key: "code", label: "Code", render: (item) => item.code || "N/A" },
+    { key: "code", label: "Code", render: (item) => item.code || "-" },
     {
       key: "is_active",
       label: "Status",
@@ -220,7 +226,7 @@ export const subjectReadOnlyResourceConfig = {
     {
       key: "description",
       label: "Description",
-      render: (item) => item.description || "N/A",
+      render: (item) => item.description || "-",
     },
   ],
   fetchItems: (filters) =>
@@ -378,9 +384,9 @@ export const teacherResourceConfig = {
       render: (item) => displayName(item),
     },
     { key: "email", label: "Email", render: (item) => optionalValue(item.email) },
-    { key: "staff_id", label: "Staff ID", render: (item) => item.staff_id || "N/A" },
-    { key: "qualification", label: "Qualification", render: (item) => item.qualification || "N/A" },
-    { key: "specialization", label: "Specialization", render: (item) => item.specialization || "N/A" },
+    { key: "staff_id", label: "Staff ID", render: (item) => item.staff_id || "-" },
+    { key: "qualification", label: "Qualification", render: (item) => item.qualification || "-" },
+    { key: "specialization", label: "Specialization", render: (item) => item.specialization || "-" },
     {
       key: "subjects",
       label: "Subjects",
@@ -406,7 +412,7 @@ export const teacherResourceConfig = {
   getItemLabel: (item) => displayName(item),
 };
 
-export const getStudentResourceConfig = ({ writable }) => ({
+export const getStudentResourceConfig = ({ writable, role = "admin" }) => ({
   singularLabel: "Student",
   pluralLabel: "Students",
   formHelp:
@@ -414,7 +420,7 @@ export const getStudentResourceConfig = ({ writable }) => ({
   canCreate: false,
   canUpdate: writable,
   canDelete: writable,
-  loadContext: () => loadAcademicContext(),
+  loadContext: () => loadAcademicContext({ role }),
   initialForm: {
     gender: "",
     date_of_birth: "",
@@ -465,7 +471,7 @@ export const getStudentResourceConfig = ({ writable }) => ({
     },
   ],
   fetchItems: (filters) =>
-    studentService.getAdminStudents({
+    (role === "teacher" ? studentService.getStudents : studentService.getAdminStudents)({
       search: filters.search,
       classId: filters.classId,
       status: filters.status,
@@ -522,7 +528,7 @@ export const parentResourceConfig = {
   getItemLabel: (item) => displayName(item),
 };
 
-export const getAttendanceResourceConfig = ({ writable, canDelete }) => ({
+export const getAttendanceResourceConfig = ({ writable, canDelete, role = "admin" }) => ({
   singularLabel: "Attendance record",
   pluralLabel: "Attendance records",
   formHelp: "Teachers can create and update attendance; only admins can delete records.",
@@ -532,7 +538,7 @@ export const getAttendanceResourceConfig = ({ writable, canDelete }) => ({
   canCreate: writable,
   canUpdate: writable,
   canDelete,
-  loadContext: () => loadAcademicContext(),
+  loadContext: () => loadAcademicContext({ role }),
   initialForm: {
     student_id: "",
     class_id: "",
@@ -557,7 +563,7 @@ export const getAttendanceResourceConfig = ({ writable, canDelete }) => ({
     { key: "class_id", label: "Class", render: (item) => className(context.classById[item.class_id]) },
     { key: "attendance_date", label: "Date" },
     { key: "status", label: "Status", render: (item) => titleCase(item.status) },
-    { key: "note", label: "Note", render: (item) => item.note || "N/A" },
+    { key: "note", label: "Note", render: (item) => item.note || "-" },
   ],
   fetchItems: (filters) =>
     attendanceService.getAttendance({
@@ -581,7 +587,7 @@ export const getAttendanceResourceConfig = ({ writable, canDelete }) => ({
   }),
 });
 
-export const getExamResourceConfig = ({ canDelete }) => ({
+export const getExamResourceConfig = ({ canDelete, role = "admin" }) => ({
   singularLabel: "Exam",
   pluralLabel: "Exams",
   formHelp: "Teachers can schedule and update exams. Deleting exams is reserved for admins.",
@@ -591,7 +597,7 @@ export const getExamResourceConfig = ({ canDelete }) => ({
   canCreate: true,
   canUpdate: true,
   canDelete,
-  loadContext: () => loadAcademicContext(),
+  loadContext: () => loadAcademicContext({ role }),
   initialForm: {
     name: "",
     subject_id: "",
@@ -637,7 +643,7 @@ export const getExamResourceConfig = ({ canDelete }) => ({
   getItemLabel: (item) => item.name,
 });
 
-export const getResultResourceConfig = ({ canDelete }) => ({
+export const getResultResourceConfig = ({ canDelete, role = "admin" }) => ({
   singularLabel: "Result",
   pluralLabel: "Results",
   formHelp: "Create results against a student, class, subject, and optionally an exam.",
@@ -647,7 +653,7 @@ export const getResultResourceConfig = ({ canDelete }) => ({
   allowUnavailable: true,
   unavailableMessage:
     "Results are not available yet because the backend results router has no live endpoints.",
-  loadContext: () => loadAcademicContext({ includeExams: true }),
+  loadContext: () => loadAcademicContext({ includeExams: true, role }),
   initialForm: {
     student_id: "",
     subject_id: "",
@@ -682,7 +688,7 @@ export const getResultResourceConfig = ({ canDelete }) => ({
     { key: "subject_id", label: "Subject", render: (item) => subjectName(context.subjectById[item.subject_id]) },
     { key: "class_id", label: "Class", render: (item) => className(context.classById[item.class_id]) },
     { key: "score", label: "Score" },
-    { key: "grade", label: "Grade", render: (item) => item.grade || "N/A" },
+    { key: "grade", label: "Grade", render: (item) => item.grade || "-" },
   ],
   fetchItems: (filters) =>
     resultService.getResults({
@@ -742,7 +748,7 @@ export const feeResourceConfig = {
   columns: (context) => [
     { key: "name", label: "Fee" },
     { key: "amount", label: "Amount" },
-    { key: "due_date", label: "Due date", render: (item) => item.due_date || "N/A" },
+    { key: "due_date", label: "Due date", render: (item) => item.due_date || "-" },
     { key: "class_id", label: "Class", render: (item) => item.class_id ? className(context.classById[item.class_id]) : "All classes" },
   ],
   fetchItems: (filters) => financeService.getFees({ classId: filters.classId }),
@@ -785,10 +791,10 @@ export const paymentResourceConfig = {
   ],
   columns: (context) => [
     { key: "student_id", label: "Student", render: (item) => fullName(context.studentById[item.student_id]) },
-    { key: "fee_id", label: "Fee", render: (item) => context.feeById[item.fee_id]?.name || "N/A" },
+    { key: "fee_id", label: "Fee", render: (item) => context.feeById[item.fee_id]?.name || "-" },
     { key: "amount", label: "Amount" },
     { key: "status", label: "Status", render: (item) => titleCase(item.status) },
-    { key: "reference", label: "Reference", render: (item) => item.reference || "N/A" },
+    { key: "reference", label: "Reference", render: (item) => item.reference || "-" },
   ],
   fetchItems: (filters) => financeService.getPayments({ studentId: filters.studentId, feeId: filters.feeId }),
   createItem: (payload) => financeService.createPayment(payload),

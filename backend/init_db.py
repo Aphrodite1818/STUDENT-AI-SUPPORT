@@ -7,6 +7,7 @@ from app.shared.base_model import Base
 
 # Import mounted-domain models so Base.metadata knows the current table shapes.
 import app.tenant_management.models  # noqa: F401
+import app.modules.announcements.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.auth_identity.models  # noqa: F401
 import app.modules.superadmin.models  # noqa: F401
@@ -510,6 +511,136 @@ async def sync_enum_values(conn) -> None:
         "actor_type",
         ["tenant_admin", "teacher", "staff", "parent", "student"],
     )
+    await create_enum_if_missing(
+        conn,
+        "announcement_category",
+        [
+            "GENERAL",
+            "ACADEMIC",
+            "EXAMINATION",
+            "ASSIGNMENT",
+            "ATTENDANCE",
+            "EVENT",
+            "HOLIDAY",
+            "FINANCE",
+            "DISCIPLINE",
+            "SPORTS",
+            "CLUB_ACTIVITY",
+            "HEALTH",
+            "TRANSPORT",
+            "EMERGENCY",
+            "SYSTEM",
+        ],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_category",
+        [
+            "GENERAL",
+            "ACADEMIC",
+            "EXAMINATION",
+            "ASSIGNMENT",
+            "ATTENDANCE",
+            "EVENT",
+            "HOLIDAY",
+            "FINANCE",
+            "DISCIPLINE",
+            "SPORTS",
+            "CLUB_ACTIVITY",
+            "HEALTH",
+            "TRANSPORT",
+            "EMERGENCY",
+            "SYSTEM",
+        ],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_priority",
+        ["LOW", "NORMAL", "HIGH", "URGENT"],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_priority",
+        ["LOW", "NORMAL", "HIGH", "URGENT"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_status",
+        ["DRAFT", "PUBLISHED", "ARCHIVED", "CANCELLED"],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_status",
+        ["DRAFT", "PUBLISHED", "ARCHIVED", "CANCELLED"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_actor_type",
+        ["SUPERADMIN", "TENANT_ADMIN", "TEACHER"],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_actor_type",
+        ["SUPERADMIN", "TENANT_ADMIN", "TEACHER"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_target_type",
+        [
+            "ALL",
+            "ROLE",
+            "CLASS",
+            "SPECIFIC_PARENT",
+            "SPECIFIC_STUDENT",
+            "SPECIFIC_TEACHER",
+            "PARENTS_OF_STUDENT",
+            "PARENTS_OF_CLASS",
+        ],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_target_type",
+        [
+            "ALL",
+            "ROLE",
+            "CLASS",
+            "SPECIFIC_PARENT",
+            "SPECIFIC_STUDENT",
+            "SPECIFIC_TEACHER",
+            "PARENTS_OF_STUDENT",
+            "PARENTS_OF_CLASS",
+        ],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_recipient_role",
+        ["TENANT_ADMIN", "TEACHER", "PARENT", "STUDENT"],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_recipient_role",
+        ["TENANT_ADMIN", "TEACHER", "PARENT", "STUDENT"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_read_actor_type",
+        ["TENANT_ADMIN", "TEACHER", "PARENT", "STUDENT"],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_read_actor_type",
+        ["TENANT_ADMIN", "TEACHER", "PARENT", "STUDENT"],
+    )
+    await create_enum_if_missing(
+        conn,
+        "announcement_read_status",
+        ["UNREAD", "READ", "ACKNOWLEDGED"],
+    )
+    await add_enum_values(
+        conn,
+        "announcement_read_status",
+        ["UNREAD", "READ", "ACKNOWLEDGED"],
+    )
 
 
 async def sync_tenant_columns(conn) -> None:
@@ -949,6 +1080,76 @@ async def sync_indexes(conn) -> None:
     )
 
 
+async def sync_announcement_indexes(conn) -> None:
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcements_created_by_actor_id",
+        table_name="announcements",
+        columns=["created_by_actor_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcements_tenant_status",
+        table_name="announcements",
+        columns=["tenant_id", "status"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_targets_announcement_id",
+        table_name="announcement_targets",
+        columns=["announcement_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_targets_class_id",
+        table_name="announcement_targets",
+        columns=["class_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_targets_student_id",
+        table_name="announcement_targets",
+        columns=["student_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_targets_parent_id",
+        table_name="announcement_targets",
+        columns=["parent_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_targets_teacher_id",
+        table_name="announcement_targets",
+        columns=["teacher_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_reads_announcement_id",
+        table_name="announcement_reads",
+        columns=["announcement_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_reads_actor_id",
+        table_name="announcement_reads",
+        columns=["actor_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="ix_announcement_reads_actor_lookup",
+        table_name="announcement_reads",
+        columns=["tenant_id", "actor_type", "actor_id"],
+    )
+    await create_index_if_columns_exist(
+        conn,
+        index_name="uq_announcement_read_actor",
+        table_name="announcement_reads",
+        columns=["tenant_id", "announcement_id", "actor_type", "actor_id"],
+        unique=True,
+    )
+
+
 async def create_tables() -> None:
     async with engine.begin() as conn:
         await run_legacy_migrations(conn)
@@ -964,6 +1165,7 @@ async def create_tables() -> None:
         await sync_tenant_admin_columns(conn)
         await sync_auth_identity_columns(conn)
         await sync_indexes(conn)
+        await sync_announcement_indexes(conn)
 
 
 if __name__ == "__main__":

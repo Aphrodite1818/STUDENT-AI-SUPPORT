@@ -260,6 +260,7 @@ function ResourcePage({ config }) {
     setError(null);
     setSuccessMessage(null);
     setFieldErrors({});
+    let submitSucceeded = false;
 
     try {
       const payload = config.buildPayload
@@ -294,7 +295,7 @@ function ResourcePage({ config }) {
       }
 
       resetForm();
-      await loadItems();
+      submitSucceeded = true;
     } catch (err) {
       const parsed = parseApiError(
         err,
@@ -306,6 +307,18 @@ function ResourcePage({ config }) {
       setError(parsed.message);
     } finally {
       setIsSubmitting(false);
+    }
+
+    if (submitSucceeded) {
+      try {
+        await loadItems();
+      } catch (err) {
+        const parsed = parseApiError(
+          err,
+          `Created ${config.singularLabel.toLowerCase()} but failed to refresh the list.`
+        );
+        setError(parsed.message);
+      }
     }
   };
 
@@ -508,7 +521,7 @@ function ResourcePage({ config }) {
                     <tr key={item.id}>
                       {columns.map((column) => (
                         <td key={column.key} data-label={column.label}>
-                          <span>{column.render ? column.render(item, context) : item[column.key] || "N/A"}</span>
+                          <span>{column.render ? column.render(item, context) : item[column.key] || "-"}</span>
                         </td>
                       ))}
                       {(config.canUpdate || config.canDelete) && (

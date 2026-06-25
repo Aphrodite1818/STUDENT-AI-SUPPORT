@@ -133,6 +133,7 @@ const navGroups = {
         { label: "Timetable", to: "/teacher/timetable", icon: CalendarDays },
         { label: "Attendance", to: "/teacher/attendance", icon: CheckSquare },
         { label: "Assignments", to: "/teacher/assignments", icon: ClipboardList },
+        { label: "Notices", to: "/teacher/announcements", icon: FileText },
         { label: "Exams", to: "/teacher/exams", icon: FileText },
         { label: "Results", to: "/teacher/results", icon: BarChart3 },
       ],
@@ -168,6 +169,7 @@ const navGroups = {
       items: [
         { label: "Dashboard", to: "/superadmin/dashboard", icon: Home },
         { label: "Tenants", to: "/superadmin/dashboard", icon: Library },
+        { label: "Announcements", to: "/superadmin/announcements", icon: FileText },
         { label: "Verification", to: "/superadmin/verification", icon: Shield },
         { label: "Activity", to: "/superadmin/activity", icon: BarChart3 },
         { label: "Settings", to: "/superadmin/settings", icon: Settings },

@@ -11,6 +11,7 @@ import EmptyState from "../../components/shared/EmptyState";
 import LoadingState from "../../components/shared/LoadingState";
 import StatCard from "../../components/shared/StatCard";
 import { authSession, getErrorMessage } from "../../services/api";
+import { dashboardService } from "../../services/dashboard.service";
 import { studentService } from "../../services/studentService";
 import { displayName } from "../../utils/user";
 
@@ -25,23 +26,25 @@ function StudentDashboardPage() {
   const [student, setStudent] = useState(null);
   const [parentLinks, setParentLinks] = useState([]);
   const [parentLinkRequests, setParentLinkRequests] = useState([]);
+  const [metrics, setMetrics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [requestActionId, setRequestActionId] = useState(null);
   const user = authSession.getUser();
   const firstName = user?.first_name || user?.firstname || "Student";
-  const requiredProfileFields = ["first_name", "last_name", "date_of_birth", "gender"];
 
   const loadDashboardData = async () => {
-    const [studentProfile, linksResponse, requestsResponse] = await Promise.all([
+    const [studentProfile, linksResponse, requestsResponse, metricsResponse] = await Promise.all([
       studentService.getMyStudent(),
       studentService.getMyParentLinks(),
       studentService.getMyParentLinkRequests(),
+      dashboardService.getStudentAnalytics(),
     ]);
 
     setStudent(studentProfile);
     setParentLinks(linksResponse?.items || []);
     setParentLinkRequests(requestsResponse?.items || []);
+    setMetrics(metricsResponse);
   };
 
   useEffect(() => {
@@ -89,17 +92,7 @@ function StudentDashboardPage() {
     );
   }
 
-  const completedProfileFields = requiredProfileFields.filter((field) => Boolean(student?.[field])).length;
-  const missingProfileFields = Math.max(requiredProfileFields.length - completedProfileFields, 0);
-  const requestBreakdownData = [
-    { label: "approved_links", value: parentLinks.length },
-    { label: "pending_requests", value: parentLinkRequests.length },
-    { label: "missing_profile_fields", value: missingProfileFields },
-  ];
-  const profileProgressData = [
-    { label: "completed_fields", value: completedProfileFields },
-    { label: "remaining_fields", value: missingProfileFields },
-  ];
+  const charts = metrics?.charts || {};
 
   return (
     <DashboardLayout
@@ -132,11 +125,11 @@ function StudentDashboardPage() {
             compact
           />
           <StatCard
-            label="Pending Requests"
-            value={parentLinkRequests.length}
-            description="awaiting your decision"
-            icon={Link2}
-            tone={parentLinkRequests.length > 0 ? "warning" : "success"}
+            label="Unread Notices"
+            value={metrics?.stats?.unread_count ?? 0}
+            description="need your attention"
+            icon={FileText}
+            tone={(metrics?.stats?.unread_count ?? 0) > 0 ? "warning" : "success"}
             compact
           />
         </section>
@@ -145,14 +138,16 @@ function StudentDashboardPage() {
       {!loadError && student && (
         <section className="dashboard-grid xl:grid-cols-2">
           <AnalyticsBarChart
-            title="Student Snapshot"
-            description="Profile readiness and parent-link progress based on your current account data."
-            data={requestBreakdownData}
+            title="Announcement Read Vs Unread"
+            description="Your personal read status across announcement feed items."
+            data={charts.announcement_read_vs_unread || []}
+            emptyMessage="No announcement read-state data available yet."
           />
           <AnalyticsDonutChart
-            title="Profile Completion Progress"
-            description="Required profile fields completed versus still missing."
-            data={profileProgressData}
+            title="Announcement Category Breakdown"
+            description="Types of announcements you receive."
+            data={charts.announcement_category_breakdown || []}
+            emptyMessage="No announcement category data available yet."
           />
         </section>
       )}
@@ -172,7 +167,7 @@ function StudentDashboardPage() {
               </div>
               <div className="rounded-2xl border border-border bg-surface px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Class</p>
-                <p className="mt-1 font-semibold text-text">{student.class_id ? `Class ${student.class_id}` : "Not assigned"}</p>
+                <p className="mt-1 font-semibold text-text">{student.class_id ? "Assigned" : "Not assigned"}</p>
               </div>
               <div className="rounded-2xl border border-border bg-surface px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Parent contacts</p>

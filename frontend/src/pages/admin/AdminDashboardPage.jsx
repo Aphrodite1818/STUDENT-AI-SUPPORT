@@ -25,7 +25,7 @@ const statItems = [
   { key: "total_parents", label: "Parents", description: "parent accounts", icon: UserCheck, tone: "accent" },
   { key: "total_classes", label: "Classes", description: "academic groups", icon: Shapes, tone: "warning" },
   { key: "total_subjects", label: "Subjects", description: "active catalog items", icon: BookOpen, tone: "primary" },
-  { key: "pending_parent_link_requests", label: "Pending Links", description: "awaiting student approval", icon: UserCheck, tone: "warning" },
+  { key: "student_profiles_incomplete", label: "Incomplete Profiles", description: "students needing updates", icon: UserCheck, tone: "warning" },
 ];
 
 function AdminDashboardPage() {
@@ -101,32 +101,47 @@ function AdminDashboardPage() {
 
           <section className="dashboard-grid xl:grid-cols-2">
             <AnalyticsBarChart
-              title="School Population"
-              description="Real counts pulled from tenant-scoped analytics."
-              data={analytics?.charts?.population_breakdown || []}
+              title="User Population Breakdown"
+              description="Students, teachers, and parents currently in this school."
+              data={analytics?.charts?.user_population_breakdown || []}
             />
             <AnalyticsDonutChart
-              title="Student Profile Completion"
+              title="Student Profile Completion Rate"
               description="Shows how many student profiles are complete versus still missing required fields."
-              data={analytics?.charts?.profile_completion || []}
+              data={analytics?.charts?.student_profile_completion_rate || []}
+            />
+          </section>
+
+          <section className="dashboard-grid xl:grid-cols-3">
+            <AnalyticsBarChart
+              title="Account Status Overview"
+              description="Active and pending accounts across teachers and parents."
+              data={analytics?.charts?.account_status_overview || []}
+              emptyMessage="No account status data available yet."
+            />
+            <AnalyticsDonutChart
+              title="Announcements By Category"
+              description="Announcement categories posted within this school."
+              data={analytics?.charts?.announcements_by_category || []}
+              emptyMessage="No announcements have been posted yet."
+            />
+            <AnalyticsBarChart
+              title="Class Population"
+              description="Number of enrolled students in each class."
+              data={analytics?.charts?.class_population || []}
+              emptyMessage="No class population data available yet."
             />
           </section>
 
           <section className="dashboard-grid xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-            <AnalyticsBarChart
-              title="Pending Workflows"
-              description="Invite and link-request work waiting on people to finish the loop."
-              data={analytics?.charts?.pending_workflows || []}
-              emptyMessage="No pending workflow items right now."
-            />
             <Card className="p-4 sm:p-5 md:p-6">
               <h2 className="section-title">Operational Snapshot</h2>
               {analytics ? (
                 <div className="mt-4 space-y-3 text-sm text-text-soft">
                   <p>Student profiles complete: {stats.student_profiles_complete ?? 0}</p>
                   <p>Student profiles incomplete: {stats.student_profiles_incomplete ?? 0}</p>
-                  <p>Pending invites: {stats.pending_user_invites ?? 0}</p>
-                  <p>Pending parent-student approvals: {stats.pending_parent_link_requests ?? 0}</p>
+                  <p>Pending teacher accounts: {stats.pending_teacher_accounts ?? 0}</p>
+                  <p>Pending parent accounts: {stats.pending_parent_accounts ?? 0}</p>
                 </div>
               ) : (
                 <EmptyState

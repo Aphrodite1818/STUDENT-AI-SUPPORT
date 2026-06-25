@@ -2,6 +2,7 @@ import secrets
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,7 @@ from app.core.exceptions import BadRequestException, ConflictException, Forbidde
 from app.modules.auth_identity.models import ActorType, IdentifierType
 from app.modules.auth_identity.schemas import AuthIdentityCreate
 from app.modules.auth_identity.service import AuthIdentityService
+from app.modules.classes.models import ClassRoom
 from app.modules.parents.models import Parent
 from app.modules.parents.repository import ParentRepository
 from app.modules.students.models import (
@@ -133,6 +135,28 @@ class StudentService:
             raise ForbiddenException(detail="You are not allowed to view this student profile")
 
     @staticmethod
+    async def _assert_teacher_can_view_student(
+        db: AsyncSession,
+        *,
+        teacher: Teacher,
+        student: Student,
+    ) -> None:
+        """Ensure the teacher is assigned to the student's class."""
+
+        if student.class_id is None:
+            raise ForbiddenException(detail="You are not allowed to view this student profile")
+
+        result = await db.execute(
+            select(ClassRoom.id).where(
+                ClassRoom.tenant_id == teacher.tenant_id,
+                ClassRoom.id == student.class_id,
+                ClassRoom.teacher_id == teacher.id,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise ForbiddenException(detail="You are not allowed to view this student profile")
+
+    @staticmethod
     async def create_student_profile(
         db: AsyncSession,
         actor: TenantAdmin,
@@ -244,6 +268,13 @@ class StudentService:
                 db=db,
                 parent=actor,
                 student_id=student.id,
+            )
+
+        if isinstance(actor, Teacher):
+            await StudentService._assert_teacher_can_view_student(
+                db=db,
+                teacher=actor,
+                student=student,
             )
 
         return StudentResponse.model_validate(student)
@@ -399,16 +430,53 @@ class StudentService:
 
         if isinstance(actor, Teacher):
             StudentService._ensure_teacher_actor(actor)
-            students, total = await StudentRepository.list_students(
-                db=db,
-                tenant_id=actor.tenant_id,
-                skip=skip,
-                limit=limit,
-                search=search,
-                class_id=class_id,
-                status=status,
+            filters = [
+                Student.tenant_id == actor.tenant_id,
+                ClassRoom.tenant_id == actor.tenant_id,
+                ClassRoom.teacher_id == actor.id,
+                Student.class_id == ClassRoom.id,
+            ]
+            if class_id is not None:
+                filters.append(Student.class_id == class_id)
+            if status is not None:
+                filters.append(Student.status == status)
+            if search:
+                search_term = f"%{search.strip()}%"
+                filters.append(
+                    or_(
+                        Student.first_name.ilike(search_term),
+                        Student.last_name.ilike(search_term),
+                        Student.admission_number.ilike(search_term),
+                    )
+                )
+
+            total = (
+                await db.execute(
+                    select(func.count()).select_from(Student).join(
+                        ClassRoom,
+                        and_(
+                            ClassRoom.id == Student.class_id,
+                            ClassRoom.tenant_id == Student.tenant_id,
+                        ),
+                    ).where(*filters)
+                )
+            ).scalar_one()
+            result = await db.execute(
+                select(Student)
+                .join(
+                    ClassRoom,
+                    and_(
+                        ClassRoom.id == Student.class_id,
+                        ClassRoom.tenant_id == Student.tenant_id,
+                    ),
+                )
+                .where(*filters)
+                .order_by(Student.created_at.desc())
+                .offset(skip)
+                .limit(limit)
             )
-            return [StudentResponse.model_validate(student) for student in students], total
+            students = list(result.scalars().all())
+            return [StudentResponse.model_validate(student) for student in students], int(total)
 
         if not isinstance(actor, Parent):
             raise ForbiddenException(detail="You are not allowed to list students")

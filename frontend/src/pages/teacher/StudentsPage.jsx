@@ -7,7 +7,7 @@ function StudentsPage() {
       role="teacher"
       title="Students"
       description="Review student records for classes assigned to you."
-      config={getStudentResourceConfig({ writable: false })}
+      config={getStudentResourceConfig({ writable: false, role: "teacher" })}
     />
   );
 }

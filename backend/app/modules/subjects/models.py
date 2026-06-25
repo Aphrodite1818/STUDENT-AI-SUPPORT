@@ -34,6 +34,7 @@ class Subject(BaseModel):
         secondary="public.teacher_subjects",
         back_populates="subjects",
         overlaps="teacher_links,subject_links,teacher,subject",
+        lazy="selectin",
     )
 
     __table_args__ = (

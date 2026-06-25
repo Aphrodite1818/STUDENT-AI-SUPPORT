@@ -11,6 +11,7 @@ import EmptyState from "../../components/shared/EmptyState";
 import LoadingState from "../../components/shared/LoadingState";
 import StatCard from "../../components/shared/StatCard";
 import { authSession, getErrorMessage } from "../../services/api";
+import { dashboardService } from "../../services/dashboard.service";
 import { parentService } from "../../services/parentService";
 import { displayName } from "../../utils/user";
 
@@ -24,6 +25,7 @@ const links = [
 function ParentDashboardPage() {
   const [children, setChildren] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [metrics, setMetrics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLinking, setIsLinking] = useState(false);
   const [admissionNumber, setAdmissionNumber] = useState("");
@@ -34,12 +36,14 @@ function ParentDashboardPage() {
   const firstName = user?.first_name || user?.firstname || "Parent";
 
   const loadDashboardData = async () => {
-    const [studentsResponse, requestsResponse] = await Promise.all([
+    const [studentsResponse, requestsResponse, metricsResponse] = await Promise.all([
       parentService.getMyStudents(),
       parentService.getMyStudentLinkRequests(),
+      dashboardService.getParentAnalytics(),
     ]);
     setChildren(studentsResponse?.items || []);
     setRequests(requestsResponse?.items || []);
+    setMetrics(metricsResponse);
   };
 
   useEffect(() => {
@@ -89,22 +93,7 @@ function ParentDashboardPage() {
   };
 
   const pendingRequests = requests.filter((item) => item.status === "pending");
-  const approvedRequests = requests.filter((item) => item.status === "approved").length;
-  const rejectedRequests = requests.filter((item) => item.status === "rejected").length;
-  const completeProfiles = children.filter((item) => item?.student?.profile_status === "complete").length;
-  const incompleteProfiles = Math.max(children.length - completeProfiles, 0);
-  const familySnapshotData = [
-    { label: "linked_students", value: children.length },
-    { label: "pending_requests", value: pendingRequests.length },
-    { label: "primary_contacts", value: children.filter((item) => item.link?.is_primary_contact).length },
-  ];
-  const requestStatusData = [
-    { label: "approved", value: approvedRequests },
-    { label: "pending", value: pendingRequests.length },
-    { label: "rejected", value: rejectedRequests },
-    { label: "profiles_complete", value: completeProfiles },
-    { label: "profiles_incomplete", value: incompleteProfiles },
-  ];
+  const charts = metrics?.charts || {};
 
   if (isLoading) {
     return (
@@ -151,11 +140,11 @@ function ParentDashboardPage() {
             compact
           />
           <StatCard
-            label="Pending Requests"
-            value={pendingRequests.length}
-            description="awaiting student approval"
-            icon={GraduationCap}
-            tone={pendingRequests.length > 0 ? "warning" : "primary"}
+            label="Unread Notices"
+            value={metrics?.stats?.unread_count ?? 0}
+            description="need your attention"
+            icon={MessageSquare}
+            tone={(metrics?.stats?.unread_count ?? 0) > 0 ? "warning" : "primary"}
             compact
           />
         </section>
@@ -164,14 +153,16 @@ function ParentDashboardPage() {
       {!loadError && (
         <section className="dashboard-grid xl:grid-cols-2">
           <AnalyticsBarChart
-            title="Family Snapshot"
-            description="Live counts for linked students, pending approvals, and primary-contact coverage."
-            data={familySnapshotData}
+            title="Announcement Read Vs Unread"
+            description="How many announcements in your feed have been read."
+            data={charts.announcement_read_vs_unread || []}
+            emptyMessage="No announcement read-state data available yet."
           />
           <AnalyticsDonutChart
-            title="Requests And Profile Status"
-            description="Combines link-request outcomes with linked-student profile completion."
-            data={requestStatusData}
+            title="Announcement Category Breakdown"
+            description="Types of announcements you are receiving from the school."
+            data={charts.announcement_category_breakdown || []}
+            emptyMessage="No announcement category data available yet."
           />
         </section>
       )}

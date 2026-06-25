@@ -44,11 +44,9 @@ function SuperadminDashboardPage() {
   const [superadmins, setSuperadmins] = useState([]);
   const [tenantFormData, setTenantFormData] = useState(INITIAL_TENANT_FORM);
   const [superadminFormData, setSuperadminFormData] = useState(INITIAL_SUPERADMIN_FORM);
-  const [restoreTenantId, setRestoreTenantId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingTenant, setIsCreatingTenant] = useState(false);
   const [isInvitingSuperadmin, setIsInvitingSuperadmin] = useState(false);
-  const [isRestoringById, setIsRestoringById] = useState(false);
   const [activeTenantAction, setActiveTenantAction] = useState(null);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -194,32 +192,13 @@ function SuperadminDashboardPage() {
     }
   };
 
-  const handleRestoreTenantById = async (event) => {
-    event.preventDefault();
-    setIsRestoringById(true);
-    setError(null);
-    setSuccessMessage(null);
-
-    try {
-      await superadminService.restoreTenant(restoreTenantId.trim());
-      setRestoreTenantId("");
-      setSuccessMessage("Tenant restored.");
-      await loadDashboardData();
-    } catch (err) {
-      setError(getErrorMessage(err, "Failed to restore tenant."));
-    } finally {
-      setIsRestoringById(false);
-    }
-  };
-
   const activeTenants = analytics?.stats?.active_tenants ?? tenants.filter((tenant) => tenant.status === "active" && !tenant.is_deleted).length;
-  const pendingTenants = analytics?.stats?.pending_verification ?? tenants.filter((tenant) => tenant.verification_status === "pending_verification").length;
-  const suspendedTenants = (analytics?.charts?.status_breakdown || []).find((item) => item.label === "suspended")?.value ?? tenants.filter((tenant) => tenant.status === "suspended").length;
+  const pendingTenants = analytics?.stats?.pending_tenants ?? tenants.filter((tenant) => tenant.verification_status === "pending_verification").length;
+  const suspendedTenants = analytics?.stats?.suspended_tenants ?? tenants.filter((tenant) => tenant.status === "suspended").length;
   const deletedTenants = tenants.filter((tenant) => tenant.is_deleted).length;
   const trialTenants = tenants.filter((tenant) => tenant.status === "trial" && !tenant.is_deleted).length;
   const totalTenants = analytics?.stats?.total_tenants ?? tenants.length;
-  const totalTenantAdmins = analytics?.stats?.total_tenant_admins ?? 0;
-  const rejectedVerification = analytics?.stats?.rejected_verification ?? 0;
+  const trialTenantsFromChart = (analytics?.charts?.tenant_status_distribution || []).find((item) => item.label === "trial")?.value ?? trialTenants;
 
   return (
     <DashboardLayout
@@ -256,13 +235,24 @@ function SuperadminDashboardPage() {
           title="Tenant Growth"
           description="Growth over time from tenant creation records."
           data={analytics?.charts?.tenant_growth || []}
-          labelKey="period"
         />
         <AnalyticsDonutChart
-          title="Verification Breakdown"
+          title="Tenant Status Distribution"
+          description="Active, pending, and suspended schools on the platform."
+          data={analytics?.charts?.tenant_status_distribution || []}
+          emptyMessage="No tenant status analytics available yet."
+        />
+        <AnalyticsDonutChart
+          title="Tenant Verification Breakdown"
           description="Current verification-state counts across tenants."
-          data={analytics?.charts?.verification_breakdown || []}
+          data={analytics?.charts?.tenant_verification_breakdown || []}
           emptyMessage="No verification analytics available yet."
+        />
+        <AnalyticsBarChart
+          title="Subscription Plan Distribution"
+          description="Which subscription plans schools are currently on."
+          data={analytics?.charts?.subscription_plan_distribution || []}
+          emptyMessage="No subscription plan analytics available yet."
         />
       </section>
 
@@ -279,7 +269,7 @@ function SuperadminDashboardPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="success">{activeTenants} active</Badge>
-                  <Badge variant="warning">{trialTenants} trial</Badge>
+                  <Badge variant="warning">{trialTenantsFromChart} trial</Badge>
                   <Badge variant="error">{deletedTenants} deleted</Badge>
                 </div>
               </div>
@@ -292,13 +282,13 @@ function SuperadminDashboardPage() {
               </div>
               <div className="rounded-2xl border border-border bg-surface p-3 sm:p-4 md:p-5">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Tenant admins</p>
-                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{totalTenantAdmins}</p>
-                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Tenant-admin accounts across schools.</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{suspendedTenants}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Schools requiring platform attention.</p>
               </div>
               <div className="col-span-2 rounded-2xl border border-border bg-surface p-3 sm:col-span-1 sm:p-4 md:p-5">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-text-muted sm:text-xs">Rejected verification</p>
-                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{rejectedVerification}</p>
-                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Tenants rejected in verification.</p>
+                <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-2xl md:text-3xl">{trialTenantsFromChart}</p>
+                <p className="mt-1 hidden text-xs text-text-muted sm:mt-2 sm:block sm:text-sm">Schools currently evaluating the platform.</p>
               </div>
             </div>
           </Card>
@@ -419,28 +409,16 @@ function SuperadminDashboardPage() {
             </form>
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-            <Card className="p-4 sm:p-5 md:p-6">
-              <h2 className="section-title">Invite superadmin</h2>
-              <form onSubmit={handleInviteSuperadmin} className="mt-4 space-y-4 sm:mt-5">
-                <Input label="Superadmin email" type="email" name="email" value={superadminFormData.email} onChange={handleSuperadminFormChange} error={superadminFieldErrors.email} required />
-                <Button type="submit" className="w-full" disabled={isInvitingSuperadmin}>
-                  <UserPlus className="h-4 w-4" />
-                  {isInvitingSuperadmin ? "Sending invite..." : "Invite superadmin"}
-                </Button>
-              </form>
-            </Card>
-
-            <Card className="p-4 sm:p-5 md:p-6">
-              <h2 className="section-title">Restore tenant</h2>
-              <form onSubmit={handleRestoreTenantById} className="mt-4 space-y-4 sm:mt-5">
-                <Input label="Tenant ID" name="restoreTenantId" value={restoreTenantId} onChange={(event) => setRestoreTenantId(event.target.value)} placeholder="00000000-0000-0000-0000-000000000000" required />
-                <Button type="submit" variant="outline" className="w-full" disabled={isRestoringById || !restoreTenantId.trim()}>
-                  {isRestoringById ? "Restoring..." : "Restore tenant"}
-                </Button>
-              </form>
-            </Card>
-          </div>
+          <Card className="p-4 sm:p-5 md:p-6">
+            <h2 className="section-title">Invite superadmin</h2>
+            <form onSubmit={handleInviteSuperadmin} className="mt-4 space-y-4 sm:mt-5">
+              <Input label="Superadmin email" type="email" name="email" value={superadminFormData.email} onChange={handleSuperadminFormChange} error={superadminFieldErrors.email} required />
+              <Button type="submit" className="w-full" disabled={isInvitingSuperadmin}>
+                <UserPlus className="h-4 w-4" />
+                {isInvitingSuperadmin ? "Sending invite..." : "Invite superadmin"}
+              </Button>
+            </form>
+          </Card>
         </aside>
       </section>
 

@@ -1,9 +1,11 @@
 import { api } from "./api";
 
+const clampLimit = (limit) => Math.min(Math.max(Number(limit) || 100, 1), 100);
+
 const buildParentQuery = ({ skip = 0, limit = 100 } = {}) => {
   const params = new URLSearchParams();
   params.set("skip", String(skip));
-  params.set("limit", String(limit));
+  params.set("limit", String(clampLimit(limit)));
   return params.toString();
 };
 

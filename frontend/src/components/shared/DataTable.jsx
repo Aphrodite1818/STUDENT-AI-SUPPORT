@@ -29,7 +29,7 @@ function DataTable({
             <tr key={item.id || index}>
               {columns.map((column) => (
                 <td key={column.key} data-label={column.label}>
-                  <span>{column.render ? column.render(item) : item[column.key] || "N/A"}</span>
+                  <span>{column.render ? column.render(item) : item[column.key] || "-"}</span>
                 </td>
               ))}
             </tr>

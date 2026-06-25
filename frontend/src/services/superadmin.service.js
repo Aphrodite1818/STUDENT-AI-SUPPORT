@@ -14,7 +14,7 @@ const buildQuery = (params) => {
 };
 
 export const superadminService = {
-  getAnalyticsOverview: () => api.get("/superadmin/analytics/overview"),
+  getAnalyticsOverview: () => api.get("/metrics/superadmin/dashboard"),
 
   createTenant: (data) => api.post("/superadmin/tenants", data),
 

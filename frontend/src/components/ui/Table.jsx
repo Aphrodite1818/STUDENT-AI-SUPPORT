@@ -31,7 +31,7 @@ function Table({ columns = [], rows = [], emptyText = "No records found.", isLoa
               <tr key={row.id || index}>
                 {columns.map((column) => (
                   <td key={column.key} data-label={column.label}>
-                    <span>{column.render ? column.render(row) : row[column.key] || "N/A"}</span>
+                    <span>{column.render ? column.render(row) : row[column.key] || "-"}</span>
                   </td>
                 ))}
               </tr>

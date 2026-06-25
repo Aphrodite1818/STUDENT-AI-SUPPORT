@@ -6,6 +6,7 @@
 def import_model_modules() -> None:
     """Import SQLAlchemy models so string relationships and FKs can resolve."""
     import app.modules.auth.models  # noqa: F401
+    import app.modules.announcements.models  # noqa: F401
     import app.modules.classes.models  # noqa: F401
     import app.modules.parents.models  # noqa: F401
     import app.modules.students.models  # noqa: F401

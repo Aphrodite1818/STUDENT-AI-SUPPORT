@@ -7,7 +7,7 @@ function AttendancePage() {
       role="teacher"
       title="Attendance"
       description="Mark attendance for assigned classes and review daily attendance history."
-      config={getAttendanceResourceConfig({ writable: true, canDelete: false })}
+      config={getAttendanceResourceConfig({ writable: true, canDelete: false, role: "teacher" })}
     />
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, CheckSquare, ClipboardList, ShieldCheck, Users } from "lucide-react";
+import { BookOpen, CheckSquare, ClipboardList, Users } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -9,6 +9,7 @@ import AnalyticsDonutChart from "../../components/charts/AnalyticsDonutChart";
 import LoadingState from "../../components/shared/LoadingState";
 import StatCard from "../../components/shared/StatCard";
 import { authSession, getErrorMessage } from "../../services/api";
+import { dashboardService } from "../../services/dashboard.service";
 import { teacherService } from "../../services/teacherService";
 
 const shortcuts = [
@@ -16,12 +17,14 @@ const shortcuts = [
   { label: "Students", to: "/teacher/students", icon: Users },
   { label: "Subjects", to: "/teacher/subjects", icon: BookOpen },
   { label: "Attendance", to: "/teacher/attendance", icon: CheckSquare },
+  { label: "Notices", to: "/teacher/announcements", icon: ClipboardList },
   { label: "Results", to: "/teacher/results", icon: ClipboardList },
 ];
 
 function TeacherDashboardPage() {
   const [teacher, setTeacher] = useState(null);
   const [subjects, setSubjects] = useState([]);
+  const [metrics, setMetrics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const user = authSession.getUser();
@@ -35,15 +38,17 @@ function TeacherDashboardPage() {
       setLoadError(null);
 
       try {
-        const [teacherProfile, subjectResponse] = await Promise.all([
+        const [teacherProfile, subjectResponse, metricsResponse] = await Promise.all([
           teacherService.getMyTeacher(),
           teacherService.getMySubjects(),
+          dashboardService.getTeacherAnalytics(),
         ]);
 
         if (!mounted) return;
 
         setTeacher(teacherProfile);
         setSubjects(subjectResponse?.items || []);
+        setMetrics(metricsResponse);
       } catch (error) {
         if (mounted) {
           setLoadError(getErrorMessage(error, "Failed to load teacher dashboard."));
@@ -69,23 +74,7 @@ function TeacherDashboardPage() {
   }
 
   const activeSubjects = subjects.filter((subject) => subject?.is_active !== false).length;
-  const inactiveSubjects = Math.max(subjects.length - activeSubjects, 0);
-  const readinessChecksComplete = [
-    teacher?.profile_completed,
-    teacher?.is_verified,
-    teacher?.is_active,
-  ].filter(Boolean).length;
-
-  const workloadChartData = [
-    { label: "assigned_subjects", value: subjects.length },
-    { label: "active_subjects", value: activeSubjects },
-    { label: "inactive_subjects", value: inactiveSubjects },
-  ];
-
-  const readinessChartData = [
-    { label: "ready_checks", value: readinessChecksComplete },
-    { label: "attention_needed", value: Math.max(3 - readinessChecksComplete, 0) },
-  ];
+  const charts = metrics?.charts || {};
 
   return (
     <DashboardLayout
@@ -102,11 +91,11 @@ function TeacherDashboardPage() {
       {!loadError && (
         <section className="stat-grid">
           <StatCard
-            label="Assigned Subjects"
-            value={subjects.length}
-            description="current teaching load"
-            icon={BookOpen}
-            tone={subjects.length > 0 ? "primary" : "warning"}
+            label="Assigned Classes"
+            value={metrics?.stats?.total_classes ?? 0}
+            description="classes you teach"
+            icon={Users}
+            tone={(metrics?.stats?.total_classes ?? 0) > 0 ? "primary" : "warning"}
             compact
           />
           <StatCard
@@ -118,11 +107,11 @@ function TeacherDashboardPage() {
             compact
           />
           <StatCard
-            label="Readiness Checks"
-            value={`${readinessChecksComplete}/3`}
-            description="profile, verification, activity"
-            icon={ShieldCheck}
-            tone={readinessChecksComplete === 3 ? "success" : "warning"}
+            label="Announcements"
+            value={metrics?.stats?.total_announcements ?? 0}
+            description="created by you"
+            icon={ClipboardList}
+            tone="primary"
             compact
           />
         </section>
@@ -131,14 +120,22 @@ function TeacherDashboardPage() {
       {!loadError && (
         <section className="dashboard-grid xl:grid-cols-2">
           <AnalyticsBarChart
-            title="Teaching Workload"
-            description="Subject allocation split across active and inactive assignments."
-            data={workloadChartData}
+            title="Class Sizes"
+            description="Number of students in each class assigned to you."
+            data={charts.class_sizes || []}
+            emptyMessage="No class size data available yet."
           />
           <AnalyticsDonutChart
-            title="Account Readiness"
-            description="Shows whether your teacher account is fully ready for day-to-day work."
-            data={readinessChartData}
+            title="Announcement Read Vs Acknowledged"
+            description="Engagement on announcements you created."
+            data={charts.announcement_read_vs_acknowledged || []}
+            emptyMessage="No announcement engagement data available yet."
+          />
+          <AnalyticsDonutChart
+            title="Announcement Category Breakdown"
+            description="Types of announcements you have posted."
+            data={charts.announcement_category_breakdown || []}
+            emptyMessage="No announcement categories available yet."
           />
         </section>
       )}

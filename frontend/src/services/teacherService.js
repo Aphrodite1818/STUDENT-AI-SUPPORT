@@ -1,9 +1,11 @@
 import { api } from "./api";
 
+const clampLimit = (limit) => Math.min(Math.max(Number(limit) || 100, 1), 100);
+
 const buildTeacherQuery = ({ skip = 0, limit = 100, search } = {}) => {
   const params = new URLSearchParams();
   params.set("skip", String(skip));
-  params.set("limit", String(limit));
+  params.set("limit", String(clampLimit(limit)));
   if (search) params.set("search", search);
   return params.toString();
 };
@@ -22,7 +24,7 @@ export const teacherService = {
     api.get(
       `/teachers/me/subjects?${new URLSearchParams({
         skip: String(options.skip ?? 0),
-        limit: String(options.limit ?? 100),
+        limit: String(clampLimit(options.limit)),
         ...(options.search ? { search: options.search } : {}),
         ...(typeof options.isActive === "boolean"
           ? { is_active: String(options.isActive) }
