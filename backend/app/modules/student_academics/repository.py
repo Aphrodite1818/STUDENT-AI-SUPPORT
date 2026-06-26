@@ -1,0 +1,481 @@
+import uuid
+from decimal import Decimal
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.student_academics.models import (
+    AcademicSession,
+    AcademicTerm,
+    ClassSubjectTeacher,
+    GradingScale,
+)
+
+
+class StudentAcademicRepository:
+    @staticmethod
+    async def create_academic_session(
+        db: AsyncSession,
+        academic_session: AcademicSession,
+    ) -> AcademicSession:
+        db.add(academic_session)
+        await db.flush()
+        await db.refresh(academic_session)
+        return academic_session
+
+    @staticmethod
+    async def get_academic_session_by_id(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        academic_session_id: uuid.UUID,
+    ) -> AcademicSession | None:
+        stmt = select(AcademicSession).where(
+            AcademicSession.tenant_id == tenant_id,
+            AcademicSession.id == academic_session_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_academic_session_by_name(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        name: str,
+    ) -> AcademicSession | None:
+        stmt = select(AcademicSession).where(
+            AcademicSession.tenant_id == tenant_id,
+            AcademicSession.name == name,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_current_academic_session(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+    ) -> AcademicSession | None:
+        stmt = select(AcademicSession).where(
+            AcademicSession.tenant_id == tenant_id,
+            AcademicSession.is_current.is_(True),
+            AcademicSession.is_active.is_(True),
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_academic_sessions(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[AcademicSession], int]:
+        count_stmt = (
+            select(func.count())
+            .select_from(AcademicSession)
+            .where(AcademicSession.tenant_id == tenant_id)
+        )
+
+        stmt = (
+            select(AcademicSession)
+            .where(AcademicSession.tenant_id == tenant_id)
+            .order_by(
+                AcademicSession.is_current.desc(),
+                AcademicSession.created_at.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        result = await db.execute(stmt)
+        items = list(result.scalars().all())
+
+        return items, total
+
+    @staticmethod
+    async def save_academic_session(
+        db: AsyncSession,
+        academic_session: AcademicSession,
+    ) -> AcademicSession:
+        await db.flush()
+        await db.refresh(academic_session)
+        return academic_session
+
+    @staticmethod
+    async def create_academic_term(
+        db: AsyncSession,
+        academic_term: AcademicTerm,
+    ) -> AcademicTerm:
+        db.add(academic_term)
+        await db.flush()
+        await db.refresh(academic_term)
+        return academic_term
+
+    @staticmethod
+    async def get_term_by_id(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        term_id: uuid.UUID,
+    ) -> AcademicTerm | None:
+        stmt = select(AcademicTerm).where(
+            AcademicTerm.tenant_id == tenant_id,
+            AcademicTerm.id == term_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_term_by_session_and_name(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        academic_session_id: uuid.UUID,
+        name,
+    ) -> AcademicTerm | None:
+        stmt = select(AcademicTerm).where(
+            AcademicTerm.tenant_id == tenant_id,
+            AcademicTerm.academic_session_id == academic_session_id,
+            AcademicTerm.name == name,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_current_term(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+    ) -> AcademicTerm | None:
+        stmt = select(AcademicTerm).where(
+            AcademicTerm.tenant_id == tenant_id,
+            AcademicTerm.is_current.is_(True),
+            AcademicTerm.is_active.is_(True),
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_terms(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[AcademicTerm], int]:
+        count_stmt = (
+            select(func.count())
+            .select_from(AcademicTerm)
+            .where(AcademicTerm.tenant_id == tenant_id)
+        )
+
+        stmt = (
+            select(AcademicTerm)
+            .where(AcademicTerm.tenant_id == tenant_id)
+            .order_by(
+                AcademicTerm.is_current.desc(),
+                AcademicTerm.created_at.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        result = await db.execute(stmt)
+        items = list(result.scalars().all())
+
+        return items, total
+
+    @staticmethod
+    async def list_terms_by_session(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        academic_session_id: uuid.UUID,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[AcademicTerm], int]:
+        count_stmt = (
+            select(func.count())
+            .select_from(AcademicTerm)
+            .where(
+                AcademicTerm.tenant_id == tenant_id,
+                AcademicTerm.academic_session_id == academic_session_id,
+            )
+        )
+
+        stmt = (
+            select(AcademicTerm)
+            .where(
+                AcademicTerm.tenant_id == tenant_id,
+                AcademicTerm.academic_session_id == academic_session_id,
+            )
+            .order_by(
+                AcademicTerm.is_current.desc(),
+                AcademicTerm.created_at.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        result = await db.execute(stmt)
+        items = list(result.scalars().all())
+
+        return items, total
+
+    @staticmethod
+    async def save_academic_term(
+        db: AsyncSession,
+        academic_term: AcademicTerm,
+    ) -> AcademicTerm:
+        await db.flush()
+        await db.refresh(academic_term)
+        return academic_term
+
+    @staticmethod
+    async def create_grading_scale(
+        db: AsyncSession,
+        grading_scale: GradingScale,
+    ) -> GradingScale:
+        db.add(grading_scale)
+        await db.flush()
+        await db.refresh(grading_scale)
+        return grading_scale
+
+    @staticmethod
+    async def get_grading_scale_by_id(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        grading_scale_id: uuid.UUID,
+    ) -> GradingScale | None:
+        stmt = select(GradingScale).where(
+            GradingScale.tenant_id == tenant_id,
+            GradingScale.id == grading_scale_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_grading_scale_by_grade(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        grade: str,
+    ) -> GradingScale | None:
+        stmt = select(GradingScale).where(
+            GradingScale.tenant_id == tenant_id,
+            GradingScale.grade == grade,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_grading_scales(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        skip: int = 0,
+        limit: int = 100,
+        active_only: bool = False,
+    ) -> tuple[list[GradingScale], int]:
+        filters = [GradingScale.tenant_id == tenant_id]
+
+        if active_only:
+            filters.append(GradingScale.is_active.is_(True))
+
+        count_stmt = select(func.count()).select_from(GradingScale).where(*filters)
+
+        stmt = (
+            select(GradingScale)
+            .where(*filters)
+            .order_by(
+                GradingScale.min_score.desc(),
+                GradingScale.created_at.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        result = await db.execute(stmt)
+        items = list(result.scalars().all())
+
+        return items, total
+
+    @staticmethod
+    async def find_grade_for_score(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        score: Decimal,
+    ) -> GradingScale | None:
+        stmt = select(GradingScale).where(
+            GradingScale.tenant_id == tenant_id,
+            GradingScale.is_active.is_(True),
+            GradingScale.min_score <= score,
+            GradingScale.max_score >= score,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def save_grading_scale(
+        db: AsyncSession,
+        grading_scale: GradingScale,
+    ) -> GradingScale:
+        await db.flush()
+        await db.refresh(grading_scale)
+        return grading_scale
+
+    @staticmethod
+    async def create_class_subject_teacher(
+        db: AsyncSession,
+        assignment: ClassSubjectTeacher,
+    ) -> ClassSubjectTeacher:
+        db.add(assignment)
+        await db.flush()
+        await db.refresh(assignment)
+        return assignment
+
+    @staticmethod
+    async def get_class_subject_teacher_by_id(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        assignment_id: uuid.UUID,
+    ) -> ClassSubjectTeacher | None:
+        stmt = select(ClassSubjectTeacher).where(
+            ClassSubjectTeacher.tenant_id == tenant_id,
+            ClassSubjectTeacher.id == assignment_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_class_subject_teacher_by_class_subject(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        class_id: uuid.UUID,
+        subject_id: uuid.UUID,
+    ) -> ClassSubjectTeacher | None:
+        stmt = select(ClassSubjectTeacher).where(
+            ClassSubjectTeacher.tenant_id == tenant_id,
+            ClassSubjectTeacher.class_id == class_id,
+            ClassSubjectTeacher.subject_id == subject_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_class_subject_teachers(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        skip: int = 0,
+        limit: int = 100,
+        class_id: uuid.UUID | None = None,
+        subject_id: uuid.UUID | None = None,
+        teacher_id: uuid.UUID | None = None,
+        active_only: bool = False,
+    ) -> tuple[list[ClassSubjectTeacher], int]:
+        filters = [ClassSubjectTeacher.tenant_id == tenant_id]
+
+        if class_id is not None:
+            filters.append(ClassSubjectTeacher.class_id == class_id)
+
+        if subject_id is not None:
+            filters.append(ClassSubjectTeacher.subject_id == subject_id)
+
+        if teacher_id is not None:
+            filters.append(ClassSubjectTeacher.teacher_id == teacher_id)
+
+        if active_only:
+            filters.append(ClassSubjectTeacher.is_active.is_(True))
+
+        count_stmt = (
+            select(func.count())
+            .select_from(ClassSubjectTeacher)
+            .where(*filters)
+        )
+
+        stmt = (
+            select(ClassSubjectTeacher)
+            .where(*filters)
+            .order_by(
+                ClassSubjectTeacher.is_active.desc(),
+                ClassSubjectTeacher.sort_order.asc(),
+                ClassSubjectTeacher.created_at.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+
+        count_result = await db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        result = await db.execute(stmt)
+        items = list(result.scalars().all())
+
+        return items, total
+
+    @staticmethod
+    async def list_teacher_assignments(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        active_only: bool = True,
+    ) -> list[ClassSubjectTeacher]:
+        filters = [
+            ClassSubjectTeacher.tenant_id == tenant_id,
+            ClassSubjectTeacher.teacher_id == teacher_id,
+        ]
+
+        if active_only:
+            filters.append(ClassSubjectTeacher.is_active.is_(True))
+
+        stmt = (
+            select(ClassSubjectTeacher)
+            .where(*filters)
+            .order_by(
+                ClassSubjectTeacher.sort_order.asc(),
+                ClassSubjectTeacher.created_at.desc(),
+            )
+        )
+
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_class_assignments(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        class_id: uuid.UUID,
+        active_only: bool = True,
+    ) -> list[ClassSubjectTeacher]:
+        filters = [
+            ClassSubjectTeacher.tenant_id == tenant_id,
+            ClassSubjectTeacher.class_id == class_id,
+        ]
+
+        if active_only:
+            filters.append(ClassSubjectTeacher.is_active.is_(True))
+
+        stmt = (
+            select(ClassSubjectTeacher)
+            .where(*filters)
+            .order_by(
+                ClassSubjectTeacher.sort_order.asc(),
+                ClassSubjectTeacher.created_at.desc(),
+            )
+        )
+
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def save_class_subject_teacher(
+        db: AsyncSession,
+        assignment: ClassSubjectTeacher,
+    ) -> ClassSubjectTeacher:
+        await db.flush()
+        await db.refresh(assignment)
+        return assignment
