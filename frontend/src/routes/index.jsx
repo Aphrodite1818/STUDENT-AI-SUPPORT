@@ -16,6 +16,7 @@ import SubjectsPage from "../pages/admin/SubjectsPage";
 import AttendancePage from "../pages/admin/AttendancePage";
 import ExamsPage from "../pages/admin/ExamsPage";
 import ResultsPage from "../pages/admin/ResultsPage";
+import AcademicPage from "../pages/admin/AcademicPage";
 import FeesPage from "../pages/admin/FeesPage";
 import PaymentsPage from "../pages/admin/PaymentsPage";
 import TeacherDashboardPage from "../pages/teacher/TeacherDashboardPage";
@@ -58,8 +59,9 @@ function AppRoutes() {
             <Route path="/admin/classes" element={<ClassesPage />} />
             <Route path="/admin/subjects" element={<SubjectsPage />} />
             <Route path="/admin/attendance" element={<AttendancePage />} />
-            <Route path="/admin/exams" element={<ExamsPage />} />
-            <Route path="/admin/results" element={<ResultsPage />} />
+            <Route path="/admin/exams" element={<Navigate to="/admin/academic" replace />} />
+            <Route path="/admin/results" element={<Navigate to="/admin/academic" replace />} />
+            <Route path="/admin/academic" element={<AcademicPage />} />
             <Route path="/admin/fees" element={<FeesPage />} />
             <Route path="/admin/payments" element={<PaymentsPage />} />
             <Route path="/admin/timetable" element={<StaticModulePage role="admin" title="Timetable" description="Professional schedule grid and class timetable planning." type="timetable" />} />
@@ -75,7 +77,7 @@ function AppRoutes() {
             <Route path="/teacher/students" element={<TeacherStudentsPage />} />
             <Route path="/teacher/subjects" element={<TeacherSubjectsPage />} />
             <Route path="/teacher/attendance" element={<TeacherAttendancePage />} />
-            <Route path="/teacher/exams" element={<TeacherExamsPage />} />
+            <Route path="/teacher/exams" element={<Navigate to="/teacher/results" replace />} />
             <Route path="/teacher/results" element={<TeacherResultsPage />} />
             <Route path="/teacher/assignments" element={<StaticModulePage role="teacher" title="Assignments" description="Create, review, and track classroom assignments." />} />
             <Route path="/teacher/timetable" element={<StaticModulePage role="teacher" title="Timetable" description="Daily teaching schedule and class periods." type="timetable" />} />

@@ -5,10 +5,10 @@ const DEFAULT_API_URL =
 
 const API_URL =
   (import.meta.env.MODE === "development"
-    ? import.meta.env.VITE_API_URL_DEV
+    ? import.meta.env.VITE_API_URL_DEV || import.meta.env.VITE_API_URL
     : import.meta.env.VITE_API_URL) || DEFAULT_API_URL;
 
-const API_BASE_URL = API_URL.replace(/\/$/, "");
+export const API_BASE_URL = API_URL.replace(/\/$/, "");
 
 const TOKEN_KEY = "token";
 const USER_KEY = "auth_user";

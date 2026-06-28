@@ -7,9 +7,9 @@ class MetricsBase(BaseModel):
 
 class ChartPoint(MetricsBase):
     label: str
-    value: int
+    value: int | float
 
 
 class DashboardMetricsResponse(MetricsBase):
-    stats: dict[str, int] = Field(default_factory=dict)
+    stats: dict[str, int | float | str | None] = Field(default_factory=dict)
     charts: dict[str, list[ChartPoint]] = Field(default_factory=dict)

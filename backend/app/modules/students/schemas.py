@@ -333,6 +333,7 @@ class StudentParentLinkRequestCreate(InputBase):
     """Parent request payload for linking a student by admission number."""
 
     admission_number: str = Field(..., min_length=1, max_length=50)
+    relationship_type: ParentRelationship = ParentRelationship.GUARDIAN
 
     @field_validator("admission_number", mode="before")
     @classmethod
@@ -358,6 +359,7 @@ class StudentParentLinkRequestResponse(OutputBase):
     student_id: uuid.UUID
     parent_id: uuid.UUID
     admission_number_snapshot: str
+    relationship_type: ParentRelationship
     status: StudentParentLinkRequestStatus
     requested_at: datetime
     responded_at: datetime | None = None

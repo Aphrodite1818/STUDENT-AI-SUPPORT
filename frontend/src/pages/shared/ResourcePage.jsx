@@ -5,6 +5,7 @@ import Input from "../../components/ui/Input";
 import MultiSelect from "../../components/ui/MultiSelect";
 import EmptyState from "../../components/shared/EmptyState";
 import { getErrorMessage, parseApiError } from "../../services/api";
+import { useToast } from "../../hooks/useToast";
 
 const emptyContext = {};
 
@@ -109,6 +110,7 @@ function FormControl({ field, value, error, onChange, onValueChange }) {
 }
 
 function ResourcePage({ config }) {
+  const { showSuccess, showError } = useToast();
   const [context, setContext] = useState(emptyContext);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -121,7 +123,6 @@ function ResourcePage({ config }) {
   const [error, setError] = useState(null);
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
-  const [successMessage, setSuccessMessage] = useState(null);
   const contextRef = useRef(context);
   const filtersRef = useRef(filters);
   const editingItemRef = useRef(editingItem);
@@ -258,7 +259,6 @@ function ResourcePage({ config }) {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
-    setSuccessMessage(null);
     setFieldErrors({});
     let submitSucceeded = false;
 
@@ -269,7 +269,7 @@ function ResourcePage({ config }) {
 
       if (editingItem) {
         const result = await config.updateItem(editingItem.id, payload);
-        setSuccessMessage(
+        showSuccess(
           config.buildSuccessMessage
             ? config.buildSuccessMessage({
                 action: "update",
@@ -282,7 +282,7 @@ function ResourcePage({ config }) {
         );
       } else {
         const result = await config.createItem(payload);
-        setSuccessMessage(
+        showSuccess(
           config.buildSuccessMessage
             ? config.buildSuccessMessage({
                 action: "create",
@@ -305,6 +305,7 @@ function ResourcePage({ config }) {
       );
       setFieldErrors(parsed.fieldErrors);
       setError(parsed.message);
+      showError(parsed.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -318,6 +319,7 @@ function ResourcePage({ config }) {
           `Created ${config.singularLabel.toLowerCase()} but failed to refresh the list.`
         );
         setError(parsed.message);
+        showError(parsed.message);
       }
     }
   };
@@ -325,7 +327,6 @@ function ResourcePage({ config }) {
   const handleEdit = (item) => {
     setEditingItem(item);
     setFormData(config.mapItemToForm(item, context));
-    setSuccessMessage(null);
     setError(null);
     setFieldErrors({});
   };
@@ -339,15 +340,16 @@ function ResourcePage({ config }) {
 
     setBusyId(item.id);
     setError(null);
-    setSuccessMessage(null);
 
     try {
       await config.deleteItem(item.id);
       if (editingItem?.id === item.id) resetForm();
-      setSuccessMessage(`${config.singularLabel} deleted successfully.`);
+      showSuccess(`${config.singularLabel} deleted successfully.`);
       await loadItems();
     } catch (err) {
-      setError(getErrorMessage(err, `Failed to delete ${config.singularLabel.toLowerCase()}.`));
+      const message = getErrorMessage(err, `Failed to delete ${config.singularLabel.toLowerCase()}.`);
+      setError(message);
+      showError(message);
     } finally {
       setBusyId(null);
     }
@@ -389,12 +391,6 @@ function ResourcePage({ config }) {
           {error}
         </div>
       )}
-      {successMessage && (
-        <div className="rounded-2xl border border-success/30 bg-success-soft px-4 py-3 text-sm font-medium text-emerald-700">
-          {successMessage}
-        </div>
-      )}
-
       <div className={`grid gap-5 ${showForm ? "xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]" : ""}`}>
         {showForm && (
           <Card className="p-4 sm:p-5 xl:sticky xl:top-28 xl:self-start">

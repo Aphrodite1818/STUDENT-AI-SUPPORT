@@ -9,6 +9,7 @@ from app.modules.student_academics.models import (
     AcademicTerm,
     ClassSubjectTeacher,
     GradingScale,
+    StudentSubjectResult,
 )
 
 
@@ -479,3 +480,87 @@ class StudentAcademicRepository:
         await db.flush()
         await db.refresh(assignment)
         return assignment
+
+    @staticmethod
+    async def upsert_result(
+        db: AsyncSession,
+        result: StudentSubjectResult,
+    ) -> StudentSubjectResult:
+        db.add(result)
+        await db.flush()
+        await db.refresh(result)
+        return result
+
+    @staticmethod
+    async def get_result_by_id(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        result_id: uuid.UUID,
+    ) -> StudentSubjectResult | None:
+        stmt = select(StudentSubjectResult).where(
+            StudentSubjectResult.tenant_id == tenant_id,
+            StudentSubjectResult.id == result_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_result_by_scope(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        student_id: uuid.UUID,
+        class_subject_teacher_id: uuid.UUID,
+        academic_session_id: uuid.UUID,
+        academic_term_id: uuid.UUID,
+    ) -> StudentSubjectResult | None:
+        stmt = select(StudentSubjectResult).where(
+            StudentSubjectResult.tenant_id == tenant_id,
+            StudentSubjectResult.student_id == student_id,
+            StudentSubjectResult.class_subject_teacher_id == class_subject_teacher_id,
+            StudentSubjectResult.academic_session_id == academic_session_id,
+            StudentSubjectResult.academic_term_id == academic_term_id,
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_results(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        student_id: uuid.UUID | None = None,
+        class_id: uuid.UUID | None = None,
+        teacher_id: uuid.UUID | None = None,
+        academic_session_id: uuid.UUID | None = None,
+        academic_term_id: uuid.UUID | None = None,
+        published_only: bool = False,
+    ) -> tuple[list[StudentSubjectResult], int]:
+        filters = [StudentSubjectResult.tenant_id == tenant_id]
+        if student_id is not None:
+            filters.append(StudentSubjectResult.student_id == student_id)
+        if class_id is not None:
+            filters.append(StudentSubjectResult.class_id == class_id)
+        if teacher_id is not None:
+            filters.append(StudentSubjectResult.teacher_id == teacher_id)
+        if academic_session_id is not None:
+            filters.append(StudentSubjectResult.academic_session_id == academic_session_id)
+        if academic_term_id is not None:
+            filters.append(StudentSubjectResult.academic_term_id == academic_term_id)
+        if published_only:
+            filters.append(
+                StudentSubjectResult.status.in_(["published", "locked"])
+            )
+
+        count_stmt = select(func.count()).select_from(StudentSubjectResult).where(*filters)
+        stmt = (
+            select(StudentSubjectResult)
+            .where(*filters)
+            .order_by(StudentSubjectResult.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        total = (await db.execute(count_stmt)).scalar_one()
+        rows = (await db.execute(stmt)).scalars().all()
+        return list(rows), int(total)

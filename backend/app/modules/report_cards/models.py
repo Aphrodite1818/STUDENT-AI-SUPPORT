@@ -1,0 +1,106 @@
+import uuid
+from decimal import Decimal
+from enum import Enum as PyEnum
+
+from sqlalchemy import Enum as SQLEnum, ForeignKey, Index, Numeric, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.shared.base_model import BaseModel, PUBLIC_SCHEMA
+
+
+class ReportCardStatus(str, PyEnum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+
+class ReportCard(BaseModel):
+    __tablename__ = "report_cards"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "student_id",
+            "academic_session_id",
+            "academic_term_id",
+            name="uq_report_cards_student_period",
+        ),
+        Index("ix_report_cards_tenant_student", "tenant_id", "student_id"),
+        Index("ix_report_cards_tenant_status", "tenant_id", "status"),
+    )
+
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classes.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    academic_session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    academic_term_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("academic_terms.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    total_score: Mapped[Decimal] = mapped_column(Numeric(7, 2), nullable=False)
+    average_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    status: Mapped[ReportCardStatus] = mapped_column(
+        SQLEnum(
+            ReportCardStatus,
+            name="report_card_status",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=ReportCardStatus.DRAFT,
+        server_default=ReportCardStatus.DRAFT.value,
+    )
+    generated_by_actor_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    generated_by_actor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+
+
+class ReportCardSubjectLine(BaseModel):
+    __tablename__ = "report_card_subject_lines"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "report_card_id",
+            "subject_id",
+            name="uq_report_card_lines_card_subject",
+        ),
+        Index("ix_report_card_lines_tenant_card", "tenant_id", "report_card_id"),
+    )
+
+    report_card_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("report_cards.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    student_subject_result_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("student_subject_results.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    subject_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    subject_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    teacher_name: Mapped[str | None] = mapped_column(String(210), nullable=True)
+    test_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    assessment_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    exam_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    total_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    grade: Mapped[str] = mapped_column(String(10), nullable=False)
+    remark: Mapped[str | None] = mapped_column(String(100), nullable=True)

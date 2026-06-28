@@ -32,6 +32,7 @@ class ParentRelationship(str, PyEnum):
     FATHER = "father"
     MOTHER = "mother"
     GUARDIAN = "guardian"
+    SPONSOR = "sponsor"
     OTHER = "other"
 
 
@@ -283,6 +284,18 @@ class StudentParentLinkRequest(BaseModel):
     )
 
     admission_number_snapshot: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    relationship_type: Mapped[ParentRelationship] = mapped_column(
+        SQLEnum(
+            ParentRelationship,
+            name="parentrelationship",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=ParentRelationship.GUARDIAN,
+        server_default=ParentRelationship.GUARDIAN.value,
+    )
 
     status: Mapped[StudentParentLinkRequestStatus] = mapped_column(
         SQLEnum(

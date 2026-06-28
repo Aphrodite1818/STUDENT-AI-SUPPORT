@@ -1,36 +1,77 @@
-/** TOAST COMPONENT **/
+import { useEffect, useState } from "react";
+import { CheckCircle2, AlertCircle, Info, X } from "lucide-react";
+import { cn } from "../../utils/cn";
+import { toastBus } from "../../hooks/useToast";
 
-/**
- * @param {message} the message to appear
- * @param {type} the type of the toast, can be "info", "success", or "error". Defaults to "info".
- * @returns
- */
-export default function Toast({ message, type = "info" }) {
-  const colors = {
-    info: "bg-primary text-white",
-    success: "bg-success text-white",
-    error: "bg-error text-white",
-  };
+const toneClasses = {
+  info: "border-primary/25 bg-surface text-text",
+  success: "border-success/25 bg-surface text-text",
+  error: "border-error/25 bg-surface text-text",
+};
 
-  const icons = {
-    info: "ℹ️",
-    success: "✅",
-    error: "❌",
-  };
+const iconClasses = {
+  info: "text-primary",
+  success: "text-success",
+  error: "text-error",
+};
+
+const icons = {
+  info: Info,
+  success: CheckCircle2,
+  error: AlertCircle,
+};
+
+function ToastCard({ toast, onClose }) {
+  const Icon = icons[toast.type] || icons.info;
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => onClose(toast.id), toast.duration);
+    return () => window.clearTimeout(timeoutId);
+  }, [onClose, toast.duration, toast.id]);
 
   return (
     <div
-      className={`
-        fixed bottom-6 right-6 z-50
-        flex items-center gap-3
-        px-5 py-3 rounded-xl
-        shadow-strong text-sm font-medium
-        animate-fadein
-        ${colors[type]}
-      `}
+      className={cn(
+        "pointer-events-auto flex min-w-[280px] max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-premium animate-fadein",
+        toneClasses[toast.type] || toneClasses.info
+      )}
+      role="status"
+      aria-live="polite"
     >
-      <span>{icons[type]}</span>
-      <span>{message}</span>
+      <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconClasses[toast.type] || iconClasses.info)} />
+      <p className="min-w-0 flex-1 text-sm font-medium text-text-soft">{toast.message}</p>
+      <button
+        type="button"
+        onClick={() => onClose(toast.id)}
+        className="rounded-lg p-1 text-text-faint transition hover:bg-surface-muted hover:text-text"
+        aria-label="Dismiss notification"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+export default function ToastHost() {
+  const [toasts, setToasts] = useState([]);
+
+  useEffect(() => {
+    return toastBus.subscribe((nextToast) => {
+      setToasts((current) => [...current, nextToast]);
+    });
+  }, []);
+
+  const closeToast = (id) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  };
+
+  if (toasts.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[80] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-3 sm:bottom-6 sm:right-6">
+      {toasts.map((toast) => (
+        <ToastCard key={toast.id} toast={toast} onClose={closeToast} />
+      ))}
     </div>
   );
 }

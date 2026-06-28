@@ -7,14 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
+    ForbiddenException,
     NotFoundException,
 )
 
+from app.modules.auth_identity.models import ActorType
+from app.modules.students.models import Student
+from app.modules.students.repository import StudentParentLinkRepository, StudentRepository
 from app.modules.student_academics.models import (
+    AcademicResultStatus,
     AcademicSession,
     AcademicTerm,
     ClassSubjectTeacher,
     GradingScale,
+    StudentSubjectResult,
 )
 
 from app.modules.student_academics.repository import StudentAcademicRepository
@@ -28,11 +34,17 @@ from app.modules.student_academics.schemas import (
     ClassSubjectTeacherUpdate,
     GradingScaleCreate,
     GradingScaleUpdate,
+    StudentSubjectResultResponse,
+    StudentSubjectResultStatusUpdate,
+    StudentSubjectResultUpsert,
 )
 
 from app.modules.classes.repository import ClassRoomRepository
 from app.modules.subjects.repository import SubjectRepository
 from app.modules.teachers.repository import TeacherRepository
+from app.modules.parents.models import Parent
+from app.modules.teachers.models import Teacher
+from app.modules.tenant_admins.models import TenantAdmin
 
 
 class StudentAcademicService:
@@ -678,3 +690,252 @@ class StudentAcademicService:
             class_id=class_id,
             active_only=True,
         )
+
+    @staticmethod
+    async def _compute_grade(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        total_score: Decimal,
+    ) -> tuple[str, str | None]:
+        grading_scale = await StudentAcademicRepository.find_grade_for_score(
+            db=db,
+            tenant_id=tenant_id,
+            score=total_score,
+        )
+        if grading_scale is None:
+            raise NotFoundException("No grading scale found for the computed total score.")
+        return grading_scale.grade, grading_scale.remark
+
+    @staticmethod
+    async def _build_result_response(
+        db: AsyncSession,
+        result: StudentSubjectResult,
+    ) -> StudentSubjectResultResponse:
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=result.tenant_id,
+            student_id=result.student_id,
+        )
+        classroom = await ClassRoomRepository.get_classroom_by_id(
+            db=db,
+            tenant_id=result.tenant_id,
+            class_id=result.class_id,
+        )
+        subject = await SubjectRepository.get_subject_by_id(
+            db=db,
+            tenant_id=result.tenant_id,
+            subject_id=result.subject_id,
+        )
+        teacher = await TeacherRepository.get_teacher_by_id(
+            db=db,
+            tenant_id=result.tenant_id,
+            teacher_id=result.teacher_id,
+        )
+        session = await StudentAcademicRepository.get_academic_session_by_id(
+            db=db,
+            tenant_id=result.tenant_id,
+            academic_session_id=result.academic_session_id,
+        )
+        term = await StudentAcademicRepository.get_term_by_id(
+            db=db,
+            tenant_id=result.tenant_id,
+            term_id=result.academic_term_id,
+        )
+
+        return StudentSubjectResultResponse(
+            id=result.id,
+            tenant_id=result.tenant_id,
+            student_id=result.student_id,
+            student_name=(
+                " ".join(part for part in [student.first_name, student.last_name] if part).strip()
+                if student
+                else None
+            ),
+            admission_number=student.admission_number if student else None,
+            class_id=result.class_id,
+            class_name=classroom.name if classroom else None,
+            class_arm=classroom.arm if classroom else None,
+            subject_id=result.subject_id,
+            subject_name=subject.name if subject else None,
+            subject_code=subject.code if subject else None,
+            teacher_id=result.teacher_id,
+            teacher_name=(
+                " ".join(part for part in [teacher.first_name, teacher.last_name] if part).strip()
+                if teacher
+                else None
+            ),
+            class_subject_teacher_id=result.class_subject_teacher_id,
+            academic_session_id=result.academic_session_id,
+            academic_session_name=session.name if session else None,
+            academic_term_id=result.academic_term_id,
+            academic_term_name=term.name.value if term else None,
+            test_score=result.test_score,
+            assessment_score=result.assessment_score,
+            exam_score=result.exam_score,
+            total_score=result.total_score,
+            grade=result.grade,
+            remark=result.remark,
+            status=result.status,
+            recorded_by_actor_type=result.recorded_by_actor_type,
+            recorded_by_actor_id=result.recorded_by_actor_id,
+            created_at=result.created_at,
+            updated_at=result.updated_at,
+        )
+
+    @staticmethod
+    async def upsert_student_result(
+        db: AsyncSession,
+        actor: TenantAdmin | Teacher,
+        payload: StudentSubjectResultUpsert,
+    ) -> StudentSubjectResultResponse:
+        tenant_id = actor.tenant_id
+        assignment = await StudentAcademicRepository.get_class_subject_teacher_by_id(
+            db=db,
+            tenant_id=tenant_id,
+            assignment_id=payload.class_subject_teacher_id,
+        )
+        if assignment is None or not assignment.is_active:
+            raise NotFoundException("Class-subject teacher assignment not found.")
+
+        if isinstance(actor, Teacher) and assignment.teacher_id != actor.id:
+            raise ForbiddenException("You can only edit class-subjects assigned to you.")
+
+        student = await StudentRepository.get_student_by_id(
+            db=db,
+            tenant_id=tenant_id,
+            student_id=payload.student_id,
+        )
+        if student is None:
+            raise NotFoundException("Student not found.")
+        if student.class_id != assignment.class_id:
+            raise BadRequestException("Student does not belong to the selected class.")
+
+        if payload.status == AcademicResultStatus.LOCKED and isinstance(actor, Teacher):
+            raise ForbiddenException("Teachers cannot lock results.")
+
+        total_score = payload.test_score + payload.assessment_score + payload.exam_score
+        grade, remark = await StudentAcademicService._compute_grade(
+            db=db,
+            tenant_id=tenant_id,
+            total_score=total_score,
+        )
+
+        existing = await StudentAcademicRepository.get_result_by_scope(
+            db=db,
+            tenant_id=tenant_id,
+            student_id=payload.student_id,
+            class_subject_teacher_id=payload.class_subject_teacher_id,
+            academic_session_id=payload.academic_session_id,
+            academic_term_id=payload.academic_term_id,
+        )
+        if existing is not None:
+            if existing.status == AcademicResultStatus.LOCKED:
+                raise ForbiddenException("Locked results are not editable in normal workflows.")
+            result = existing
+        else:
+            actor_type = (
+                ActorType.TEACHER.value
+                if isinstance(actor, Teacher)
+                else ActorType.TENANT_ADMIN.value
+            )
+            result = StudentSubjectResult(
+                tenant_id=tenant_id,
+                student_id=payload.student_id,
+                class_id=assignment.class_id,
+                subject_id=assignment.subject_id,
+                teacher_id=assignment.teacher_id,
+                class_subject_teacher_id=assignment.id,
+                academic_session_id=payload.academic_session_id,
+                academic_term_id=payload.academic_term_id,
+                recorded_by_actor_type=actor_type,
+                recorded_by_actor_id=actor.id,
+                test_score=payload.test_score,
+                assessment_score=payload.assessment_score,
+                exam_score=payload.exam_score,
+                total_score=total_score,
+                grade=grade,
+                remark=remark,
+                status=payload.status,
+            )
+
+        result.test_score = payload.test_score
+        result.assessment_score = payload.assessment_score
+        result.exam_score = payload.exam_score
+        result.total_score = total_score
+        result.grade = grade
+        result.remark = remark
+        result.status = payload.status
+
+        saved = await StudentAcademicRepository.upsert_result(db=db, result=result)
+        await db.commit()
+        return await StudentAcademicService._build_result_response(db=db, result=saved)
+
+    @staticmethod
+    async def update_result_status(
+        db: AsyncSession,
+        actor: TenantAdmin,
+        result_id: uuid.UUID,
+        payload: StudentSubjectResultStatusUpdate,
+    ) -> StudentSubjectResultResponse:
+        result = await StudentAcademicRepository.get_result_by_id(
+            db=db,
+            tenant_id=actor.tenant_id,
+            result_id=result_id,
+        )
+        if result is None:
+            raise NotFoundException("Result not found.")
+        result.status = payload.status
+        saved = await StudentAcademicRepository.upsert_result(db=db, result=result)
+        await db.commit()
+        return await StudentAcademicService._build_result_response(db=db, result=saved)
+
+    @staticmethod
+    async def list_results(
+        db: AsyncSession,
+        actor: TenantAdmin | Teacher | Student | Parent,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        student_id: uuid.UUID | None = None,
+        class_id: uuid.UUID | None = None,
+        academic_session_id: uuid.UUID | None = None,
+        academic_term_id: uuid.UUID | None = None,
+    ) -> tuple[list[StudentSubjectResultResponse], int]:
+        tenant_id = actor.tenant_id
+        teacher_id = None
+        published_only = False
+
+        if isinstance(actor, Teacher):
+            teacher_id = actor.id
+        elif isinstance(actor, Student):
+            student_id = actor.id
+            published_only = True
+        elif isinstance(actor, Parent):
+            if student_id is None:
+                raise BadRequestException("student_id is required for parent academic results.")
+            link = await StudentParentLinkRepository.get_by_student_and_parent(
+                db=db,
+                tenant_id=tenant_id,
+                student_id=student_id,
+                parent_id=actor.id,
+            )
+            if link is None:
+                raise ForbiddenException("You cannot view academic records for this student.")
+            published_only = True
+
+        results, total = await StudentAcademicRepository.list_results(
+            db=db,
+            tenant_id=tenant_id,
+            skip=skip,
+            limit=min(limit, 100),
+            student_id=student_id,
+            class_id=class_id,
+            teacher_id=teacher_id,
+            academic_session_id=academic_session_id,
+            academic_term_id=academic_term_id,
+            published_only=published_only,
+        )
+        return [
+            await StudentAcademicService._build_result_response(db=db, result=result)
+            for result in results
+        ], total

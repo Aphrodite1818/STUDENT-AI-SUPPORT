@@ -8,6 +8,7 @@ from sqlalchemy import (
     Date,
     Enum as SQLEnum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -186,3 +187,84 @@ class ClassSubjectTeacher(BaseModel):
         server_default="true",
         nullable=False,
     )
+
+
+class StudentSubjectResult(BaseModel):
+    __tablename__ = "student_subject_results"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "student_id",
+            "class_subject_teacher_id",
+            "academic_session_id",
+            "academic_term_id",
+            name="uq_student_subject_result_scope",
+        ),
+        Index("ix_student_subject_results_tenant_student", "tenant_id", "student_id"),
+        Index("ix_student_subject_results_tenant_class", "tenant_id", "class_id"),
+        Index("ix_student_subject_results_tenant_teacher", "tenant_id", "teacher_id"),
+        Index("ix_student_subject_results_tenant_status", "tenant_id", "status"),
+    )
+
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("classes.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    subject_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("subjects.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("teachers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    class_subject_teacher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("class_subject_teachers.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    academic_session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    academic_term_id: Mapped[uuid.UUID] = mapped_column(
+        UUID,
+        ForeignKey("academic_terms.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    test_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    assessment_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    exam_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    total_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    grade: Mapped[str] = mapped_column(String(10), nullable=False)
+    remark: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[AcademicResultStatus] = mapped_column(
+        SQLEnum(
+            AcademicResultStatus,
+            name="academic_result_status",
+            schema=PUBLIC_SCHEMA,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=AcademicResultStatus.DRAFT,
+        server_default=AcademicResultStatus.DRAFT.value,
+    )
+    recorded_by_actor_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    recorded_by_actor_id: Mapped[uuid.UUID] = mapped_column(UUID, nullable=False)

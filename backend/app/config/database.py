@@ -10,17 +10,22 @@
 """Configure the application's async database engine and session factory."""
 
 
+import logging
+
 from sqlalchemy.ext.asyncio import (
-    create_async_engine,
     AsyncSession,
-    async_sessionmaker
+    async_sessionmaker,
+    create_async_engine,
 )
 from app.config.logging import is_development, resolve_log_level
 from app.config.settings import settings
-import logging
+
+database_url = settings.DATABASE_URL
+if not database_url:
+    raise ValueError("DATABASE_URL must be set for the active environment.")
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    database_url,
     echo=is_development() or resolve_log_level() <= logging.DEBUG,
     pool_pre_ping=True,          # health checks connection before use
     pool_size=10,                # persistent connections kept open

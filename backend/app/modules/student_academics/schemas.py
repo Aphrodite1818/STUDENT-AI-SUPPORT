@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import (
@@ -11,7 +11,7 @@ from pydantic import (
 )
 
 from app.core.utils.validators import validate_academic_session_name
-from app.modules.student_academics.models import AcademicTermName
+from app.modules.student_academics.models import AcademicResultStatus, AcademicTermName
 
 
 class InputBase(BaseModel):
@@ -66,6 +66,7 @@ class AcademicSessionResponse(OutputBase):
     end_date: date | None = None
     is_current: bool
     is_active: bool
+    created_at: datetime
 
 
 class AcademicTermCreate(InputBase):
@@ -172,6 +173,65 @@ class ClassSubjectTeacherDetailResponse(ClassSubjectTeacherResponse):
     subject_code: str | None = None
     teacher_name: str | None = None
     teacher_staff_id: str | None = None
+
+
+class StudentSubjectResultUpsert(InputBase):
+    student_id: uuid.UUID
+    class_subject_teacher_id: uuid.UUID
+    academic_session_id: uuid.UUID
+    academic_term_id: uuid.UUID
+    test_score: Decimal = Field(..., ge=0, le=100)
+    assessment_score: Decimal = Field(..., ge=0, le=100)
+    exam_score: Decimal = Field(..., ge=0, le=100)
+    status: AcademicResultStatus = AcademicResultStatus.DRAFT
+
+    @model_validator(mode="after")
+    def validate_score_total(self):
+        total = self.test_score + self.assessment_score + self.exam_score
+        if total > 100:
+            raise ValueError("The combined score cannot exceed 100.")
+        return self
+
+
+class StudentSubjectResultStatusUpdate(InputBase):
+    status: AcademicResultStatus
+
+
+class StudentSubjectResultResponse(OutputBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    student_id: uuid.UUID
+    student_name: str | None = None
+    admission_number: str | None = None
+    class_id: uuid.UUID
+    class_name: str | None = None
+    class_arm: str | None = None
+    subject_id: uuid.UUID
+    subject_name: str | None = None
+    subject_code: str | None = None
+    teacher_id: uuid.UUID
+    teacher_name: str | None = None
+    class_subject_teacher_id: uuid.UUID
+    academic_session_id: uuid.UUID
+    academic_session_name: str | None = None
+    academic_term_id: uuid.UUID
+    academic_term_name: str | None = None
+    test_score: Decimal
+    assessment_score: Decimal
+    exam_score: Decimal
+    total_score: Decimal
+    grade: str
+    remark: str | None = None
+    status: AcademicResultStatus
+    recorded_by_actor_type: str
+    recorded_by_actor_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class StudentSubjectResultListResponse(OutputBase):
+    items: list[StudentSubjectResultResponse]
+    total: int
 
 
 class AcademicSessionListResponse(OutputBase):
