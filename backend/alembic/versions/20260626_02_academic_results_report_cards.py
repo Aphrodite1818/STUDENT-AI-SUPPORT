@@ -19,6 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
     academic_result_status = postgresql.ENUM(
         "draft",
         "submitted",
@@ -34,28 +37,62 @@ def upgrade() -> None:
         name="report_card_status",
         schema="public",
     )
-    academic_result_status.create(op.get_bind(), checkfirst=True)
-    report_card_status.create(op.get_bind(), checkfirst=True)
+    academic_result_status.create(bind, checkfirst=True)
+    report_card_status.create(bind, checkfirst=True)
 
-    op.execute("ALTER TYPE public.parentrelationship ADD VALUE IF NOT EXISTS 'sponsor'")
-    op.add_column(
-        "student_parent_link_requests",
-        sa.Column(
-            "relationship_type",
-            sa.Enum(
-                "father",
-                "mother",
-                "guardian",
-                "sponsor",
-                "other",
-                name="parentrelationship",
-                schema="public",
-            ),
-            server_default="guardian",
-            nullable=False,
-        ),
-        schema="public",
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                WHERE t.typname = 'parentrelationship'
+                  AND n.nspname = 'public'
+            ) THEN
+                CREATE TYPE public.parentrelationship AS ENUM (
+                    'father',
+                    'mother',
+                    'guardian',
+                    'sponsor',
+                    'other'
+                );
+            ELSE
+                ALTER TYPE public.parentrelationship ADD VALUE IF NOT EXISTS 'sponsor';
+            END IF;
+        END
+        $$;
+        """
     )
+    if inspector.has_table("student_parent_link_requests", schema="public"):
+        existing_columns = {
+            column["name"]
+            for column in inspector.get_columns(
+                "student_parent_link_requests",
+                schema="public",
+            )
+        }
+        if "relationship_type" not in existing_columns:
+            op.add_column(
+                "student_parent_link_requests",
+                sa.Column(
+                    "relationship_type",
+                    postgresql.ENUM(
+                        "father",
+                        "mother",
+                        "guardian",
+                        "sponsor",
+                        "other",
+                        name="parentrelationship",
+                        schema="public",
+                        create_type=False,
+                    ),
+                    server_default="guardian",
+                    nullable=False,
+                ),
+                schema="public",
+            )
 
     op.create_table(
         "student_subject_results",
