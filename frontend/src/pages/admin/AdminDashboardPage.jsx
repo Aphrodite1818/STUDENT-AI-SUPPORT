@@ -121,7 +121,7 @@ function AdminDashboardPage() {
 
       {!error && (
         <>
-          <section className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-6">
+          <section className="stat-grid">
             {statItems.map((item) => (
               <StatCard
                 key={item.key}
@@ -144,7 +144,7 @@ function AdminDashboardPage() {
             ))}
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+          <section className="stat-grid xl:grid-cols-4 2xl:grid-cols-4">
             <StatCard
               label="Active Session"
               value={cleanText(stats.active_academic_session, "-")}

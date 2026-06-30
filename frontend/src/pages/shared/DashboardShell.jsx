@@ -12,6 +12,7 @@ export function DashboardStat({ label, value, hint, icon }) {
       value={value}
       description={hint}
       icon={icon}
+      compact
     />
   );
 }
