@@ -144,7 +144,7 @@ function AdminDashboardPage() {
             ))}
           </section>
 
-          <section className="stat-grid xl:grid-cols-4 2xl:grid-cols-4">
+          <section className="stat-grid">
             <StatCard
               label="Active Session"
               value={cleanText(stats.active_academic_session, "-")}
