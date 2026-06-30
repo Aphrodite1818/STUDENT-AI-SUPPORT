@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { BarChart3, Bell, CreditCard, GraduationCap, Link2, MessageSquare, Users } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -11,9 +11,18 @@ import EmptyState from "../../components/shared/EmptyState";
 import LoadingState from "../../components/shared/LoadingState";
 import StatCard from "../../components/shared/StatCard";
 import { authSession, getErrorMessage } from "../../services/api";
-import { dashboardService } from "../../services/dashboard.service";
 import { parentService } from "../../services/parentService";
+import { academicService } from "../../services/academicService";
+import { reportCardService } from "../../services/reportCardService";
 import { displayName } from "../../utils/user";
+import {
+  averageScore,
+  bestAndWeakestSubject,
+  chartFromCounts,
+  cleanText,
+  reportCardStatusChart,
+  subjectPerformanceChart,
+} from "../../utils/academicDashboard";
 
 const links = [
   { label: "Attendance", to: "/parent/attendance", icon: Bell },
@@ -25,10 +34,13 @@ const links = [
 function ParentDashboardPage() {
   const [children, setChildren] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [metrics, setMetrics] = useState(null);
+  const [selectedChildId, setSelectedChildId] = useState("");
+  const [childResults, setChildResults] = useState([]);
+  const [childReportCards, setChildReportCards] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLinking, setIsLinking] = useState(false);
   const [admissionNumber, setAdmissionNumber] = useState("");
+  const [relationshipType, setRelationshipType] = useState("guardian");
   const [loadError, setLoadError] = useState(null);
   const [linkError, setLinkError] = useState(null);
   const [linkSuccess, setLinkSuccess] = useState(null);
@@ -36,14 +48,15 @@ function ParentDashboardPage() {
   const firstName = user?.first_name || user?.firstname || "Parent";
 
   const loadDashboardData = async () => {
-    const [studentsResponse, requestsResponse, metricsResponse] = await Promise.all([
+    const [studentsResponse, requestsResponse] = await Promise.all([
       parentService.getMyStudents(),
       parentService.getMyStudentLinkRequests(),
-      dashboardService.getParentAnalytics(),
     ]);
     setChildren(studentsResponse?.items || []);
     setRequests(requestsResponse?.items || []);
-    setMetrics(metricsResponse);
+    if (!selectedChildId && studentsResponse?.items?.[0]?.student?.id) {
+      setSelectedChildId(studentsResponse.items[0].student.id);
+    }
   };
 
   useEffect(() => {
@@ -81,6 +94,7 @@ function ParentDashboardPage() {
     try {
       await parentService.createStudentLinkRequest({
         admission_number: normalizedAdmissionNumber,
+        relationship_type: relationshipType,
       });
       await loadDashboardData();
       setAdmissionNumber("");
@@ -92,8 +106,53 @@ function ParentDashboardPage() {
     }
   };
 
-  const pendingRequests = requests.filter((item) => item.status === "pending");
-  const charts = metrics?.charts || {};
+  const printReportCard = async (card) => {
+    setLoadError(null);
+    try {
+      await reportCardService.printParentReportCard(selectedChildId, card.id);
+    } catch (error) {
+      setLoadError(getErrorMessage(error, "Could not open report card."));
+    }
+  };
+
+  const selectedChild = children.find((item) => item.student?.id === selectedChildId);
+  const childAverage = averageScore(childResults);
+  const subjectHighlights = bestAndWeakestSubject(childResults);
+  const selectedChildAcademicLabel = useMemo(() => {
+    const latestResult = childResults[0];
+    const latestCard = childReportCards[0];
+    const session = latestResult?.academic_session_name || latestCard?.academic_session_name;
+    const term = latestResult?.academic_term_name || latestCard?.academic_term_name;
+    return [session, cleanText(term, "")].filter(Boolean).join(" - ") || "-";
+  }, [childResults, childReportCards]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadChildAcademics() {
+      if (!selectedChildId) {
+        setChildResults([]);
+        setChildReportCards([]);
+        return;
+      }
+      try {
+        const [resultResponse, reportCardResponse] = await Promise.all([
+          academicService.listChildResults(selectedChildId),
+          reportCardService.listChildReportCards(selectedChildId),
+        ]);
+        if (!mounted) return;
+        setChildResults(resultResponse?.items || []);
+        setChildReportCards(reportCardResponse?.items || []);
+      } catch {
+        if (!mounted) return;
+        setChildResults([]);
+        setChildReportCards([]);
+      }
+    }
+    loadChildAcademics();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedChildId]);
 
   if (isLoading) {
     return (
@@ -140,11 +199,27 @@ function ParentDashboardPage() {
             compact
           />
           <StatCard
-            label="Unread Notices"
-            value={metrics?.stats?.unread_count ?? 0}
-            description="need your attention"
-            icon={MessageSquare}
-            tone={(metrics?.stats?.unread_count ?? 0) > 0 ? "warning" : "primary"}
+            label="Average Score"
+            value={childAverage}
+            description="selected child"
+            icon={BarChart3}
+            tone={childResults.length > 0 ? "success" : "warning"}
+            compact
+          />
+          <StatCard
+            label="Academic Context"
+            value={selectedChildAcademicLabel}
+            description="selected child latest term"
+            icon={GraduationCap}
+            tone={selectedChildAcademicLabel !== "-" ? "primary" : "warning"}
+            compact
+          />
+          <StatCard
+            label="Best Subject"
+            value={subjectHighlights.best?.label || "-"}
+            description={subjectHighlights.best ? `${subjectHighlights.best.value} score` : "awaiting results"}
+            icon={BarChart3}
+            tone={subjectHighlights.best ? "success" : "warning"}
             compact
           />
         </section>
@@ -153,16 +228,28 @@ function ParentDashboardPage() {
       {!loadError && (
         <section className="dashboard-grid xl:grid-cols-2">
           <AnalyticsBarChart
-            title="Announcement Read Vs Unread"
-            description="How many announcements in your feed have been read."
-            data={charts.announcement_read_vs_unread || []}
-            emptyMessage="No announcement read-state data available yet."
+            title="Subject Performance"
+            description="Published scores for the selected child."
+            data={subjectPerformanceChart(childResults)}
+            emptyMessage="No published subject results for the selected child yet."
           />
           <AnalyticsDonutChart
-            title="Announcement Category Breakdown"
-            description="Types of announcements you are receiving from the school."
-            data={charts.announcement_category_breakdown || []}
-            emptyMessage="No announcement category data available yet."
+            title="Grade Distribution"
+            description="Grade spread for the selected child."
+            data={chartFromCounts(childResults, "grade", "ungraded")}
+            emptyMessage="No grade distribution available yet."
+          />
+          <AnalyticsDonutChart
+            title="Result Status"
+            description="Availability state for the selected child's results."
+            data={chartFromCounts(childResults, "status", "not available")}
+            emptyMessage="No result status data available yet."
+          />
+          <AnalyticsDonutChart
+            title="Report Card Status"
+            description="Report-card generation and publishing state."
+            data={reportCardStatusChart(childReportCards)}
+            emptyMessage="No report card status data available yet."
           />
         </section>
       )}
@@ -170,6 +257,24 @@ function ParentDashboardPage() {
       <section className="dashboard-grid lg:grid-cols-[minmax(0,1fr)_min(100%,360px)]">
         <Card className="p-4 sm:p-5 md:p-6">
           <h2 className="section-title">Family Overview</h2>
+          {children.length > 0 && (
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Selected child
+              </span>
+              <select
+                value={selectedChildId}
+                onChange={(event) => setSelectedChildId(event.target.value)}
+                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm font-medium text-text outline-none"
+              >
+                {children.map(({ student }) => (
+                  <option key={student.id} value={student.id}>
+                    {displayName(student)} - {student.admission_number}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {children.length > 0 ? (
             <div className="mt-4 grid gap-3">
               {children.map(({ student, link }) => (
@@ -180,7 +285,7 @@ function ParentDashboardPage() {
                         {displayName(student)}
                       </p>
                       <p className="mt-1 text-xs font-medium text-text-muted">
-                        {student.admission_number || "No admission number"} - {student.profile_status}
+                          {cleanText(student.admission_number)} - {cleanText(student.profile_status)}
                       </p>
                     </div>
                     <Badge variant={link.is_primary_contact ? "success" : "default"}>
@@ -196,6 +301,62 @@ function ParentDashboardPage() {
               title="No linked students yet"
               description="Submit a student admission number to request access. The student must approve it before the link becomes active."
             />
+          )}
+
+          {selectedChild && (
+            <div className="mt-5 border-t border-border pt-5">
+              <h3 className="text-sm font-semibold text-text">Academic summary for {displayName(selectedChild.student)}</h3>
+              <div className="mt-3 grid gap-3">
+                {childResults.length === 0 ? (
+                  <p className="text-sm text-text-muted">No result available yet.</p>
+                ) : (
+                  childResults.map((result) => (
+                    <div key={result.id} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-text">{result.subject_name || "Subject"}</p>
+                          <p className="text-xs text-text-muted">
+                            {cleanText(result.subject_code)} | Total {cleanText(result.total_score)}
+                          </p>
+                        </div>
+                        <Badge variant="success">{cleanText(result.grade)}</Badge>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-text-soft">
+                        <p>Teacher: {cleanText(result.teacher_name)}</p>
+                        <p>Test: {cleanText(result.test_score)}</p>
+                        <p>Assessment: {cleanText(result.assessment_score)}</p>
+                        <p>Exam: {cleanText(result.exam_score)}</p>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-text">{cleanText(result.remark, "No result available yet.")}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              <h3 className="mt-5 text-sm font-semibold text-text">Report cards</h3>
+              <div className="mt-3 space-y-3">
+                {childReportCards.length === 0 ? (
+                  <p className="text-sm text-text-muted">No report card available yet.</p>
+                ) : (
+                  childReportCards.map((card) => (
+                    <div key={card.id} className="rounded-2xl border border-border bg-surface px-4 py-3">
+                      <p className="font-semibold text-text">
+                        {cleanText(card.academic_session_name, "Session")} - {cleanText(card.academic_term_name, "Term")}
+                      </p>
+                      <p className="mt-1 text-sm text-text-muted">Average score: {cleanText(card.average_score)}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => printReportCard(card)}
+                      >
+                        Print or download
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           )}
         </Card>
 
@@ -216,6 +377,22 @@ function ParentDashboardPage() {
                 placeholder="NHS-2026-12345"
                 className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm font-medium text-text outline-none transition placeholder:text-text-faint focus:border-primary focus:ring-4 focus:ring-primary/10"
               />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Relationship
+              </span>
+              <select
+                value={relationshipType}
+                onChange={(event) => setRelationshipType(event.target.value)}
+                className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm font-medium text-text outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10"
+              >
+                <option value="father">Father</option>
+                <option value="mother">Mother</option>
+                <option value="guardian">Guardian</option>
+                <option value="sponsor">Sponsor</option>
+                <option value="other">Other</option>
+              </select>
             </label>
             {linkError && <p className="text-sm font-medium text-error">{linkError}</p>}
             {linkSuccess && <p className="text-sm font-medium text-success">{linkSuccess}</p>}

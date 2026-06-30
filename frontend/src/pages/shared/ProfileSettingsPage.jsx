@@ -16,18 +16,26 @@ function ProfileSettingsPage() {
       title="Profile Settings"
       description="Manage the same account details used during onboarding."
     >
-      <Card className="mx-auto max-w-3xl p-5 sm:p-6">
-        <div className="flex items-center gap-4">
-          <Avatar name={displayName} user={user} size="lg" />
-          <div>
-            <h2 className="text-xl font-semibold">{displayName || "User profile"}</h2>
-            <p className="text-sm text-text-muted">
-              Update your personal details and role-specific profile information here.
-            </p>
+      <Card className="mx-auto max-w-3xl overflow-hidden">
+        <div className="border-b border-border bg-surface-muted/50 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <Avatar
+              name={displayName}
+              user={user}
+              size="xl"
+              className="h-20 w-20 ring-4 ring-surface"
+            />
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wide text-primary">{role} profile</p>
+              <h2 className="mt-1 truncate text-xl font-semibold">{displayName || "User profile"}</h2>
+              <p className="mt-1 text-sm text-text-muted">
+                Update your details and preview the passport/profile image that will appear across the workspace.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="p-5 sm:p-6">
           <ProfileCompletionForm
             role={role}
             submitLabel="Save changes"

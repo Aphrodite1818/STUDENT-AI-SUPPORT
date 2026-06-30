@@ -731,6 +731,7 @@ class StudentParentLinkRequestService:
             parent_id=actor.id,
             student_id=student.id,
             admission_number_snapshot=student.admission_number,
+            relationship_type=payload.relationship_type,
             status=StudentParentLinkRequestStatus.PENDING,
         )
 
@@ -825,6 +826,7 @@ class StudentParentLinkRequestService:
                         tenant_id=actor.tenant_id,
                         student_id=actor.id,
                         parent_id=link_request.parent_id,
+                        relationship_type=link_request.relationship_type,
                     ),
                 )
             link_request.status = StudentParentLinkRequestStatus.APPROVED

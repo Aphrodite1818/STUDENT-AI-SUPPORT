@@ -189,6 +189,101 @@
   .data-table tbody tr:hover td {
     @apply md:bg-surface-muted/30;
   }
+
+  .sc-card {
+    @apply overflow-hidden rounded-2xl border border-border/70 bg-surface shadow-sm;
+  }
+
+  .sc-head {
+    padding: 14px;
+    @apply border-b border-border/60;
+  }
+
+  .sc-title {
+    @apply text-[14px] font-medium text-text;
+  }
+
+  .sc-subtitle {
+    @apply mt-1 text-[12px] text-text-muted;
+  }
+
+  .sc-body {
+    padding: 14px;
+  }
+
+  .form-grid {
+    @apply flex flex-col gap-3 xl:flex-row xl:items-end;
+  }
+
+  .form-grid-field {
+    @apply min-w-0 flex-1;
+  }
+
+  .form-grid-actions {
+    @apply flex items-end gap-2 xl:ml-auto xl:self-end;
+  }
+
+  .btn-create {
+    @apply inline-flex h-[34px] min-h-[34px] items-center justify-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500 px-3.5 text-[12px] font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex h-[30px] min-h-[30px] items-center justify-center gap-1.5 rounded-lg border border-transparent bg-transparent px-2.5 text-[12px] font-medium text-text-soft transition hover:bg-surface-muted/70 hover:text-text disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-deact {
+    @apply inline-flex h-[30px] min-h-[30px] items-center justify-center gap-1.5 rounded-lg border border-rose-300/50 bg-rose-50/20 px-2.5 text-[12px] font-medium text-rose-300 transition hover:border-rose-300/70 hover:bg-rose-100/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium;
+  }
+
+  .badge.green {
+    @apply bg-emerald-500/15 text-emerald-300;
+  }
+
+  .badge.blue {
+    @apply bg-indigo-500/15 text-indigo-200;
+  }
+
+  .badge.gray {
+    @apply bg-slate-500/15 text-slate-300;
+  }
+
+  .aw-table-wrap {
+    @apply overflow-x-auto;
+  }
+
+  .aw-table {
+    @apply w-full min-w-[760px] border-separate border-spacing-0 text-left;
+  }
+
+  .aw-table thead th {
+    padding: 11px 16px;
+    @apply border-b border-border/60 text-[11px] font-medium uppercase tracking-[0.04em] text-text-muted;
+  }
+
+  .aw-table tbody td {
+    padding: 11px 16px;
+    @apply border-b border-border/60 text-[13px] text-text-soft align-top;
+  }
+
+  .aw-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .aw-table .primary-cell {
+    @apply font-medium text-text;
+  }
+
+  .aw-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .tab-description {
+    @apply text-[12.5px] text-text-muted;
+  }
 }
 
 @layer utilities {

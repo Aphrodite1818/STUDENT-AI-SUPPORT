@@ -1,0 +1,171 @@
+from typing import Annotated, TypeAlias
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import HTMLResponse
+
+from app.core.dependencies.db import DbSession
+from app.core.dependencies.route_guards import (
+    get_current_onboarded_student,
+    get_current_parent,
+    get_current_tenant_admin,
+)
+from app.modules.parents.models import Parent
+from app.modules.report_cards.schemas import (
+    ReportCardGenerateRequest,
+    ReportCardListResponse,
+    ReportCardResponse,
+)
+from app.modules.report_cards.service import ReportCardService
+from app.modules.students.models import Student
+from app.modules.tenant_admins.models import TenantAdmin
+
+
+tenant_admin_router = APIRouter(
+    prefix="/tenant-admin/academic/report-cards",
+    tags=["Tenant Admin Report Cards"],
+)
+parent_router = APIRouter(
+    prefix="/parents/me/children/{student_id}/academic/report-cards",
+    tags=["Parent Report Cards"],
+)
+student_router = APIRouter(
+    prefix="/students/me/academic/report-cards",
+    tags=["Student Report Cards"],
+)
+
+CurrentTenantAdmin: TypeAlias = Annotated[TenantAdmin, Depends(get_current_tenant_admin)]
+CurrentParent: TypeAlias = Annotated[Parent, Depends(get_current_parent)]
+CurrentStudent: TypeAlias = Annotated[Student, Depends(get_current_onboarded_student)]
+
+
+@tenant_admin_router.post(
+    "/generate",
+    response_model=ReportCardResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_report_card(
+    payload: ReportCardGenerateRequest,
+    db: DbSession,
+    current_admin: CurrentTenantAdmin,
+) -> ReportCardResponse:
+    return await ReportCardService.generate(db, current_admin, payload)
+
+
+@tenant_admin_router.get("", response_model=ReportCardListResponse)
+async def list_report_cards(
+    db: DbSession,
+    current_admin: CurrentTenantAdmin,
+    student_id: UUID | None = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=100),
+) -> ReportCardListResponse:
+    items, total = await ReportCardService.list_cards(
+        db,
+        current_admin,
+        student_id=student_id,
+        skip=skip,
+        limit=limit,
+    )
+    return ReportCardListResponse(items=items, total=total)
+
+
+@tenant_admin_router.get("/{report_card_id}", response_model=ReportCardResponse)
+async def get_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_admin: CurrentTenantAdmin,
+) -> ReportCardResponse:
+    return await ReportCardService.get(db, current_admin, report_card_id)
+
+
+@tenant_admin_router.post("/{report_card_id}/publish", response_model=ReportCardResponse)
+async def publish_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_admin: CurrentTenantAdmin,
+) -> ReportCardResponse:
+    return await ReportCardService.publish(db, current_admin, report_card_id)
+
+
+@tenant_admin_router.get("/{report_card_id}/print", response_class=HTMLResponse)
+async def print_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_admin: CurrentTenantAdmin,
+) -> HTMLResponse:
+    return HTMLResponse(await ReportCardService.render_html(db, current_admin, report_card_id))
+
+
+@tenant_admin_router.get("/{report_card_id}/download", response_class=HTMLResponse)
+async def download_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_admin: CurrentTenantAdmin,
+) -> HTMLResponse:
+    return HTMLResponse(await ReportCardService.render_html(db, current_admin, report_card_id))
+
+
+@parent_router.get("", response_model=ReportCardListResponse)
+async def list_child_report_cards(
+    student_id: UUID,
+    db: DbSession,
+    current_parent: CurrentParent,
+) -> ReportCardListResponse:
+    items, total = await ReportCardService.list_cards(
+        db,
+        current_parent,
+        student_id=student_id,
+    )
+    return ReportCardListResponse(items=items, total=total)
+
+
+@student_router.get("", response_model=ReportCardListResponse)
+async def list_my_report_cards(
+    db: DbSession,
+    current_student: CurrentStudent,
+) -> ReportCardListResponse:
+    items, total = await ReportCardService.list_cards(db, current_student)
+    return ReportCardListResponse(items=items, total=total)
+
+
+@student_router.get("/{report_card_id}", response_model=ReportCardResponse)
+async def get_my_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_student: CurrentStudent,
+) -> ReportCardResponse:
+    return await ReportCardService.get(db, current_student, report_card_id)
+
+
+@student_router.get("/{report_card_id}/print", response_class=HTMLResponse)
+async def print_my_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_student: CurrentStudent,
+) -> HTMLResponse:
+    return HTMLResponse(await ReportCardService.render_html(db, current_student, report_card_id))
+
+
+@parent_router.get("/{report_card_id}", response_model=ReportCardResponse)
+async def get_child_report_card(
+    student_id: UUID,
+    report_card_id: UUID,
+    db: DbSession,
+    current_parent: CurrentParent,
+) -> ReportCardResponse:
+    card = await ReportCardService.get(db, current_parent, report_card_id)
+    if card.student_id != student_id:
+        from app.core.exceptions import ForbiddenException
+
+        raise ForbiddenException("Report card does not belong to this child.")
+    return card
+
+
+@parent_router.get("/{report_card_id}/print", response_class=HTMLResponse)
+async def print_child_report_card(
+    report_card_id: UUID,
+    db: DbSession,
+    current_parent: CurrentParent,
+) -> HTMLResponse:
+    return HTMLResponse(await ReportCardService.render_html(db, current_parent, report_card_id))

@@ -10,6 +10,7 @@ import { studentService } from "../../services/studentService";
 import { teacherService } from "../../services/teacherService";
 import { parentService } from "../../services/parentService";
 import { getErrorMessage, parseApiError } from "../../services/api";
+import { useToast } from "../../hooks/useToast";
 
 const USER_TYPES = ["student", "teacher", "parent"];
 
@@ -61,6 +62,7 @@ function CreateUserPage() {
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [successPayload, setSuccessPayload] = useState(null);
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     let mounted = true;
@@ -151,6 +153,7 @@ function CreateUserPage() {
         });
         setStudentForm(INITIAL_STUDENT_FORM);
         setSuccessPayload({ type: "student", result });
+        showSuccess("Student created successfully.");
       } else if (activeTab === "teacher") {
         const result = await teacherService.createTeacher({
           email: teacherForm.email,
@@ -161,6 +164,7 @@ function CreateUserPage() {
         });
         setTeacherForm(INITIAL_TEACHER_FORM);
         setSuccessPayload({ type: "teacher", result });
+        showSuccess("Teacher created successfully.");
       } else {
         const result = await parentService.createParent({
           email: parentForm.email,
@@ -169,11 +173,13 @@ function CreateUserPage() {
         });
         setParentForm(INITIAL_PARENT_FORM);
         setSuccessPayload({ type: "parent", result });
+        showSuccess("Parent created successfully.");
       }
     } catch (err) {
       const apiError = parseApiError(err, `Failed to create ${activeTab}.`);
       setFieldErrors(apiError.fieldErrors);
       setError(apiError.message);
+      showError(apiError.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -312,6 +318,31 @@ function CreateUserPage() {
           </div>
         )}
 
+        <Card className="p-5 sm:p-6">
+          <h2 className="text-lg font-semibold text-text">
+            {activeTab === "student" ? "Student details" : activeTab === "teacher" ? "Teacher details" : "Parent details"}
+          </h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Only collect the fields the admin is responsible for. The rest should be completed through onboarding or later profile updates.
+          </p>
+
+          {isLoadingContext ? (
+            <div className="mt-6 rounded-2xl border border-dashed border-border bg-surface-muted/40 px-4 py-10 text-center text-sm text-text-muted">
+              Loading form options...
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              {activeTab === "student" && renderStudentForm()}
+              {activeTab === "teacher" && renderTeacherForm()}
+              {activeTab === "parent" && renderParentForm()}
+
+              <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+                {isSubmitting ? "Creating..." : `Create ${activeTab}`}
+              </Button>
+            </form>
+          )}
+        </Card>
+
         {successPayload && (
           <Card className="p-5 sm:p-6">
             {successPayload.type === "student" ? (
@@ -342,31 +373,6 @@ function CreateUserPage() {
             )}
           </Card>
         )}
-
-        <Card className="p-5 sm:p-6">
-          <h2 className="text-lg font-semibold text-text">
-            {activeTab === "student" ? "Student details" : activeTab === "teacher" ? "Teacher details" : "Parent details"}
-          </h2>
-          <p className="mt-1 text-sm text-text-muted">
-            Only collect the fields the admin is responsible for. The rest should be completed through onboarding or later profile updates.
-          </p>
-
-          {isLoadingContext ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-border bg-surface-muted/40 px-4 py-10 text-center text-sm text-text-muted">
-              Loading form options...
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              {activeTab === "student" && renderStudentForm()}
-              {activeTab === "teacher" && renderTeacherForm()}
-              {activeTab === "parent" && renderParentForm()}
-
-              <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-                {isSubmitting ? "Creating..." : `Create ${activeTab}`}
-              </Button>
-            </form>
-          )}
-        </Card>
       </div>
     </DashboardLayout>
   );

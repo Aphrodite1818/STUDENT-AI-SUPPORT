@@ -29,6 +29,18 @@ from app.modules.announcements.router import (
     tenant_admin_router as tenant_admin_announcement_router,
 )
 from app.modules.metrics.router import router as metrics_router
+from app.modules.student_academics.router import (
+    parent_router as parent_academic_router,
+    student_router as student_academic_router,
+    teacher_router as teacher_academic_router,
+    tenant_admin_router as tenant_admin_academic_router,
+)
+from app.modules.report_cards.router import (
+    parent_router as parent_report_card_router,
+    student_router as student_report_card_router,
+    tenant_admin_router as tenant_admin_report_card_router,
+)
+from app.modules.search.router import router as tenant_search_router
 
 
 logger = get_logger(__name__)
@@ -95,6 +107,14 @@ def create_app() -> FastAPI:
     app.include_router(teacher_announcement_router, prefix="/api/v1")
     app.include_router(announcement_feed_router, prefix="/api/v1")
     app.include_router(metrics_router, prefix="/api/v1")
+    app.include_router(tenant_admin_academic_router, prefix="/api/v1")
+    app.include_router(teacher_academic_router, prefix="/api/v1")
+    app.include_router(student_academic_router, prefix="/api/v1")
+    app.include_router(parent_academic_router, prefix="/api/v1")
+    app.include_router(tenant_admin_report_card_router, prefix="/api/v1")
+    app.include_router(student_report_card_router, prefix="/api/v1")
+    app.include_router(parent_report_card_router, prefix="/api/v1")
+    app.include_router(tenant_search_router, prefix="/api/v1")
 
     # ── Health check ──────────────────────────────────────────────────────────
     @app.get("/health", tags=["Health"])

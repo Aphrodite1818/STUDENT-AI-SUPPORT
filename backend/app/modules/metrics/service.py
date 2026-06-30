@@ -14,6 +14,8 @@ from app.modules.metrics.schemas import ChartPoint, DashboardMetricsResponse
 from app.modules.parents.models import Parent, ParentAccountStatus
 from app.modules.students.models import Student, StudentAccountStatus, StudentParentLink, StudentProfileStatus
 from app.modules.subjects.models import Subject
+from app.modules.student_academics.models import AcademicSession, AcademicTerm, ClassSubjectTeacher, StudentSubjectResult
+from app.modules.report_cards.models import ReportCard, ReportCardStatus
 from app.modules.teachers.models import Teacher, TeacherAccountStatus
 from app.tenant_management.models import SubscriptionPlan, Tenant, TenantStatus, TenantVerificationStatus
 
@@ -92,6 +94,31 @@ class MetricsService:
         total_parents = await MetricsService._count(db, Parent, Parent.tenant_id == tenant_id)
         total_classes = await MetricsService._count(db, ClassRoom, ClassRoom.tenant_id == tenant_id)
         total_subjects = await MetricsService._count(db, Subject, Subject.tenant_id == tenant_id)
+        report_cards_generated = await MetricsService._count(db, ReportCard, ReportCard.tenant_id == tenant_id)
+        report_cards_published = await MetricsService._count(
+            db,
+            ReportCard,
+            ReportCard.tenant_id == tenant_id,
+            ReportCard.status == ReportCardStatus.PUBLISHED,
+        )
+        current_session = (
+            await db.execute(
+                select(AcademicSession).where(
+                    AcademicSession.tenant_id == tenant_id,
+                    AcademicSession.is_current.is_(True),
+                    AcademicSession.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        current_term = (
+            await db.execute(
+                select(AcademicTerm).where(
+                    AcademicTerm.tenant_id == tenant_id,
+                    AcademicTerm.is_current.is_(True),
+                    AcademicTerm.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
         complete_profiles = await MetricsService._count(
             db,
             Student,
@@ -143,6 +170,29 @@ class MetricsService:
                 .order_by(ClassRoom.name.asc(), ClassRoom.arm.asc())
             )
         ).all()
+        grade_rows = (
+            await db.execute(
+                select(StudentSubjectResult.grade, func.count(StudentSubjectResult.id))
+                .where(StudentSubjectResult.tenant_id == tenant_id)
+                .group_by(StudentSubjectResult.grade)
+            )
+        ).all()
+        result_status_rows = (
+            await db.execute(
+                select(StudentSubjectResult.status, func.count(StudentSubjectResult.id))
+                .where(StudentSubjectResult.tenant_id == tenant_id)
+                .group_by(StudentSubjectResult.status)
+            )
+        ).all()
+        subject_performance_rows = (
+            await db.execute(
+                select(Subject.name, func.avg(StudentSubjectResult.total_score))
+                .join(Subject, Subject.id == StudentSubjectResult.subject_id)
+                .where(StudentSubjectResult.tenant_id == tenant_id)
+                .group_by(Subject.name)
+                .order_by(Subject.name.asc())
+            )
+        ).all()
 
         return DashboardMetricsResponse(
             stats={
@@ -155,6 +205,10 @@ class MetricsService:
                 "student_profiles_incomplete": max(total_students - complete_profiles, 0),
                 "pending_teacher_accounts": pending_teachers,
                 "pending_parent_accounts": pending_parents,
+                "active_academic_session": current_session.name if current_session else None,
+                "active_academic_term": current_term.name.value if current_term else None,
+                "report_cards_generated": report_cards_generated,
+                "report_cards_published": report_cards_published,
             },
             charts={
                 "user_population_breakdown": [
@@ -180,6 +234,20 @@ class MetricsService:
                     ChartPoint(label=f"{row.name} {row.arm}".strip(), value=int(row[2]))
                     for row in class_rows
                 ],
+                "grade_distribution": [
+                    ChartPoint(label=row[0], value=int(row[1])) for row in grade_rows
+                ],
+                "result_status_distribution": [
+                    ChartPoint(
+                        label=row[0].value if hasattr(row[0], "value") else str(row[0]),
+                        value=int(row[1]),
+                    )
+                    for row in result_status_rows
+                ],
+                "subject_performance": [
+                    ChartPoint(label=row[0] or "Subject", value=round(float(row[1] or 0), 2))
+                    for row in subject_performance_rows
+                ],
             },
         )
 
@@ -193,6 +261,39 @@ class MetricsService:
                 .where(ClassRoom.tenant_id == tenant_id, ClassRoom.teacher_id == teacher_id)
                 .group_by(ClassRoom.id, ClassRoom.name, ClassRoom.arm)
                 .order_by(ClassRoom.name.asc(), ClassRoom.arm.asc())
+            )
+        ).all()
+        assignment_rows = (
+            await db.execute(
+                select(ClassSubjectTeacher.id)
+                .where(
+                    ClassSubjectTeacher.tenant_id == tenant_id,
+                    ClassSubjectTeacher.teacher_id == teacher_id,
+                    ClassSubjectTeacher.is_active.is_(True),
+                )
+            )
+        ).scalars().all()
+        submitted_results = await MetricsService._count(
+            db,
+            StudentSubjectResult,
+            StudentSubjectResult.tenant_id == tenant_id,
+            StudentSubjectResult.teacher_id == teacher_id,
+        )
+        published_results = await MetricsService._count(
+            db,
+            StudentSubjectResult,
+            StudentSubjectResult.tenant_id == tenant_id,
+            StudentSubjectResult.teacher_id == teacher_id,
+            StudentSubjectResult.status.in_(["published", "locked"]),
+        )
+        teacher_grade_rows = (
+            await db.execute(
+                select(StudentSubjectResult.grade, func.count(StudentSubjectResult.id))
+                .where(
+                    StudentSubjectResult.tenant_id == tenant_id,
+                    StudentSubjectResult.teacher_id == teacher_id,
+                )
+                .group_by(StudentSubjectResult.grade)
             )
         ).all()
         own_announcement_ids = (
@@ -232,7 +333,13 @@ class MetricsService:
             )
         ).all()
         return DashboardMetricsResponse(
-            stats={"total_classes": len(class_rows), "total_announcements": len(own_announcement_ids)},
+            stats={
+                "total_classes": len(class_rows),
+                "assigned_subjects": len(assignment_rows),
+                "total_announcements": len(own_announcement_ids),
+                "results_submitted": submitted_results,
+                "results_published": published_results,
+            },
             charts={
                 "class_sizes": [
                     ChartPoint(label=f"{row.name} {row.arm}".strip(), value=int(row[3]))
@@ -245,6 +352,9 @@ class MetricsService:
                 "announcement_category_breakdown": [
                     ChartPoint(label=row[0].value if hasattr(row[0], "value") else str(row[0]), value=int(row[1]))
                     for row in category_rows
+                ],
+                "grade_distribution": [
+                    ChartPoint(label=row[0], value=int(row[1])) for row in teacher_grade_rows
                 ],
             },
         )
@@ -301,12 +411,38 @@ class MetricsService:
         read_count: int,
         category_counts: dict[str, int],
     ) -> DashboardMetricsResponse:
-        response = await MetricsService._personal_announcement_metrics(
-            db,
-            actor_id=student_id,
-            tenant_id=tenant_id,
-            feed_total=feed_total,
-            read_count=read_count,
-            category_counts=category_counts,
+        result_rows = (
+            await db.execute(
+                select(StudentSubjectResult)
+                .where(
+                    StudentSubjectResult.tenant_id == tenant_id,
+                    StudentSubjectResult.student_id == student_id,
+                    StudentSubjectResult.status.in_(["published", "locked"]),
+                )
+            )
+        ).scalars().all()
+        average = (
+            round(sum(float(row.total_score or 0) for row in result_rows) / len(result_rows), 2)
+            if result_rows
+            else 0
         )
-        return response
+        grade_counts: dict[str, int] = {}
+        for row in result_rows:
+            grade_counts[row.grade] = grade_counts.get(row.grade, 0) + 1
+        return DashboardMetricsResponse(
+            stats={
+                "feed_total": feed_total,
+                "read_count": read_count,
+                "unread_count": max(feed_total - read_count, 0),
+                "current_average": average,
+                "published_results": len(result_rows),
+            },
+            charts={
+                "grade_distribution": [
+                    ChartPoint(label=label, value=value) for label, value in grade_counts.items()
+                ],
+                "subject_comparison": [
+                    ChartPoint(label=row.grade, value=float(row.total_score or 0)) for row in result_rows
+                ],
+            },
+        )

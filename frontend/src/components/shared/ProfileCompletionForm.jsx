@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, ImageOff } from "lucide-react";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
 import { parseApiError } from "../../services/api";
 import { onboardingService } from "../../services/onboardingService";
+import { getAvatarSrcFromRecord } from "../../utils/user";
 
 const ROLE_FORM_CONFIG = {
   admin: [
@@ -175,6 +177,43 @@ function EditableField({ field, value, error, onChange }) {
   );
 }
 
+function PassportPhotoPreview({ data, role }) {
+  const imageSrc = getAvatarSrcFromRecord(data);
+  const label = role === "admin" ? "Profile image" : "Passport photograph";
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full border border-border-strong bg-surface-muted ring-4 ring-surface">
+          {imageSrc ? (
+            <img src={imageSrc} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-text-faint">
+              <ImageOff className="h-8 w-8" />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-semibold text-text">
+            <Camera className="h-4 w-4 text-primary" />
+            {label}
+          </div>
+          <p className="mt-1 text-sm text-text-muted">
+            {imageSrc
+              ? "Previewing the image URL currently saved for this profile."
+              : "A round passport photo will appear here once a valid image URL is saved."}
+          </p>
+          {imageSrc && (
+            <p className="mt-2 truncate text-xs font-medium text-text-faint" title={imageSrc}>
+              {imageSrc}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProfileCompletionForm({
   role,
   submitLabel = "Save profile",
@@ -331,6 +370,14 @@ function ProfileCompletionForm({
           {successMessage}
         </div>
       )}
+
+      <PassportPhotoPreview
+        role={normalizedRole}
+        data={{
+          ...(statusData?.current_values || {}),
+          ...formData,
+        }}
+      />
 
       {sections.map((section) => (
         <div key={section.key} className="space-y-4 rounded-2xl border border-border bg-surface-muted/40 p-4">

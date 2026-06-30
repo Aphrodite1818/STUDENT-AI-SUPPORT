@@ -1,4 +1,4 @@
-const AVATAR_SRC_KEYS = [
+export const AVATAR_SRC_KEYS = [
   "profile_image_url",
   "avatar_url",
   "image_url",
@@ -42,10 +42,14 @@ export function getUserInitials(user) {
 }
 
 export function getUserAvatarSrc(user) {
-  if (!user) return undefined;
+  return getAvatarSrcFromRecord(user);
+}
+
+export function getAvatarSrcFromRecord(record) {
+  if (!record) return undefined;
 
   for (const key of AVATAR_SRC_KEYS) {
-    const value = user[key];
+    const value = record[key];
     if (typeof value === "string" && value.trim()) {
       return value.trim();
     }

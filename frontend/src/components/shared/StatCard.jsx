@@ -19,6 +19,7 @@ function StatCard({
   icon: Icon,
   tone = "primary",
   description,
+  valueBadge = null,
   className = "",
   compact = false,
 }) {
@@ -36,12 +37,23 @@ function StatCard({
     >
       <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-text-muted sm:text-[11px] md:text-xs">
+          <p className="truncate text-[10px] font-semibold tracking-wide text-text-muted sm:text-[11px] md:text-xs">
             {label}
           </p>
-          <p className="mt-1 truncate text-lg font-semibold leading-none tracking-tight text-text sm:mt-1.5 sm:text-2xl md:text-3xl lg:text-4xl">
-            {value}
-          </p>
+          {valueBadge ? (
+            <div className="mt-2">
+              <Badge
+                variant={valueBadge.variant || "success"}
+                className={cn("px-3 py-1.5 text-xs sm:text-sm", valueBadge.className)}
+              >
+                {valueBadge.label}
+              </Badge>
+            </div>
+          ) : (
+            <p className="mt-1 break-words text-lg font-semibold leading-tight tracking-tight text-text sm:mt-1.5 sm:text-2xl md:text-3xl lg:text-4xl">
+              {value}
+            </p>
+          )}
         </div>
         {Icon && (
           <span

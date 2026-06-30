@@ -5,16 +5,34 @@
 
 """Load and validate application settings from environment variables."""
 
+import os
 from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, computed_field, model_validator
+from dotenv import dotenv_values
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DEV_DATABASE_URL = "postgresql+asyncpg://postgres:252236@localhost:5433/learnly_local"
+BASE_ENV_VALUES = dotenv_values(BASE_DIR / ".env")
+ACTIVE_ENV = (
+    os.getenv("ENV")
+    or os.getenv("APP_ENV")
+    or BASE_ENV_VALUES.get("ENV")
+    or "dev"
+).lower()
+
+ENV_FILE_BY_NAME = {
+    "dev": ".env.development",
+    "development": ".env.development",
+    "prod": ".env.production",
+    "production": ".env.production",
+    "stg": ".env.staging",
+    "staging": ".env.staging",
+}
+ACTIVE_ENV_FILE = ENV_FILE_BY_NAME.get(ACTIVE_ENV, f".env.{ACTIVE_ENV}")
 
 
 class EnvironmentType(str, Enum): 
@@ -27,7 +45,10 @@ class EnvironmentType(str, Enum):
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     model_config = SettingsConfigDict(
-        env_file=BASE_DIR / ".env",
+        env_file=(
+            BASE_DIR / ".env",
+            BASE_DIR / ACTIVE_ENV_FILE,
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True
@@ -61,12 +82,7 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 1024
     
 
-    ALLOWED_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:3000",
-        "http://localhost:8501",
-    ]
+    ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
 
     TWILIO_ACCOUNT_SID: str = Field(..., description="Twilio account SID")
     TWILIO_AUTH_TOKEN: str = Field(..., description="Twilio auth token")
@@ -82,28 +98,23 @@ class Settings(BaseSettings):
     OTP_EXPIRATION_MINUTES: int = 10
     TENANT_ACTIVATION_EXPIRATION_HOURS: int = 48
 
-    FRONTEND_APP_URL: str = "http://localhost:5173"
+    FRONTEND_APP_URL: str = Field(..., description="Frontend application URL")
     DEFAULT_STUDENT_PASSWORD: str = "default"
 
-    APP_SCRIPT_URL : str = Field(...,)
+    APP_SCRIPT_URL: str = Field(...)
 
     @model_validator(mode="after")
     def apply_database_url_for_environment(self) -> "Settings":
         """Select the correct database URL for the active environment."""
-        if self.ENV == EnvironmentType.DEVELOPMENT:
-            self.DATABASE_URL = DEV_DATABASE_URL
-            return self
-
         if not self.DATABASE_URL:
-            raise ValueError("DATABASE_URL must be set when ENV is not dev.")
+            raise ValueError("DATABASE_URL must be set for the active environment.")
 
         return self
 
-    @computed_field  #creates and compute the value of this property method
     @property
     def is_development(self) -> bool:
         """Return whether the application is running in development mode."""
-        return self.ENV == EnvironmentType.DEVELOPMENT #returns True if the env is a development environment
+        return self.ENV == EnvironmentType.DEVELOPMENT  # returns True if dev
 
 
 settings = Settings()  # pyright: ignore[reportCallIssue]
