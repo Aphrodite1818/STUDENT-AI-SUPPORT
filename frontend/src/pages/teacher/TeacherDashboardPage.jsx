@@ -126,7 +126,7 @@ function TeacherDashboardPage() {
       )}
 
       {!loadError && (
-        <section className="stat-grid">
+        <section className="stat-grid stat-grid-six">
           <StatCard
             label="Assigned Classes"
             value={assignedClassLabels.length || metrics?.stats?.total_classes || 0}

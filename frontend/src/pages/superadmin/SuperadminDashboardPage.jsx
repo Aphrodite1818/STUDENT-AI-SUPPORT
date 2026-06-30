@@ -223,7 +223,7 @@ function SuperadminDashboardPage() {
         </div>
       )}
 
-      <section className="stat-grid">
+      <section className="stat-grid stat-grid-four">
         <StatCard label="Total Schools" value={totalTenants} icon={Building2} tone="primary" description="registered tenants" compact />
         <StatCard label="Active Schools" value={activeTenants} icon={CheckCircle2} tone="success" description="currently active" compact />
         <StatCard label="Pending Schools" value={pendingTenants} icon={Clock3} tone="warning" description="awaiting verification" compact />

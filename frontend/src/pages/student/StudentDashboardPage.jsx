@@ -149,7 +149,7 @@ function StudentDashboardPage() {
       )}
 
       {!loadError && student && (
-        <section className="stat-grid">
+        <section className="stat-grid stat-grid-six">
           <StatCard
             label="Profile"
             value={student.profile_status === "complete" ? "Complete" : "Incomplete"}

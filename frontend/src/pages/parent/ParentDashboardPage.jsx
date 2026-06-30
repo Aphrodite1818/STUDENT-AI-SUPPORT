@@ -181,7 +181,7 @@ function ParentDashboardPage() {
       )}
 
       {!loadError && (
-        <section className="stat-grid">
+        <section className="stat-grid stat-grid-five">
           <StatCard
             label="Linked Students"
             value={children.length}
